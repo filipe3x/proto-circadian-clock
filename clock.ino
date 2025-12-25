@@ -98,6 +98,13 @@ void updateDisplay();
 uint16_t getStatusColor(SystemStatus status);
 const char* getStatusName(SystemStatus status);
 
+// Button feedback icons
+void showModeFeedback(Mode mode);
+void drawSunIcon(uint8_t brightness);
+void drawRedText(uint8_t brightness);
+void drawOffText(uint8_t brightness);
+void fadeTransition(void (*drawFunc)(uint8_t), int holdMs, bool fadeToFill, uint8_t fillR, uint8_t fillG, uint8_t fillB);
+
 // ============= ANIMACAO DE BOOT =============
 void showBootAnimation() {
   display->fillScreen(display->color565(0, 0, 0));
@@ -150,6 +157,149 @@ const char* getStatusName(SystemStatus status) {
     case STATUS_WIFI_ONLY:    return "WiFi (Limitado, sem hora)";
     case STATUS_OFFLINE:      return "Offline (Crítico)";
     default:                  return "Desconhecido";
+  }
+}
+
+// ============= BUTTON FEEDBACK ICONS =============
+
+// Draw a beautiful amber sun with radiating rays
+void drawSunIcon(uint8_t brightness) {
+  display->fillScreen(display->color565(0, 0, 0));
+
+  // Scale colors by brightness (amber/golden sun color)
+  uint8_t r = (255 * brightness) / 255;
+  uint8_t g = (180 * brightness) / 255;  // Amber gold
+  uint8_t b = (20 * brightness) / 255;   // Slight warmth
+
+  uint16_t sunColor = display->color565(r, g, b);
+  uint16_t rayColor = display->color565(r * 3/4, g * 3/4, b * 3/4);
+
+  // Center of display
+  int cx = 15;
+  int cy = 7;
+
+  // Draw 8 rays first (behind the sun)
+  // Diagonal rays (longer)
+  display->drawLine(cx - 6, cy - 5, cx - 4, cy - 3, rayColor);  // Top-left
+  display->drawLine(cx + 6, cy - 5, cx + 4, cy - 3, rayColor);  // Top-right
+  display->drawLine(cx - 6, cy + 5, cx - 4, cy + 3, rayColor);  // Bottom-left
+  display->drawLine(cx + 6, cy + 5, cx + 4, cy + 3, rayColor);  // Bottom-right
+
+  // Cardinal rays (shorter, thicker feel)
+  display->drawLine(cx, cy - 6, cx, cy - 4, rayColor);          // Top
+  display->drawLine(cx, cy + 6, cx, cy + 4, rayColor);          // Bottom
+  display->drawLine(cx - 7, cy, cx - 5, cy, rayColor);          // Left
+  display->drawLine(cx + 7, cy, cx + 5, cy, rayColor);          // Right
+
+  // Draw sun circle (filled) - 3 pixel radius approximation
+  display->fillCircle(cx, cy, 3, sunColor);
+
+  // Add a brighter center for depth
+  uint8_t rBright = min(255, (int)(r * 1.2));
+  uint8_t gBright = min(255, (int)(g * 1.1));
+  display->drawPixel(cx, cy, display->color565(rBright, gBright, b));
+  display->drawPixel(cx - 1, cy, display->color565(rBright, gBright, b));
+  display->drawPixel(cx, cy - 1, display->color565(rBright, gBright, b));
+}
+
+// Draw "RED" text in bold red
+void drawRedText(uint8_t brightness) {
+  display->fillScreen(display->color565(0, 0, 0));
+
+  uint8_t r = (255 * brightness) / 255;
+  uint16_t textColor = display->color565(r, 0, 0);
+
+  display->setTextSize(1);
+  display->setTextColor(textColor);
+
+  // Center "RED" on 32x16 display
+  // Each char is 6px wide at size 1, "RED" = 18px, so start at (7, 4)
+  display->setCursor(7, 4);
+  display->print("RED");
+}
+
+// Draw "OFF" text in red
+void drawOffText(uint8_t brightness) {
+  display->fillScreen(display->color565(0, 0, 0));
+
+  uint8_t r = (180 * brightness) / 255;  // Slightly dimmer red for OFF
+  uint16_t textColor = display->color565(r, 0, 0);
+
+  display->setTextSize(1);
+  display->setTextColor(textColor);
+
+  // Center "OFF" on 32x16 display
+  display->setCursor(7, 4);
+  display->print("OFF");
+}
+
+// Smooth fade transition with optional fill at end
+void fadeTransition(void (*drawFunc)(uint8_t), int holdMs, bool fadeToFill, uint8_t fillR, uint8_t fillG, uint8_t fillB) {
+  // Fade in (0 -> 255)
+  for (int b = 0; b <= 255; b += 15) {
+    drawFunc(b);
+    delay(20);
+  }
+  drawFunc(255);  // Ensure full brightness
+
+  // Hold at full brightness
+  delay(holdMs);
+
+  if (fadeToFill) {
+    // Crossfade to solid fill color
+    for (int t = 0; t <= 100; t += 5) {
+      // Draw the icon at decreasing brightness
+      uint8_t iconBright = 255 - (t * 255 / 100);
+      drawFunc(iconBright);
+
+      // Overlay with increasing fill opacity (blend effect)
+      uint8_t fillBright = (t * 255 / 100);
+      uint8_t r = (fillR * fillBright) / 255;
+      uint8_t g = (fillG * fillBright) / 255;
+      uint8_t bVal = (fillB * fillBright) / 255;
+
+      // Draw fill pixels over the icon area
+      if (t > 50) {
+        // Past halfway, start showing solid fill
+        uint16_t fillColor = display->color565(r, g, bVal);
+        for (int y = 0; y < 16; y++) {
+          for (int x = 0; x < 32; x++) {
+            display->drawPixel(x, y, fillColor);
+          }
+        }
+      }
+      delay(25);
+    }
+
+    // Final solid fill
+    display->fillScreen(display->color565(fillR, fillG, fillB));
+  } else {
+    // Simple fade out
+    for (int b = 255; b >= 0; b -= 15) {
+      drawFunc(b);
+      delay(20);
+    }
+    display->fillScreen(display->color565(0, 0, 0));
+  }
+}
+
+// Main feedback function called on mode change
+void showModeFeedback(Mode mode) {
+  switch (mode) {
+    case AUTO_SOLAR:
+      // Beautiful amber sun with rays, fade in, hold, fade out
+      fadeTransition(drawSunIcon, 400, false, 0, 0, 0);
+      break;
+
+    case THERAPY_RED:
+      // "RED" text fades in, then crossfades to red fill
+      fadeTransition(drawRedText, 300, true, 100, 0, 0);
+      break;
+
+    case OFF:
+      // "OFF" text fades in, hold, then fade to black
+      fadeTransition(drawOffText, 400, false, 0, 0, 0);
+      break;
   }
 }
 
@@ -652,15 +802,19 @@ void handleButton() {
   if (buttonPressed) {
     buttonPressed = false;
     delay(20);
-    
+
     if (digitalRead(BUTTON_PIN) == LOW) {
       currentMode = (Mode)((currentMode + 1) % 3);
-      
+
       const char* modeNames[] = {"AUTO_SOLAR", "THERAPY_RED", "OFF"};
       Serial.printf("\n>>> MODO: %s <<<\n\n", modeNames[currentMode]);
-      
+
+      // Show beautiful feedback icon with fade animation
+      showModeFeedback(currentMode);
+
+      // Then update to the actual mode display
       updateDisplay();
-      
+
       while (digitalRead(BUTTON_PIN) == LOW) delay(10);
     }
   }
