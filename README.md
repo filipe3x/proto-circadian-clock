@@ -78,6 +78,8 @@ git clone https://github.com/filipe3x/P10_32x16_QuarterScan.git
 
 ## Configuration
 
+### Location Settings
+
 Edit these constants in `clock.ino`:
 
 ```cpp
@@ -88,13 +90,26 @@ const int TIMEZONE_OFFSET = 0;     // Hours from UTC
 
 // Shift the solar cycle (e.g., -1 to wake up earlier)
 const int SOLAR_OFFSET_HOURS = 1;
+```
 
-// WiFi networks (in priority order)
+### WiFi Credentials
+
+Copy `wifi_credentials.h.example` to `wifi_credentials.h` and add your networks:
+
+```bash
+cp wifi_credentials.h.example wifi_credentials.h
+```
+
+Then edit `wifi_credentials.h`:
+
+```cpp
 WiFiCredentials wifiNetworks[] = {
   {"YourNetwork1", "password1"},
   {"YourNetwork2", "password2"},
 };
 ```
+
+**Note:** `wifi_credentials.h` is ignored by git to keep your passwords private.
 
 ## Installation
 
@@ -172,6 +187,16 @@ Connect at **115200 baud** to see:
 - Solar information (sunrise/sunset times)
 - Elevation and color updates every 5 minutes
 - Mode changes
+
+## Roadmap
+
+Potential future enhancements:
+
+- **Dawn Simulator Mode** - Gradual wake-up light 30 min before alarm
+- **Brightness Adjustment** - Manual or ambient sensor-based control
+- **Web Interface** - Configuration via WiFi AP mode
+- **Multiple Profiles** - Different settings per day of week
+- **Home Assistant Integration** - MQTT control
 
 ## License
 
