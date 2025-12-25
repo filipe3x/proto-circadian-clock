@@ -2,6 +2,7 @@
 #include <RTClib.h>
 #include <WiFi.h>
 #include <Dusk2Dawn.h>
+#include "wifi_credentials.h"
 
 // ============= PINOUT =============
 #define R1_PIN 25
@@ -28,19 +29,7 @@ RTC_DS3231 rtc;
 bool rtcAvailable = false;
 
 // ============= CONFIGURACAO WIFI MULTI-SSID =============
-struct WiFiCredentials {
-  const char* ssid;
-  const char* password;
-};
-
-// Lista de redes WiFi (ordena por prioridade)
-WiFiCredentials wifiNetworks[] = {
-  {"guest", "benfica00"},
-  {"iPhone SE3", "b3jjgjg0c1m4j"},
-  // Adiciona mais redes aqui
-};
-
-const int NUM_WIFI_NETWORKS = sizeof(wifiNetworks) / sizeof(wifiNetworks[0]);
+// WiFi credentials are stored in wifi_credentials.h (not tracked by git)
 const int WIFI_TIMEOUT_MS = 10000;  // 10s por rede
 const int WIFI_RETRY_PER_NETWORK = 2;  // Tentar cada rede 2x
 

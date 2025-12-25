@@ -1,0 +1,12 @@
+# WiFi credentials (private)
+wifi_credentials.h
+
+# Build artifacts
+*.o
+*.elf
+*.hex
+*.bin
+
+# IDE files
+.vscode/
+*.code-workspace
