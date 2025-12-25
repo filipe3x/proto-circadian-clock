@@ -200,6 +200,153 @@ O **Proto Circadian Clock** é um dispositivo de iluminação inteligente que si
 | **Home Automation** | Home Assistant, MQTT | Comunidade open-source |
 | **Health Platforms** | Apple Health, Google Fit | Tracking de sono |
 
+### 4.6 Parcerias com Wearables
+
+| Empresa | API Disponível | Dados Relevantes | Fit Estratégico |
+|---------|----------------|------------------|-----------------|
+| **WHOOP** | [Developer API](https://developer.whoop.com/) | Recovery Score, Sleep, HRV, Strain | ⭐⭐⭐⭐⭐ |
+| **Oura Ring** | Sim | Sleep Score, Readiness, HRV | ⭐⭐⭐⭐⭐ |
+| **Eight Sleep** | Sim | Temperatura, fases de sono | ⭐⭐⭐⭐⭐ |
+| **Garmin** | Connect IQ | Body Battery, Sleep, Stress | ⭐⭐⭐⭐ |
+| **Fitbit/Google** | Web API | Sleep Stages, SpO2 | ⭐⭐⭐ |
+| **Apple Watch** | HealthKit (limitada) | Sleep, HRV | ⭐⭐⭐ |
+
+**Integração WHOOP - Modelo Proposto:**
+```
+WHOOP API → App Circadian Clock → Ajuste automático de luz
+
+Lógica:
+- Recovery Score < 33% (red zone) → Luz quente 1h mais cedo
+- Recovery Score 33-66% (yellow) → Ciclo solar normal
+- Recovery Score > 66% (green) → Pode estender ciclo
+- Sleep Consistency baixa → Ajuste gradual do offset
+- HRV indica stress → Ativa red therapy mais cedo
+```
+
+**Potencial de Receita:**
+| Modelo | Descrição | Receita Estimada |
+|--------|-----------|------------------|
+| Bundle WHOOP + Circadian | Desconto cruzado, co-marketing | €100-200k/ano |
+| White-label para WHOOP | "WHOOP Light" branded | €500k-2M (deal) |
+| Integração premium | Feature paga na app | €50-100k/ano |
+
+### 4.7 Parcerias com Biohackers e Influencers
+
+**Influenciadores-Chave:**
+
+| Nome | Plataforma | Audiência | Relevância | Custo Estimado |
+|------|------------|-----------|------------|----------------|
+| **Andrew Huberman** | Podcast/YouTube | 5M+ | ⭐⭐⭐⭐⭐ | €20-50k/episódio |
+| **Bryan Johnson** | YouTube/X | 1M+ | ⭐⭐⭐⭐⭐ | Produto + equity |
+| **Peter Attia** | Podcast | 1M+ | ⭐⭐⭐⭐ | €10-30k/episódio |
+| **Dave Asprey** | Podcast/YouTube | 2M+ | ⭐⭐⭐⭐ | €5-15k |
+| **Ben Greenfield** | Podcast | 500k+ | ⭐⭐⭐⭐ | €3-8k |
+| **Rhonda Patrick** | YouTube | 1M+ | ⭐⭐⭐ | €5-12k |
+
+**Fit Natural com Huberman Lab:**
+O protocolo de sono do Dr. Huberman já recomenda:
+- ✅ Exposição a luz natural 30-60 min após acordar
+- ✅ Evitar luzes brilhantes entre 22h-4h
+- ✅ Light therapy lamps como substituto do sol
+- ✅ Red light à noite para não suprimir melatonina
+
+**O Circadian Clock automatiza todo este protocolo!**
+
+**Comunidades Target:**
+
+| Comunidade | Membros | Plataforma | Estratégia |
+|------------|---------|------------|------------|
+| r/Biohackers | 350k+ | Reddit | Posts, AMAs |
+| r/QuantifiedSelf | 100k+ | Reddit | Case studies |
+| r/Nootropics | 300k+ | Reddit | Discussões sono |
+| r/circadianrhythm | 15k+ | Reddit | Nicho direto |
+| Huberman Lab Discord | 100k+ | Discord | Comunidade |
+| Biohacker Center | 50k+ | Forum | Reviews |
+
+**Estratégia de Influencer Marketing:**
+
+| Fase | Ação | Investimento | ROI Esperado |
+|------|------|--------------|--------------|
+| 1. Seeding | 20 micro-influencers (5-50k) | €2,000 (produto) | 10-25x |
+| 2. Reviews | 5 mid-tier (50-200k) | €5,000 | 8-15x |
+| 3. Sponsors | 2 podcasts médios | €3,000 | 5-12x |
+| 4. Major | Huberman/Attia pitch | €20-50k | 4-20x |
+
+### 4.8 Parcerias com Atletas e Equipas Desportivas
+
+**Referências de Mercado:**
+
+| Empresa | Atletas/Equipas Parceiros | Modelo |
+|---------|---------------------------|--------|
+| **Eight Sleep** | Charles Leclerc (F1), Aaron Judge (MLB), Jimmy Butler (NBA), EF Pro Cycling | Ambassadors + Investors |
+| **WHOOP** | Notre Dame Athletics, LeBron James, Michael Phelps, Patrick Mahomes | Team + Individual |
+| **Dreams UK** | Team GB (Paris 2024) | Official Sleep Partner |
+
+**Proposta de Valor para Atletas:**
+
+| Problema do Atleta | Solução Circadian Clock |
+|--------------------|------------------------|
+| Viagens constantes (jet lag) | Ajuste automático de timezone |
+| Treinos de madrugada | Dawn simulation adaptativo |
+| Recuperação pós-competição | Red therapy mode intensivo |
+| Quartos de hotel escuros | Portabilidade + funciona offline |
+| Dados fragmentados | Integração com WHOOP/Oura/Garmin |
+
+**Atletas/Equipas Target - Portugal:**
+
+| Atleta/Equipa | Desporto | Fit | Potencial |
+|---------------|----------|-----|-----------|
+| Cristiano Ronaldo | Futebol | ⭐⭐⭐⭐⭐ | Já é investidor WHOOP |
+| Sporting/Benfica/Porto | Futebol | ⭐⭐⭐⭐ | Departamento médico |
+| João Almeida | Ciclismo | ⭐⭐⭐⭐ | Grand Tours = jet lag |
+| Miguel Oliveira | MotoGP | ⭐⭐⭐⭐ | Viagens constantes |
+| Patrícia Mamona | Atletismo | ⭐⭐⭐ | Imagem wellness |
+| Federação Portuguesa | Olímpicos | ⭐⭐⭐⭐ | LA 2028 prep |
+
+**Atletas/Equipas Target - Internacional:**
+
+| Segmento | Exemplos | Abordagem |
+|----------|----------|-----------|
+| Ciclistas WorldTour | UAE, Ineos, Jumbo | Recovery em Grand Tours |
+| Pilotos F1/MotoGP | Via managers | Jet lag constante |
+| NBA/NFL players | Via agências (CAA, WME) | Premium market |
+| Tenistas | Via ATP/WTA | Circuito global |
+| Atletas Olímpicos | Comités nacionais | Paris 2024 → LA 2028 |
+
+**Modelos de Parceria Desportiva:**
+
+| Modelo | Descrição | Investimento | Retorno |
+|--------|-----------|--------------|---------|
+| **Product Seeding** | Enviar a 50 atletas | €5,000 | Social proof |
+| **Athlete Ambassador** | Atleta usa e promove | Produto + €1-5k/mês | Credibilidade |
+| **Team Partnership** | Fornecedor oficial equipa | €10-50k/época | B2B + visibilidade |
+| **Athlete Investor** | Equity por promoção | 1-5% equity | Compromisso longo |
+| **Performance Study** | Estudo científico com equipa | €5-10k | Dados + PR |
+| **Co-branded Edition** | "Circadian x [Atleta]" | Revenue share | Premium pricing |
+
+**Plano de Ação - Atletas e Biohackers:**
+
+| Semana | Ação |
+|--------|------|
+| 1-2 | Produzir 50 unidades "beta tester edition" |
+| 3-4 | Enviar a 20 micro-influencers biohacking |
+| 5-6 | Contactar 5 atletas portugueses via Instagram/agentes |
+| 7-8 | Criar landing page "Used by athletes & biohackers" |
+| 9-12 | Recolher testemunhos e case studies |
+| 13-16 | Aplicar a podcasts como sponsor |
+| 17-20 | Pitch a equipas desportivas portuguesas |
+| 21-24 | Lançar affiliate program (15% comissão) |
+
+**ROI Estimado por Canal:**
+
+| Canal | Investimento | Vendas Esperadas | ROI |
+|-------|--------------|------------------|-----|
+| Micro-influencers (20x) | €2,000 | 200-500 unidades | 10-25x |
+| Podcast pequeno | €1,000 | 50-150 unidades | 5-15x |
+| Atleta português | €500 + produto | 100-300 unidades | 20-60x |
+| Equipa de futebol | €15,000 | 500-1,500 unidades | 3-10x |
+| Huberman mention | €30,000 | 2,000-10,000 unidades | 7-33x |
+
 ---
 
 ## 5. Estratégia de Go-to-Market
@@ -432,5 +579,6 @@ O Proto Circadian Clock tem potencial significativo num mercado em crescimento. 
 ---
 
 *Documento criado: Dezembro 2024*
-*Versão: 1.0*
-*Autor: Estratégia de Comercialização*
+*Última atualização: Dezembro 2024*
+*Versão: 1.1*
+*Changelog: Adicionadas secções 4.6-4.8 (Wearables, Biohackers, Atletas)*
