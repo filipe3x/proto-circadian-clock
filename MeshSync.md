@@ -74,6 +74,8 @@ struct MeshMessage {
 };
 ```
 
+**Tamanho total:** ~32 bytes por mensagem
+
 ## Fluxo de Sincronização
 
 ### 1. Descoberta
@@ -142,10 +144,193 @@ t=85ms   Slave C (slot 5) → ACK
 | Timezone | Eventual | Só master |
 | Solar Offset | Eventual | Só master |
 
-**Nota:** Atualmente latitude/longitude/timezone são constantes no código. Para torná-los dinâmicos seria necessário:
-1. Converter para variáveis
-2. Guardar em NVS
-3. Implementar captive portal para configuração
+---
+
+## Análise de Tráfego de Rede (Spam)
+
+### Configuração Atual
+
+| Parâmetro | Valor |
+|-----------|-------|
+| `BROADCAST_INTERVAL_MS` | 30.000ms (30s) |
+| Tamanho mensagem | ~32 bytes |
+| Timeout de peer | 300.000ms (5 min) |
+
+### Tráfego por Dispositivo
+
+| Tipo | Frequência | Quem envia | Bytes/msg |
+|------|------------|------------|-----------|
+| DISCOVERY | 30s | Todos | 32 |
+| SETTINGS | 30s | Só master | 32 |
+| ACK | Por SETTINGS | Slaves | 32 |
+
+### Cálculo de Tráfego Total
+
+**Cenário: 1 Master + 4 Slaves (5 dispositivos)**
+
+```
+Por ciclo de 30s:
+├── 5× DISCOVERY (todos)     = 160 bytes
+├── 1× SETTINGS (master)     = 32 bytes
+├── 4× ACK (slaves)          = 128 bytes
+└── Total por ciclo          = 320 bytes
+
+Por hora:  320 × 120 = 38.4 KB
+Por dia:   38.4 × 24 = 922 KB ≈ 0.9 MB
+```
+
+### Escala com Número de Dispositivos
+
+| Dispositivos | Msgs/hora | KB/hora | MB/dia |
+|--------------|-----------|---------|--------|
+| 2 | 360 | 11.5 | 0.27 |
+| 5 | 840 | 26.9 | 0.65 |
+| 10 | 1560 | 49.9 | 1.20 |
+| 20 | 2880 | 92.2 | 2.21 |
+
+### Avaliação
+
+| Métrica | Estado | Comentário |
+|---------|--------|------------|
+| Largura de banda | ✅ OK | <100 KB/hora é negligível |
+| Colisões 802.11 | ⚠️ Baixo risco | Backoff mitiga |
+| Interferência WiFi | ✅ OK | Canal 1 fixo, baixo duty cycle |
+| Bateria (se aplicável) | ⚠️ Problema | Ver secção de energia |
+
+### Otimizações Possíveis
+
+#### Opção 1: Aumentar Intervalo de Broadcast
+```cpp
+#define BROADCAST_INTERVAL_MS 60000  // 60s em vez de 30s
+```
+**Impacto:** Reduz tráfego 50%, aumenta tempo de descoberta
+
+#### Opção 2: Adaptive Broadcast
+```cpp
+// Se não há peers, broadcast mais frequente (descoberta)
+// Se há peers estáveis, broadcast menos frequente
+if (numPeers == 0) {
+  interval = 10000;   // 10s - modo descoberta
+} else if (allPeersStable) {
+  interval = 120000;  // 2min - modo estável
+} else {
+  interval = 30000;   // 30s - modo normal
+}
+```
+
+#### Opção 3: Eliminar ACKs para Broadcasts
+Os ACKs para broadcasts periódicos são redundantes - a próxima mensagem serve como heartbeat implícito.
+```cpp
+// Em handleSettings:
+// Não enviar ACK para broadcasts periódicos
+// Só enviar ACK para mudanças de modo explícitas
+```
+
+#### Opção 4: Compressão de Discovery
+Combinar DISCOVERY + SETTINGS numa só mensagem:
+```cpp
+// Reduz msgs/ciclo de 2 para 1 (master)
+MSG_HEARTBEAT = DISCOVERY + modo atual
+```
+
+---
+
+## Análise de Consumo de Energia
+
+### Estados de Energia do ESP32
+
+| Estado | Corrente | Descrição |
+|--------|----------|-----------|
+| Active (CPU + WiFi TX) | ~240mA | A transmitir |
+| Active (CPU + WiFi RX) | ~95-100mA | A escutar |
+| Modem Sleep | ~20mA | CPU ativo, WiFi off |
+| Light Sleep | ~0.8mA | CPU pausado, WiFi off |
+| Deep Sleep | ~10µA | Quase tudo off |
+
+### Consumo Atual (Implementação Presente)
+
+**Problema:** O ESP32 está em modo **WiFi STA contínuo** para ESP-NOW.
+
+```
+Estado atual:
+├── WiFi RX sempre ativo: ~95mA contínuo
+├── Picos de TX (30s): ~240mA × 5ms = desprezável
+└── CPU ativo: incluído nos 95mA
+
+Consumo médio: ~95mA
+```
+
+### Impacto em Bateria
+
+| Bateria | Capacidade | Autonomia (95mA) |
+|---------|------------|------------------|
+| 18650 (1S) | 2500mAh | 26 horas |
+| 2× 18650 | 5000mAh | 52 horas |
+| USB powerbank 10Ah | 10000mAh | 4-5 dias |
+
+**Conclusão:** Inviável para operação a bateria sem otimizações.
+
+### Comparação: Com vs Sem Mesh
+
+| Modo | Corrente média | Autonomia (2500mAh) |
+|------|----------------|---------------------|
+| Sem mesh (display only) | ~50mA | 50 horas |
+| Com mesh (atual) | ~95mA | 26 horas |
+| Com mesh otimizado | ~25mA | 100 horas |
+
+### Estratégias de Otimização
+
+#### Nível 1: Modem Sleep entre Broadcasts (Fácil)
+```cpp
+// Após enviar/receber, desligar modem por 25s
+WiFi.setSleep(WIFI_PS_MAX_MODEM);
+
+// Problema: Perde mensagens durante sleep
+// Solução: Janelas de escuta sincronizadas
+```
+**Redução:** 95mA → ~30mA
+
+#### Nível 2: Light Sleep com Wake Periódico (Médio)
+```cpp
+// Dormir 29s, acordar 1s para escutar/enviar
+esp_sleep_enable_timer_wakeup(29000000);  // 29s
+esp_light_sleep_start();
+
+// Ao acordar:
+initMeshSync();
+delay(1000);  // Janela de escuta
+sendDiscovery();
+```
+**Redução:** 95mA → ~5mA médio
+
+#### Nível 3: Deep Sleep com ESP-NOW Wake (Avançado)
+```cpp
+// O ESP32 pode acordar com ESP-NOW em deep sleep
+// mas requer configuração específica do RTC
+esp_now_set_wake_window(50);  // 50ms janela
+esp_wifi_set_inactive_time(ESP_IF_WIFI_STA, 1);
+```
+**Redução:** 95mA → ~0.5mA médio
+
+### Trade-offs
+
+| Otimização | Consumo | Latência sync | Complexidade |
+|------------|---------|---------------|--------------|
+| Atual | 95mA | <50ms | Baixa |
+| Modem Sleep | 30mA | <1s | Baixa |
+| Light Sleep | 5mA | <30s | Média |
+| Deep Sleep | 0.5mA | <60s | Alta |
+
+### Recomendação por Caso de Uso
+
+| Caso | Alimentação | Recomendação |
+|------|-------------|--------------|
+| Ligado à corrente | 5V USB | Manter atual (simplicidade) |
+| Powerbank ocasional | USB | Modem Sleep |
+| Bateria permanente | 18650 | Light Sleep mínimo |
+| Solar/bateria longa | Painel | Deep Sleep obrigatório |
+
+---
 
 ## Debug Serial
 
@@ -178,13 +363,16 @@ Primeira instalacao! Timestamp: 157234567
 2. **Canal fixo (1)** - Todos os dispositivos devem usar o mesmo canal
 3. **Sem encriptação** - Mensagens não são cifradas (podia adicionar-se)
 4. **Alcance ~200m** - Linha de vista; paredes reduzem significativamente
+5. **Consumo elevado** - Não otimizado para bateria (ver análise acima)
 
-## Consumo de Energia
+## Resumo de Impacto
 
-O ESP-NOW é eficiente, mas ainda assim consome:
-- **Broadcast a cada 30s** - Pode ser aumentado se a bateria for problema
-- **WiFi em modo STA** - Necessário para ESP-NOW funcionar
-- **Desliga após NTP sync** - O WiFi infrastructure desliga, mas ESP-NOW continua
+| Vetor | Estado Atual | Severidade | Ação Recomendada |
+|-------|--------------|------------|------------------|
+| Spam de rede | ~40 KB/hora | ✅ Baixa | Nenhuma (aceitável) |
+| Colisões | Backoff implementado | ✅ Baixa | Monitorar em produção |
+| Consumo energia | ~95mA contínuo | ⚠️ Alta | Implementar sleep se bateria |
+| Latência sync | <50ms | ✅ Excelente | Manter |
 
 ## Extensões Futuras
 
@@ -193,3 +381,6 @@ O ESP-NOW é eficiente, mas ainda assim consome:
 - [ ] Sync de brightness individual
 - [ ] OTA update coordenado entre dispositivos
 - [ ] Heartbeat visual (LED pisca quando recebe de peer)
+- [ ] **Light Sleep entre broadcasts** (prioridade se bateria)
+- [ ] **Adaptive broadcast interval** (menos tráfego quando estável)
+- [ ] **Eliminar ACKs redundantes** (heartbeat implícito)
