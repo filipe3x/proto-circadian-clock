@@ -6,6 +6,7 @@
 #include <Preferences.h>
 #include <Dusk2Dawn.h>
 #include "captive_portal.h"  // Modulo do captive portal
+#include "auto_solar.h"       // Modulo de calculo solar
 
 // ============= PINOUT =============
 #define R1_PIN 25
@@ -172,16 +173,10 @@ enum Mode {
 
 Mode currentMode = AUTO_SOLAR;
 
-// ============= ESTRUTURA DE COR =============
-struct SolarColor {
-  uint8_t r, g, b;
-  uint8_t brightness;
-  int colorTemp;
-};
+// SolarColor agora definida em auto_solar.h
 
 // ============= DECLARACOES ANTECIPADAS =============
 void fillPanel(SolarColor color);
-SolarColor mapSolarElevationToColor(float elevation);
 DateTime getCurrentTime();
 void showBootAnimation();
 void updateBootStatus(uint16_t color, int progress);
@@ -190,8 +185,7 @@ SystemStatus connectWiFiAndSync();
 bool tryConnectWiFi();
 bool syncWithNTP();
 void printSolarInfo();
-float calculateSolarElevation(DateTime now);
-void colorTempToRGB(int kelvin, uint8_t &r, uint8_t &g, uint8_t &b);
+// calculateSolarElevation, colorTempToRGB e mapSolarElevationToColor declaradas em auto_solar.h
 void displayAutoSolar();
 void displayTherapyRed();
 void displayOff();
@@ -1129,42 +1123,7 @@ void startCaptivePortalWithDisplay() {
   showCaptivePortalDisplay();
 }
 
-// ============= CONVERSAO TEMPERATURA DE COR =============
-void colorTempToRGB(int kelvin, uint8_t &r, uint8_t &g, uint8_t &b) {
-  float temp = kelvin / 100.0;
-  float red, green, blue;
-  
-  if (temp <= 66) {
-    red = 255;
-  } else {
-    red = temp - 60;
-    red = 329.698727446 * pow(red, -0.1332047592);
-    red = constrain(red, 0, 255);
-  }
-  
-  if (temp <= 66) {
-    green = temp;
-    green = 99.4708025861 * log(green) - 161.1195681661;
-  } else {
-    green = temp - 60;
-    green = 288.1221695283 * pow(green, -0.0755148492);
-  }
-  green = constrain(green, 0, 255);
-  
-  if (temp >= 66) {
-    blue = 255;
-  } else if (temp <= 19) {
-    blue = 0;
-  } else {
-    blue = temp - 10;
-    blue = 138.5177312231 * log(blue) - 305.0447927307;
-    blue = constrain(blue, 0, 255);
-  }
-  
-  r = (uint8_t)red;
-  g = (uint8_t)green;
-  b = (uint8_t)blue;
-}
+// colorTempToRGB movida para auto_solar.cpp
 
 // ============= PREENCHER PAINEL =============
 void fillPanel(SolarColor color) {
@@ -1356,103 +1315,7 @@ void printSolarInfo() {
   Serial.println("------------------\n");
 }
 
-// ============= CALCULO ELEVACAO SOLAR =============
-float calculateSolarElevation(DateTime now) {
-  int a = (14 - now.month()) / 12;
-  int y = now.year() + 4800 - a;
-  int m = now.month() + 12 * a - 3;
-  
-  int jdn = now.day() + (153 * m + 2) / 5 + 365 * y + y / 4 - y / 100 + y / 400 - 32045;
-  double jd = jdn + (now.hour() - 12.0) / 24.0 + now.minute() / 1440.0 + now.second() / 86400.0;
-  double t = (jd - 2451545.0) / 36525.0;
-  
-  double L0 = fmod(280.46646 + t * (36000.76983 + t * 0.0003032), 360.0);
-  double M = fmod(357.52911 + t * (35999.05029 - t * 0.0001537), 360.0);
-  double M_rad = M * PI / 180.0;
-  
-  double C = (1.914602 - t * (0.004817 + t * 0.000014)) * sin(M_rad) +
-             (0.019993 - t * 0.000101) * sin(2 * M_rad) +
-             0.000289 * sin(3 * M_rad);
-  
-  double theta = L0 + C;
-  double epsilon = 23.439291 - t * 0.0130042;
-  double epsilon_rad = epsilon * PI / 180.0;
-  double theta_rad = theta * PI / 180.0;
-  
-  double delta = asin(sin(epsilon_rad) * sin(theta_rad));
-  double E = 4 * (L0 - 0.0057183 - atan2(tan(theta_rad), cos(epsilon_rad)) * 180.0 / PI + C);
-  
-  double solarTime = now.hour() * 60.0 + now.minute() + now.second() / 60.0 + 
-                     E + 4 * LONGITUDE - 60 * TIMEZONE_OFFSET;
-  
-  double H = (solarTime / 4.0 - 180.0) * PI / 180.0;
-  double phi = LATITUDE * PI / 180.0;
-  
-  double elevation = asin(sin(phi) * sin(delta) + cos(phi) * cos(delta) * cos(H));
-  
-  return elevation * 180.0 / PI;
-}
-
-// ============= MAPEAMENTO ELEVACAO PARA COR =============
-SolarColor mapSolarElevationToColor(float elevation) {
-  SolarColor color;
-  int colorTemp;
-  
-  if (elevation < -18.0) {
-    colorTemp = 0;
-    color.r = 0; color.g = 0; color.b = 0;
-    color.brightness = 0;
-  }
-  else if (elevation < -12.0) {
-    colorTemp = 1500;
-    float t = map((int)(elevation * 10), -180, -120, 0, 40);
-    colorTempToRGB(colorTemp, color.r, color.g, color.b);
-    color.brightness = t;
-  }
-  else if (elevation < -6.0) {
-    colorTemp = map((int)(elevation * 10), -120, -60, 1500, 2000);
-    float t = map((int)(elevation * 10), -120, -60, 40, 80);
-    colorTempToRGB(colorTemp, color.r, color.g, color.b);
-    color.brightness = t;
-  }
-  else if (elevation < -0.833) {
-    colorTemp = map((int)(elevation * 10), -60, -8, 2000, 2800);
-    float t = map((int)(elevation * 10), -60, -8, 80, 140);
-    colorTempToRGB(colorTemp, color.r, color.g, color.b);
-    color.brightness = t;
-  }
-  else if (elevation < 6.0) {
-    colorTemp = map((int)(elevation * 10), -8, 60, 2800, 3800);
-    float t = map((int)(elevation * 10), -8, 60, 140, 200);
-    colorTempToRGB(colorTemp, color.r, color.g, color.b);
-    color.brightness = t;
-  }
-  else if (elevation < 15.0) {
-    colorTemp = map((int)(elevation * 10), 60, 150, 3800, 4800);
-    float t = map((int)(elevation * 10), 60, 150, 200, 230);
-    colorTempToRGB(colorTemp, color.r, color.g, color.b);
-    color.brightness = t;
-  }
-  else if (elevation < 30.0) {
-    colorTemp = map((int)(elevation * 10), 150, 300, 4800, 5500);
-    float t = map((int)(elevation * 10), 150, 300, 230, 250);
-    colorTempToRGB(colorTemp, color.r, color.g, color.b);
-    color.brightness = t;
-  }
-  else if (elevation < 50.0) {
-    colorTemp = map((int)(elevation * 10), 300, 500, 5500, 5900);
-    color.brightness = 255;
-    colorTempToRGB(colorTemp, color.r, color.g, color.b);
-  }
-  else {
-    colorTemp = 6500;
-    color.brightness = 255;
-    colorTempToRGB(colorTemp, color.r, color.g, color.b);
-  }
-  
-  color.colorTemp = colorTemp;
-  return color;
-}
+// calculateSolarElevation e mapSolarElevationToColor movidas para auto_solar.cpp
 
 // ============= MODO AUTO SOLAR =============
 void displayAutoSolar() {
@@ -1464,7 +1327,7 @@ void displayAutoSolar() {
     solarTime = now + TimeSpan(0, 0, offsetMinutes, 0);
   }
   
-  float elevation = calculateSolarElevation(solarTime);
+  float elevation = calculateSolarElevation(solarTime, LATITUDE, LONGITUDE, TIMEZONE_OFFSET);
   SolarColor color = mapSolarElevationToColor(elevation);
   
   fillPanel(color);
