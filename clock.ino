@@ -221,7 +221,8 @@ void stopMesh();
 const char* getMeshStateName(MeshState state);
 
 // Safe restart (limpa display antes de reiniciar)
-void prepareForRestart(bool showOK = false);
+// Default argument definido apenas no header (captive_portal.h)
+void prepareForRestart(bool showOK);
 
 // Captive Portal - declaracoes em captive_portal.h
 
@@ -274,8 +275,8 @@ void prepareForRestart(bool showOK) {
 
   // 3. Fade out do brilho do hardware para preto total
   if (dma_display != nullptr) {
-    uint8_t currentBrightness = dma_display->getBrightness();
-    for (int b = currentBrightness; b >= 0; b -= 5) {
+    // Usar configBrightness como referência (variável global em captive_portal.cpp)
+    for (int b = configBrightness; b >= 0; b -= 5) {
       dma_display->setBrightness8(b);
       delay(10);
     }
