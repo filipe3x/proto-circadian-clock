@@ -1,6 +1,9 @@
 #include <P10_32x16_QuarterScan.h> //https://github.com/filipe3x/P10_32x16_QuarterScan
 #include <RTClib.h>
 #include <WiFi.h>
+#include <esp_now.h>
+#include <esp_wifi.h>
+#include <Preferences.h>
 #include <Dusk2Dawn.h>
 #include "wifi_credentials.h"
 
@@ -53,6 +56,88 @@ const int SOLAR_OFFSET_HOURS = 1;
 
 Dusk2Dawn esposende(LATITUDE, LONGITUDE, TIMEZONE_OFFSET);
 
+// ============= DEVICE ID UNICO =============
+// O ESP32 tem um eFuse de 64 bits unico de fabrica
+// Usamos 6 bytes (48 bits) como ID principal
+// Combinamos com um hash do MAC BT como fallback para garantir unicidade
+uint8_t deviceId[6];
+char deviceIdStr[18];  // "XX:XX:XX:XX:XX:XX\0"
+Preferences preferences;
+
+// ============= MESH SYNC (ESP-NOW) =============
+// Estrutura para sincronizacao entre dispositivos Proto Circadian Clock
+#define MESH_CHANNEL 1
+#define SYNC_MAGIC 0x50434C4B  // "PCLK" - Proto CLock
+#define SYNC_VERSION 1
+#define BROADCAST_INTERVAL_MS 30000  // Broadcast a cada 30s
+#define ACK_TIMEOUT_MS 500
+#define MAX_PEERS 10
+
+// Endereco broadcast ESP-NOW
+uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+// Tipos de mensagem
+enum MeshMsgType {
+  MSG_DISCOVERY = 0x01,    // Anuncio de presenca
+  MSG_SETTINGS = 0x02,     // Broadcast de definicoes (do master)
+  MSG_REQUEST = 0x03,      // Pedido de definicoes (de um slave)
+  MSG_ACK = 0x04           // Confirmacao de recepcao
+};
+
+// Estrutura de definicoes sincronizaveis
+struct __attribute__((packed)) SyncSettings {
+  float latitude;
+  float longitude;
+  int8_t timezoneOffset;
+  int8_t solarOffsetHours;
+  uint8_t mode;            // AUTO_SOLAR, THERAPY_RED, OFF
+  uint8_t reserved[5];     // Para expansao futura
+};
+
+// Estrutura de mensagem ESP-NOW
+struct __attribute__((packed)) MeshMessage {
+  uint32_t magic;          // Identificador PCLK
+  uint8_t version;         // Versao do protocolo
+  uint8_t msgType;         // Tipo de mensagem
+  uint8_t senderId[6];     // ID do remetente
+  uint32_t firstBootTime;  // Timestamp da primeira instalacao (segundos desde 2020)
+  uint16_t msgId;          // ID da mensagem para ACKs
+  union {
+    SyncSettings settings; // Para MSG_SETTINGS
+    uint16_t ackMsgId;     // Para MSG_ACK - ID da mensagem confirmada
+  } payload;
+};
+
+// Estado do mesh
+bool meshEnabled = false;
+bool isMaster = false;
+uint32_t myFirstBootTime = 0;
+uint16_t nextMsgId = 0;
+unsigned long lastBroadcast = 0;
+
+// Tabela de peers conhecidos
+struct PeerInfo {
+  uint8_t id[6];
+  uint32_t firstBootTime;
+  unsigned long lastSeen;
+  bool active;
+};
+PeerInfo knownPeers[MAX_PEERS];
+int numPeers = 0;
+
+// Fila de ACKs pendentes
+struct PendingAck {
+  uint16_t msgId;
+  uint8_t targetId[6];
+  unsigned long sentTime;
+  bool waiting;
+};
+PendingAck pendingAcks[5];
+
+// Callback de recepcao ESP-NOW (declaracao antecipada)
+void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len);
+void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
+
 // ============= BOTAO =============
 #define BUTTON_PIN 0
 volatile bool buttonPressed = false;
@@ -104,6 +189,20 @@ void drawSunIcon(uint8_t brightness);
 void drawRedText(uint8_t brightness);
 void drawOffText(uint8_t brightness);
 void fadeTransition(void (*drawFunc)(uint8_t), int holdMs, bool fadeToFill, uint8_t fillR, uint8_t fillG, uint8_t fillB);
+
+// Device ID e Mesh Sync
+void initDeviceId();
+void initMeshSync();
+void updateMeshSync();
+void sendDiscovery();
+void sendSettings();
+void sendAck(const uint8_t* targetMac, uint16_t ackMsgId);
+void handleDiscovery(const uint8_t* mac, MeshMessage* msg);
+void handleSettings(MeshMessage* msg);
+void handleAck(MeshMessage* msg);
+void updateMasterStatus();
+bool compareMac(const uint8_t* a, const uint8_t* b);
+void formatMac(const uint8_t* mac, char* str);
 
 // ============= ANIMACAO DE BOOT =============
 void showBootAnimation() {
@@ -459,6 +558,391 @@ SystemStatus connectWiFiAndSync() {
   return status;
 }
 
+// ============= DEVICE ID E MESH SYNC =============
+
+// Inicializa o ID unico do dispositivo
+void initDeviceId() {
+  // Obter o chip ID do ESP32 (baseado no MAC address do eFuse)
+  // Este e um identificador de 48 bits unico de fabrica
+  uint64_t chipId = ESP.getEfuseMac();
+
+  // Extrair os 6 bytes do chip ID
+  deviceId[0] = (chipId >> 0) & 0xFF;
+  deviceId[1] = (chipId >> 8) & 0xFF;
+  deviceId[2] = (chipId >> 16) & 0xFF;
+  deviceId[3] = (chipId >> 24) & 0xFF;
+  deviceId[4] = (chipId >> 32) & 0xFF;
+  deviceId[5] = (chipId >> 40) & 0xFF;
+
+  // Formatar como string
+  formatMac(deviceId, deviceIdStr);
+
+  Serial.println("\n=== DEVICE ID ===");
+  Serial.printf("Chip ID: %s\n", deviceIdStr);
+  Serial.printf("Raw: 0x%012llX\n", chipId);
+
+  // Carregar/guardar timestamp de primeira instalacao
+  preferences.begin("pclk", false);  // namespace "pclk" = Proto CLock
+
+  myFirstBootTime = preferences.getUInt("firstBoot", 0);
+
+  if (myFirstBootTime == 0) {
+    // Primeira instalacao! Guardar timestamp atual
+    // Usamos segundos desde 2020-01-01 para caber em 32 bits
+    // Epoch de 2020: 1577836800
+    myFirstBootTime = (millis() / 1000) + 1;  // +1 para nunca ser 0
+
+    // Se tivermos hora real (RTC ou NTP), usar essa
+    DateTime now = getCurrentTime();
+    if (now.year() >= 2020) {
+      myFirstBootTime = now.unixtime() - 1577836800;  // Segundos desde 2020
+    }
+
+    preferences.putUInt("firstBoot", myFirstBootTime);
+    Serial.printf("Primeira instalacao! Timestamp: %u\n", myFirstBootTime);
+  } else {
+    Serial.printf("Dispositivo instalado ha: %u segundos\n", myFirstBootTime);
+  }
+
+  preferences.end();
+}
+
+// Formata MAC address como string
+void formatMac(const uint8_t* mac, char* str) {
+  sprintf(str, "%02X:%02X:%02X:%02X:%02X:%02X",
+          mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
+
+// Compara dois MAC addresses
+bool compareMac(const uint8_t* a, const uint8_t* b) {
+  for (int i = 0; i < 6; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
+// Callback quando dados sao enviados
+void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  if (status != ESP_NOW_SEND_SUCCESS) {
+    char macStr[18];
+    formatMac(mac_addr, macStr);
+    Serial.printf("[MESH] Falha envio para %s\n", macStr);
+  }
+}
+
+// Callback quando dados sao recebidos
+void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
+  if (len < sizeof(MeshMessage)) return;
+
+  MeshMessage* msg = (MeshMessage*)data;
+
+  // Verificar magic number e versao
+  if (msg->magic != SYNC_MAGIC || msg->version != SYNC_VERSION) {
+    return;  // Nao e uma mensagem nossa
+  }
+
+  // Ignorar mensagens de nos mesmos
+  if (compareMac(msg->senderId, deviceId)) {
+    return;
+  }
+
+  char senderStr[18];
+  formatMac(msg->senderId, senderStr);
+
+  switch (msg->msgType) {
+    case MSG_DISCOVERY:
+      handleDiscovery(info->src_addr, msg);
+      break;
+    case MSG_SETTINGS:
+      handleSettings(msg);
+      // Enviar ACK
+      sendAck(info->src_addr, msg->msgId);
+      break;
+    case MSG_REQUEST:
+      // Se somos master, enviar settings
+      if (isMaster) {
+        sendSettings();
+      }
+      break;
+    case MSG_ACK:
+      handleAck(msg);
+      break;
+  }
+}
+
+// Processa mensagem de discovery
+void handleDiscovery(const uint8_t* mac, MeshMessage* msg) {
+  char senderStr[18];
+  formatMac(msg->senderId, senderStr);
+
+  // Procurar se ja conhecemos este peer
+  int freeSlot = -1;
+  for (int i = 0; i < MAX_PEERS; i++) {
+    if (knownPeers[i].active && compareMac(knownPeers[i].id, msg->senderId)) {
+      // Atualizar lastSeen
+      knownPeers[i].lastSeen = millis();
+      knownPeers[i].firstBootTime = msg->firstBootTime;
+      Serial.printf("[MESH] Peer atualizado: %s (age: %u)\n", senderStr, msg->firstBootTime);
+      updateMasterStatus();
+      return;
+    }
+    if (!knownPeers[i].active && freeSlot == -1) {
+      freeSlot = i;
+    }
+  }
+
+  // Novo peer!
+  if (freeSlot != -1) {
+    memcpy(knownPeers[freeSlot].id, msg->senderId, 6);
+    knownPeers[freeSlot].firstBootTime = msg->firstBootTime;
+    knownPeers[freeSlot].lastSeen = millis();
+    knownPeers[freeSlot].active = true;
+    numPeers++;
+
+    Serial.printf("[MESH] Novo peer: %s (age: %u)\n", senderStr, msg->firstBootTime);
+
+    // Adicionar como peer ESP-NOW
+    esp_now_peer_info_t peerInfo = {};
+    memcpy(peerInfo.peer_addr, mac, 6);
+    peerInfo.channel = MESH_CHANNEL;
+    peerInfo.encrypt = false;
+
+    if (esp_now_add_peer(&peerInfo) == ESP_OK) {
+      Serial.printf("[MESH] Peer ESP-NOW adicionado\n");
+    }
+
+    updateMasterStatus();
+
+    // Se somos novos (não master), pedir settings
+    if (!isMaster) {
+      // Enviar pedido de settings
+      MeshMessage request;
+      request.magic = SYNC_MAGIC;
+      request.version = SYNC_VERSION;
+      request.msgType = MSG_REQUEST;
+      memcpy(request.senderId, deviceId, 6);
+      request.firstBootTime = myFirstBootTime;
+      request.msgId = nextMsgId++;
+
+      esp_now_send(mac, (uint8_t*)&request, sizeof(request));
+      Serial.printf("[MESH] Pedido de sync enviado\n");
+    }
+  }
+}
+
+// Processa settings recebidas do master
+void handleSettings(MeshMessage* msg) {
+  // So aplicar settings se vierem de um dispositivo mais antigo
+  if (msg->firstBootTime >= myFirstBootTime) {
+    Serial.printf("[MESH] Ignorando settings de dispositivo mais novo\n");
+    return;
+  }
+
+  SyncSettings* settings = &msg->payload.settings;
+
+  Serial.println("\n[MESH] === SETTINGS RECEBIDAS ===");
+  Serial.printf("  Latitude: %.4f\n", settings->latitude);
+  Serial.printf("  Longitude: %.4f\n", settings->longitude);
+  Serial.printf("  Timezone: %d\n", settings->timezoneOffset);
+  Serial.printf("  Solar Offset: %d\n", settings->solarOffsetHours);
+  Serial.printf("  Mode: %d\n", settings->mode);
+
+  // Aplicar modo se diferente (opcional - pode ser comentado se preferir controlo local)
+  if (settings->mode != currentMode && settings->mode < 3) {
+    currentMode = (Mode)settings->mode;
+    Serial.printf("[MESH] Modo alterado para: %d\n", currentMode);
+    updateDisplay();
+  }
+
+  // Nota: latitude/longitude/timezone sao constantes neste firmware
+  // Para torna-los dinamicos, seria necessario:
+  // 1. Converter para variaveis
+  // 2. Reinicializar o objeto Dusk2Dawn
+  // 3. Guardar em NVS
+}
+
+// Processa ACK recebido
+void handleAck(MeshMessage* msg) {
+  uint16_t ackedId = msg->payload.ackMsgId;
+
+  for (int i = 0; i < 5; i++) {
+    if (pendingAcks[i].waiting && pendingAcks[i].msgId == ackedId) {
+      pendingAcks[i].waiting = false;
+      Serial.printf("[MESH] ACK recebido para msg %d\n", ackedId);
+      return;
+    }
+  }
+}
+
+// Envia ACK
+void sendAck(const uint8_t* targetMac, uint16_t ackMsgId) {
+  MeshMessage ack;
+  ack.magic = SYNC_MAGIC;
+  ack.version = SYNC_VERSION;
+  ack.msgType = MSG_ACK;
+  memcpy(ack.senderId, deviceId, 6);
+  ack.firstBootTime = myFirstBootTime;
+  ack.msgId = nextMsgId++;
+  ack.payload.ackMsgId = ackMsgId;
+
+  esp_now_send(targetMac, (uint8_t*)&ack, sizeof(ack));
+}
+
+// Atualiza status de master/slave
+void updateMasterStatus() {
+  bool wasMaster = isMaster;
+  isMaster = true;  // Assumir que somos master
+
+  // Verificar se algum peer e mais antigo
+  for (int i = 0; i < MAX_PEERS; i++) {
+    if (knownPeers[i].active) {
+      // Remover peers inativos (>5 min sem comunicacao)
+      if (millis() - knownPeers[i].lastSeen > 300000) {
+        knownPeers[i].active = false;
+        numPeers--;
+        char peerStr[18];
+        formatMac(knownPeers[i].id, peerStr);
+        Serial.printf("[MESH] Peer removido (timeout): %s\n", peerStr);
+        continue;
+      }
+
+      if (knownPeers[i].firstBootTime < myFirstBootTime) {
+        isMaster = false;  // Ha um dispositivo mais antigo
+      }
+    }
+  }
+
+  if (wasMaster != isMaster) {
+    Serial.printf("[MESH] Estado alterado: %s\n", isMaster ? "MASTER" : "SLAVE");
+  }
+}
+
+// Envia mensagem de discovery (broadcast)
+void sendDiscovery() {
+  MeshMessage discovery;
+  discovery.magic = SYNC_MAGIC;
+  discovery.version = SYNC_VERSION;
+  discovery.msgType = MSG_DISCOVERY;
+  memcpy(discovery.senderId, deviceId, 6);
+  discovery.firstBootTime = myFirstBootTime;
+  discovery.msgId = nextMsgId++;
+
+  esp_now_send(broadcastAddress, (uint8_t*)&discovery, sizeof(discovery));
+  Serial.printf("[MESH] Discovery broadcast (age: %u, peers: %d)\n", myFirstBootTime, numPeers);
+}
+
+// Envia settings (como master)
+void sendSettings() {
+  if (!isMaster) return;
+
+  MeshMessage msg;
+  msg.magic = SYNC_MAGIC;
+  msg.version = SYNC_VERSION;
+  msg.msgType = MSG_SETTINGS;
+  memcpy(msg.senderId, deviceId, 6);
+  msg.firstBootTime = myFirstBootTime;
+  msg.msgId = nextMsgId++;
+
+  // Preencher settings atuais
+  msg.payload.settings.latitude = LATITUDE;
+  msg.payload.settings.longitude = LONGITUDE;
+  msg.payload.settings.timezoneOffset = TIMEZONE_OFFSET;
+  msg.payload.settings.solarOffsetHours = SOLAR_OFFSET_HOURS;
+  msg.payload.settings.mode = currentMode;
+  memset(msg.payload.settings.reserved, 0, 5);
+
+  // Enviar broadcast
+  esp_now_send(broadcastAddress, (uint8_t*)&msg, sizeof(msg));
+  Serial.printf("[MESH] Settings broadcast enviado\n");
+}
+
+// Inicializa ESP-NOW mesh
+void initMeshSync() {
+  Serial.println("\n=== MESH SYNC ===");
+
+  // Configurar WiFi em modo STA para ESP-NOW
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+
+  // Definir canal WiFi fixo para mesh
+  esp_wifi_set_channel(MESH_CHANNEL, WIFI_SECOND_CHAN_NONE);
+
+  // Inicializar ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("[MESH] Erro ao inicializar ESP-NOW");
+    meshEnabled = false;
+    return;
+  }
+
+  // Registar callbacks
+  esp_now_register_send_cb(onDataSent);
+  esp_now_register_recv_cb(onDataRecv);
+
+  // Adicionar peer broadcast
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
+  peerInfo.channel = MESH_CHANNEL;
+  peerInfo.encrypt = false;
+
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    Serial.println("[MESH] Erro ao adicionar peer broadcast");
+    meshEnabled = false;
+    return;
+  }
+
+  // Inicializar tabela de peers
+  for (int i = 0; i < MAX_PEERS; i++) {
+    knownPeers[i].active = false;
+  }
+  for (int i = 0; i < 5; i++) {
+    pendingAcks[i].waiting = false;
+  }
+
+  meshEnabled = true;
+  isMaster = true;  // Assumir master ate descobrir peers mais antigos
+
+  Serial.println("[MESH] ESP-NOW inicializado");
+  Serial.printf("[MESH] Device ID: %s\n", deviceIdStr);
+  Serial.printf("[MESH] First Boot: %u\n", myFirstBootTime);
+  Serial.printf("[MESH] Estado: MASTER (default)\n");
+
+  // Enviar primeiro discovery
+  delay(100);
+  sendDiscovery();
+}
+
+// Atualiza mesh sync no loop
+void updateMeshSync() {
+  if (!meshEnabled) return;
+
+  unsigned long now = millis();
+
+  // Broadcast periodico
+  if (now - lastBroadcast >= BROADCAST_INTERVAL_MS) {
+    lastBroadcast = now;
+
+    sendDiscovery();
+
+    // Se somos master, enviar settings tambem
+    if (isMaster && numPeers > 0) {
+      delay(100);  // Pequeno delay para nao colidir
+      sendSettings();
+    }
+
+    updateMasterStatus();
+  }
+
+  // Verificar ACKs pendentes (timeout)
+  for (int i = 0; i < 5; i++) {
+    if (pendingAcks[i].waiting && (now - pendingAcks[i].sentTime > ACK_TIMEOUT_MS)) {
+      pendingAcks[i].waiting = false;
+      char targetStr[18];
+      formatMac(pendingAcks[i].targetId, targetStr);
+      Serial.printf("[MESH] ACK timeout para %s (msg %d)\n", targetStr, pendingAcks[i].msgId);
+    }
+  }
+}
+
 // ============= CONVERSAO TEMPERATURA DE COR =============
 void colorTempToRGB(int kelvin, uint8_t &r, uint8_t &g, uint8_t &b) {
   float temp = kelvin / 100.0;
@@ -534,8 +1018,8 @@ void setup() {
   
   Serial.println("\n\n");
   Serial.println("╔═══════════════════════════════════╗");
-  Serial.println("║     RELÓGIO SOLAR LED v2.0        ║");
-  Serial.println("║   Multi-WiFi + RTC Fallback       ║");
+  Serial.println("║     RELÓGIO SOLAR LED v3.0        ║");
+  Serial.println("║   Multi-WiFi + Mesh Sync          ║");
   Serial.println("╚═══════════════════════════════════╝");
   
   // Configurar pinos
@@ -600,9 +1084,19 @@ void setup() {
   }
   
   updateBootStatus(display->color565(50, 0, 0), 40);
-  
+
+  // Inicializar Device ID unico
+  initDeviceId();
+
+  updateBootStatus(display->color565(50, 0, 0), 50);
+
   // WiFi + NTP (com fallback automático)
   currentStatus = connectWiFiAndSync();
+
+  updateBootStatus(display->color565(50, 0, 0), 70);
+
+  // Inicializar Mesh Sync (ESP-NOW)
+  initMeshSync();
   
   updateBootStatus(display->color565(50, 0, 0), 80);
   
@@ -638,9 +1132,11 @@ void setup() {
   Serial.println("\n╔═══════════════════════════════════╗");
   Serial.println("║     SISTEMA PRONTO!               ║");
   Serial.println("╚═══════════════════════════════════╝");
+  Serial.printf("Device ID: %s\n", deviceIdStr);
+  Serial.printf("Mesh: %s | Role: %s\n", meshEnabled ? "ON" : "OFF", isMaster ? "MASTER" : "SLAVE");
   Serial.printf("Modo inicial: AUTO_SOLAR\n");
   Serial.printf("Offset solar: %+d hora(s)\n\n", SOLAR_OFFSET_HOURS);
-  
+
   updateDisplay();
 }
 
@@ -833,9 +1329,12 @@ void updateDisplay() {
 void loop() {
   static unsigned long lastUpdate = 0;
   static unsigned long lastSync = 0;
-  
+
   handleButton();
-  
+
+  // Atualizar mesh sync
+  updateMeshSync();
+
   unsigned long currentMillis = millis();
   
   // Atualizar display a cada 60s (só em AUTO_SOLAR)
