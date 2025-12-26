@@ -1105,7 +1105,7 @@ void showCaptivePortalDisplay() {
   // Texto "SETUP"
   display->setTextSize(1);
   display->setTextColor(amber);
-  display->setCursor(4, 9);
+  display->setCursor(1, 9);
   display->print("SETUP");
 }
 
