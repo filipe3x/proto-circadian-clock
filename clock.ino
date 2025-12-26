@@ -224,6 +224,9 @@ const char* getMeshStateName(MeshState state);
 // Default argument definido apenas no header (captive_portal.h)
 void prepareForRestart(bool showOK);
 
+// Brightness preview animation (para captive portal)
+void previewBrightness(int brightness);
+
 // Captive Portal - declaracoes em captive_portal.h
 
 // ============= SAFE RESTART =============
@@ -299,6 +302,43 @@ void prepareForRestart(bool showOK) {
 
   // 6. Reiniciar
   ESP.restart();
+}
+
+// ============= BRIGHTNESS PREVIEW =============
+// Animacao de demonstracao do brilho configurado
+// Faz fade in/out com luz vermelha para o utilizador ver o efeito
+void previewBrightness(int brightness) {
+  if (display == nullptr || dma_display == nullptr) return;
+
+  Serial.printf("[PREVIEW] Brightness preview: %d\n", brightness);
+
+  // Aplicar o brilho selecionado
+  dma_display->setBrightness8(brightness);
+
+  // Fade in com luz vermelha (0 -> 255)
+  for (int b = 0; b <= 255; b += 10) {
+    uint8_t r = (255 * b) / 255;
+    display->fillScreen(display->color565(r, 0, 0));
+    delay(15);
+  }
+  display->fillScreen(display->color565(255, 0, 0));
+
+  // Hold no máximo
+  delay(400);
+
+  // Fade out (255 -> 0)
+  for (int b = 255; b >= 0; b -= 10) {
+    uint8_t r = (255 * b) / 255;
+    display->fillScreen(display->color565(r, 0, 0));
+    delay(15);
+  }
+  display->fillScreen(display->color565(0, 0, 0));
+
+  // Pequena pausa no preto
+  delay(100);
+
+  // Voltar a mostrar o ecrã do captive portal
+  showCaptivePortalDisplay();
 }
 
 // ============= ANIMACAO DE BOOT =============

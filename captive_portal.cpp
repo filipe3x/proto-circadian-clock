@@ -167,6 +167,25 @@ void setupCaptiveWebServer() {
     prepareForRestart(true);  // true = mostrar "OK" em amber
   });
 
+  // Preview de brilho - chamado quando o utilizador larga o slider
+  webServer.on("/preview-brightness", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (request->hasParam("value")) {
+      int brightness = request->getParam("value")->value().toInt();
+      brightness = constrain(brightness, 10, 255);
+
+      Serial.printf("[WEB] Preview brightness: %d\n", brightness);
+
+      // Responder imediatamente para não bloquear o browser
+      request->send(200, "text/plain", "OK");
+
+      // Executar a animação de preview (atualiza o timer do portal para não dar timeout)
+      configModeStart = millis();
+      previewBrightness(brightness);
+    } else {
+      request->send(400, "text/plain", "Missing value parameter");
+    }
+  });
+
   // Captive portal detection (iOS, Android, Windows)
   webServer.on("/hotspot-detect.html", HTTP_GET, handleCaptiveRedirect);
   webServer.on("/generate_204", HTTP_GET, handleCaptiveRedirect);
@@ -487,7 +506,7 @@ String getConfigPage() {
         </div>
         <label>Brightness</label>
         <div class="slider-container">
-          <input type="range" name="bright" min="10" max="255" value=")rawliteral";
+          <input type="range" name="bright" id="brightSlider" min="10" max="255" value=")rawliteral";
 
   html += String(configBrightness);
   html += R"rawliteral(" oninput="document.getElementById('bval').textContent=this.value">
@@ -552,6 +571,29 @@ String getConfigPage() {
         label.textContent = 'Normal';
       }
     }
+
+    // Brightness preview - triggers when user releases the slider
+    (function() {
+      var slider = document.getElementById('brightSlider');
+      var previewTimeout = null;
+
+      function previewBrightness() {
+        // Debounce to avoid multiple calls
+        if (previewTimeout) clearTimeout(previewTimeout);
+        previewTimeout = setTimeout(function() {
+          var value = slider.value;
+          fetch('/preview-brightness?value=' + value)
+            .then(function(r) { console.log('Preview:', value); })
+            .catch(function(e) { console.error('Preview error:', e); });
+        }, 100);
+      }
+
+      // Mouse events (desktop)
+      slider.addEventListener('mouseup', previewBrightness);
+
+      // Touch events (mobile)
+      slider.addEventListener('touchend', previewBrightness);
+    })();
   </script>
 </body>
 </html>
