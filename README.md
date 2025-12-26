@@ -222,7 +222,7 @@ Potential future enhancements:
 
 ## Authors
 
-- **Filipe Moreira** ([@filipe3x](https://github.com/filipe3x)) - Creator and maintainer
+- **Filipe Marques** ([@filipe3x](https://github.com/filipe3x)) - Creator and maintainer
 - **Claude** (Anthropic) - AI pair programming assistant
 
 ## License
