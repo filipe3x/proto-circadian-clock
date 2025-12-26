@@ -400,11 +400,26 @@ String getConfigPage() {
             <option value="-33.8688,151.2093">Sydney</option>
             <option value="-37.8136,144.9631">Melbourne</option>
           </optgroup>
-          <optgroup label="Asia">
-            <option value="35.6762,139.6503">Tokyo</option>
-            <option value="22.3193,114.1694">Hong Kong</option>
-            <option value="1.3521,103.8198">Singapore</option>
+          <optgroup label="China">
+            <option value="22.5431,114.0579">Shenzhen</option>
+            <option value="39.9042,116.4074">Beijing</option>
             <option value="31.2304,121.4737">Shanghai</option>
+            <option value="30.2741,120.1551">Hangzhou</option>
+            <option value="23.1291,113.2644">Guangzhou</option>
+            <option value="30.5728,104.0668">Chengdu</option>
+            <option value="30.5928,114.3055">Wuhan</option>
+            <option value="34.3416,108.9398">Xi'an</option>
+            <option value="32.0603,118.7969">Nanjing</option>
+            <option value="31.2989,120.5853">Suzhou</option>
+            <option value="22.3193,114.1694">Hong Kong</option>
+          </optgroup>
+          <optgroup label="Taiwan">
+            <option value="25.0330,121.5654">Taipei</option>
+            <option value="24.8066,120.9686">Hsinchu</option>
+          </optgroup>
+          <optgroup label="Asia - Other">
+            <option value="35.6762,139.6503">Tokyo</option>
+            <option value="1.3521,103.8198">Singapore</option>
             <option value="37.5665,126.9780">Seoul</option>
             <option value="19.0760,72.8777">Mumbai</option>
           </optgroup>
@@ -455,7 +470,7 @@ String getConfigPage() {
           <option value="5">UTC+5</option>
           <option value="6">UTC+6</option>
           <option value="7">UTC+7</option>
-          <option value="8">UTC+8 (Singapore, Hong Kong)</option>
+          <option value="8">UTC+8 (China, Taiwan, Singapore)</option>
           <option value="9">UTC+9 (Tokyo)</option>
           <option value="10">UTC+10 (Sydney)</option>
           <option value="11">UTC+11</option>
