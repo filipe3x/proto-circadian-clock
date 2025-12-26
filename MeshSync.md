@@ -40,19 +40,33 @@ O mesh usa uma **máquina de estados adaptativa** para poupar energia:
 
 ```cpp
 #define MESH_SCAN_INTERVAL_MS 60000   // Scan a cada 60s quando sozinho
-#define MESH_SCAN_DURATION_MS 3000    // 3s de escuta durante scan
+#define MESH_SCAN_DURATION_MS 3000    // 3s de escuta durante scan normal
+#define MESH_INITIAL_SCAN_MS 65000    // 65s no primeiro scan (garante descoberta)
 #define MESH_IDLE_TIMEOUT_MS 300000   // 5 min sem peers = desligar mesh
 ```
+
+### Scan Inicial Longo
+
+Para garantir que dispositivos se encontram mesmo que os scans estejam dessincronizados:
+
+```
+Boot:     ████████████████████████████████████████████████████████████████░░░░░░███░░░░░░
+          ←───────────────── 65s ────────────────────────────────────────→     ←3s→
+          Primeiro scan (longo, > 1 ciclo)                                     Seguintes
+```
+
+**Porquê 65s?** É maior que o intervalo de scan (60s), garantindo que apanha pelo menos um ciclo completo de qualquer outro dispositivo na rede.
 
 ### Consumo por Estado
 
 | Estado | WiFi | Consumo | Duração |
 |--------|------|---------|---------|
 | MESH_OFF | Desligado | ~20mA (só CPU+display) | 57s |
-| MESH_SCANNING | Ligado | ~95mA | 3s |
+| MESH_SCANNING (inicial) | Ligado | ~95mA | 65s (só no boot) |
+| MESH_SCANNING (normal) | Ligado | ~95mA | 3s |
 | MESH_ACTIVE | Ligado | ~95mA | Contínuo |
 
-**Consumo médio quando sozinho:**
+**Consumo médio quando sozinho (após boot):**
 ```
 (20mA × 57s + 95mA × 3s) / 60s = 23.75mA ≈ 24mA
 ```

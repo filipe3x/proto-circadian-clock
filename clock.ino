@@ -75,7 +75,8 @@ Preferences preferences;
 
 // Configuracao do modo hibrido (economia de energia)
 #define MESH_SCAN_INTERVAL_MS 60000   // Scan a cada 60s quando sozinho
-#define MESH_SCAN_DURATION_MS 3000    // 3s de escuta durante scan
+#define MESH_SCAN_DURATION_MS 3000    // 3s de escuta durante scan normal
+#define MESH_INITIAL_SCAN_MS 65000    // 65s no primeiro scan (> 1 ciclo completo)
 #define MESH_IDLE_TIMEOUT_MS 300000   // 5 min sem peers = desligar mesh
 
 // Estados do mesh (maquina de estados hibrida)
@@ -88,6 +89,7 @@ enum MeshState {
 MeshState meshState = MESH_OFF;
 unsigned long lastScanTime = 0;
 unsigned long lastPeerActivity = 0;
+bool isFirstScan = true;  // Primeiro scan e mais longo
 
 // Endereco broadcast ESP-NOW
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
@@ -954,7 +956,10 @@ void startMeshScan() {
   // Enviar discovery imediatamente
   sendDiscovery();
 
-  Serial.printf("[MESH] Scan iniciado (WiFi ON por %dms)\n", MESH_SCAN_DURATION_MS);
+  int scanDuration = isFirstScan ? MESH_INITIAL_SCAN_MS : MESH_SCAN_DURATION_MS;
+  Serial.printf("[MESH] Scan iniciado (WiFi ON por %ds) %s\n",
+                scanDuration / 1000,
+                isFirstScan ? "[INICIAL]" : "");
 }
 
 // Para o mesh e desliga WiFi para poupar energia
@@ -979,7 +984,9 @@ void stopMesh() {
   }
   numPeers = 0;
 
-  Serial.println("[MESH] WiFi OFF - Proximo scan em 60s");
+  Serial.printf("[MESH] WiFi OFF - Proximo scan em %ds (%ds duracao)\n",
+                MESH_SCAN_INTERVAL_MS / 1000,
+                MESH_SCAN_DURATION_MS / 1000);
 }
 
 // Inicializa o sistema mesh (chamado no setup)
@@ -1017,17 +1024,29 @@ void updateMeshSync() {
       break;
 
     case MESH_SCANNING:
-      // A procurar peers: esperar SCAN_DURATION_MS por respostas
-      if (now - lastScanTime >= MESH_SCAN_DURATION_MS) {
-        if (numPeers > 0) {
-          // Encontrou peers! Transitar para modo ativo
-          meshState = MESH_ACTIVE;
-          lastPeerActivity = now;
+      // A procurar peers: esperar pela duracao do scan
+      {
+        unsigned long scanDuration = isFirstScan ? MESH_INITIAL_SCAN_MS : MESH_SCAN_DURATION_MS;
+
+        // Durante scan inicial, enviar discovery periodicamente (a cada 10s)
+        if (isFirstScan && (now - lastBroadcast >= 10000)) {
           lastBroadcast = now;
-          Serial.printf("[MESH] %d peer(s) encontrado(s) - Mesh ATIVO\n", numPeers);
-        } else {
-          // Nenhum peer encontrado, desligar WiFi
-          stopMesh();
+          sendDiscovery();
+        }
+
+        if (now - lastScanTime >= scanDuration) {
+          if (numPeers > 0) {
+            // Encontrou peers! Transitar para modo ativo
+            meshState = MESH_ACTIVE;
+            lastPeerActivity = now;
+            lastBroadcast = now;
+            isFirstScan = false;
+            Serial.printf("[MESH] %d peer(s) encontrado(s) - Mesh ATIVO\n", numPeers);
+          } else {
+            // Nenhum peer encontrado, desligar WiFi
+            isFirstScan = false;  // Proximo scan sera curto
+            stopMesh();
+          }
         }
       }
       break;
