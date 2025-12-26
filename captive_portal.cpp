@@ -1,5 +1,13 @@
 #include "captive_portal.h"
 
+// Credenciais de fallback para debug (copia wifi_credentials.h.example para wifi_credentials.h)
+#if DEBUG_MODE && __has_include("wifi_credentials.h")
+  #include "wifi_credentials.h"
+  #define HAS_FALLBACK_WIFI 1
+#else
+  #define HAS_FALLBACK_WIFI 0
+#endif
+
 // ============= VARIAVEIS GLOBAIS =============
 WiFiCredentials wifiNetworks[2];
 int NUM_WIFI_NETWORKS = 2;
@@ -67,13 +75,13 @@ void loadConfig() {
   if (wifiNetworks[0].ssid.length() > 0) NUM_WIFI_NETWORKS++;
   if (wifiNetworks[1].ssid.length() > 0) NUM_WIFI_NETWORKS++;
 
-  // DEBUG: Se nao ha redes configuradas, usar credenciais de fallback
-  #if DEBUG_MODE
+  // DEBUG: Se nao ha redes configuradas, usar credenciais de wifi_credentials.h
+  #if HAS_FALLBACK_WIFI
   if (NUM_WIFI_NETWORKS == 0) {
     wifiNetworks[0].ssid = FALLBACK_WIFI_SSID;
     wifiNetworks[0].password = FALLBACK_WIFI_PASS;
     NUM_WIFI_NETWORKS = 1;
-    Serial.println("[DEBUG] Usando credenciais WiFi de fallback");
+    Serial.println("[DEBUG] Usando credenciais de wifi_credentials.h");
   }
   #endif
 
