@@ -69,9 +69,25 @@ Preferences preferences;
 #define MESH_CHANNEL 1
 #define SYNC_MAGIC 0x50434C4B  // "PCLK" - Proto CLock
 #define SYNC_VERSION 1
-#define BROADCAST_INTERVAL_MS 30000  // Broadcast a cada 30s
+#define BROADCAST_INTERVAL_MS 30000  // Broadcast a cada 30s (quando ativo)
 #define ACK_TIMEOUT_MS 500
 #define MAX_PEERS 10
+
+// Configuracao do modo hibrido (economia de energia)
+#define MESH_SCAN_INTERVAL_MS 60000   // Scan a cada 60s quando sozinho
+#define MESH_SCAN_DURATION_MS 3000    // 3s de escuta durante scan
+#define MESH_IDLE_TIMEOUT_MS 300000   // 5 min sem peers = desligar mesh
+
+// Estados do mesh (maquina de estados hibrida)
+enum MeshState {
+  MESH_OFF,       // WiFi desligado, a poupar energia
+  MESH_SCANNING,  // A procurar peers (WiFi ON temporario)
+  MESH_ACTIVE     // Peers encontrados, mesh sempre ativo
+};
+
+MeshState meshState = MESH_OFF;
+unsigned long lastScanTime = 0;
+unsigned long lastPeerActivity = 0;
 
 // Endereco broadcast ESP-NOW
 uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
@@ -204,6 +220,9 @@ void handleAck(MeshMessage* msg);
 void updateMasterStatus();
 bool compareMac(const uint8_t* a, const uint8_t* b);
 void formatMac(const uint8_t* mac, char* str);
+void startMeshScan();
+void stopMesh();
+const char* getMeshStateName(MeshState state);
 
 // ============= ANIMACAO DE BOOT =============
 void showBootAnimation() {
@@ -860,7 +879,8 @@ void sendSettings() {
 // Broadcast imediato de mudanca de modo (para feedback instantaneo)
 // Qualquer dispositivo pode enviar, nao precisa ser master
 void broadcastModeChange() {
-  if (!meshEnabled || numPeers == 0) return;
+  // So enviar se mesh esta ativo e ha peers
+  if (meshState != MESH_ACTIVE || numPeers == 0) return;
 
   MeshMessage msg;
   msg.magic = SYNC_MAGIC;
@@ -881,9 +901,19 @@ void broadcastModeChange() {
   Serial.printf("[MESH] Mode change broadcast: %d\n", currentMode);
 }
 
-// Inicializa ESP-NOW mesh
-void initMeshSync() {
-  Serial.println("\n=== MESH SYNC ===");
+// Retorna nome do estado do mesh
+const char* getMeshStateName(MeshState state) {
+  switch (state) {
+    case MESH_OFF: return "OFF";
+    case MESH_SCANNING: return "SCANNING";
+    case MESH_ACTIVE: return "ACTIVE";
+    default: return "UNKNOWN";
+  }
+}
+
+// Inicia scan para descoberta de peers (liga WiFi temporariamente)
+void startMeshScan() {
+  Serial.println("[MESH] Iniciando scan...");
 
   // Configurar WiFi em modo STA para ESP-NOW
   WiFi.mode(WIFI_STA);
@@ -895,7 +925,7 @@ void initMeshSync() {
   // Inicializar ESP-NOW
   if (esp_now_init() != ESP_OK) {
     Serial.println("[MESH] Erro ao inicializar ESP-NOW");
-    meshEnabled = false;
+    meshState = MESH_OFF;
     return;
   }
 
@@ -911,9 +941,54 @@ void initMeshSync() {
 
   if (esp_now_add_peer(&peerInfo) != ESP_OK) {
     Serial.println("[MESH] Erro ao adicionar peer broadcast");
-    meshEnabled = false;
+    esp_now_deinit();
+    WiFi.mode(WIFI_OFF);
+    meshState = MESH_OFF;
     return;
   }
+
+  meshEnabled = true;
+  meshState = MESH_SCANNING;
+  lastScanTime = millis();
+
+  // Enviar discovery imediatamente
+  sendDiscovery();
+
+  Serial.printf("[MESH] Scan iniciado (WiFi ON por %dms)\n", MESH_SCAN_DURATION_MS);
+}
+
+// Para o mesh e desliga WiFi para poupar energia
+void stopMesh() {
+  Serial.println("[MESH] Desligando mesh (economia energia)...");
+
+  // Desinicializar ESP-NOW
+  esp_now_deinit();
+
+  // Desligar WiFi completamente
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+
+  meshEnabled = false;
+  meshState = MESH_OFF;
+
+  // Limpar tabela de peers
+  for (int i = 0; i < MAX_PEERS; i++) {
+    if (knownPeers[i].active) {
+      knownPeers[i].active = false;
+    }
+  }
+  numPeers = 0;
+
+  Serial.println("[MESH] WiFi OFF - Proximo scan em 60s");
+}
+
+// Inicializa o sistema mesh (chamado no setup)
+void initMeshSync() {
+  Serial.println("\n=== MESH SYNC (HIBRIDO) ===");
+  Serial.printf("[MESH] Device ID: %s\n", deviceIdStr);
+  Serial.printf("[MESH] First Boot: %u\n", myFirstBootTime);
+  Serial.printf("[MESH] Modo: Hibrido (scan %ds a cada %ds)\n",
+                MESH_SCAN_DURATION_MS / 1000, MESH_SCAN_INTERVAL_MS / 1000);
 
   // Inicializar tabela de peers
   for (int i = 0; i < MAX_PEERS; i++) {
@@ -923,48 +998,79 @@ void initMeshSync() {
     pendingAcks[i].waiting = false;
   }
 
-  meshEnabled = true;
   isMaster = true;  // Assumir master ate descobrir peers mais antigos
 
-  Serial.println("[MESH] ESP-NOW inicializado");
-  Serial.printf("[MESH] Device ID: %s\n", deviceIdStr);
-  Serial.printf("[MESH] First Boot: %u\n", myFirstBootTime);
-  Serial.printf("[MESH] Estado: MASTER (default)\n");
-
-  // Enviar primeiro discovery
-  delay(100);
-  sendDiscovery();
+  // Iniciar primeiro scan imediatamente
+  startMeshScan();
 }
 
-// Atualiza mesh sync no loop
+// Atualiza mesh sync no loop (maquina de estados hibrida)
 void updateMeshSync() {
-  if (!meshEnabled) return;
-
   unsigned long now = millis();
 
-  // Broadcast periodico
-  if (now - lastBroadcast >= BROADCAST_INTERVAL_MS) {
-    lastBroadcast = now;
+  switch (meshState) {
+    case MESH_OFF:
+      // Modo economia: WiFi desligado, verificar se e hora de fazer scan
+      if (now - lastScanTime >= MESH_SCAN_INTERVAL_MS) {
+        startMeshScan();
+      }
+      break;
 
-    sendDiscovery();
+    case MESH_SCANNING:
+      // A procurar peers: esperar SCAN_DURATION_MS por respostas
+      if (now - lastScanTime >= MESH_SCAN_DURATION_MS) {
+        if (numPeers > 0) {
+          // Encontrou peers! Transitar para modo ativo
+          meshState = MESH_ACTIVE;
+          lastPeerActivity = now;
+          lastBroadcast = now;
+          Serial.printf("[MESH] %d peer(s) encontrado(s) - Mesh ATIVO\n", numPeers);
+        } else {
+          // Nenhum peer encontrado, desligar WiFi
+          stopMesh();
+        }
+      }
+      break;
 
-    // Se somos master, enviar settings tambem
-    if (isMaster && numPeers > 0) {
-      delay(100);  // Pequeno delay para nao colidir
-      sendSettings();
-    }
+    case MESH_ACTIVE:
+      // Mesh ativo: comportamento normal com verificacao de timeout
 
-    updateMasterStatus();
-  }
+      // Atualizar lastPeerActivity se ha peers ativos
+      if (numPeers > 0) {
+        lastPeerActivity = now;
+      }
 
-  // Verificar ACKs pendentes (timeout)
-  for (int i = 0; i < 5; i++) {
-    if (pendingAcks[i].waiting && (now - pendingAcks[i].sentTime > ACK_TIMEOUT_MS)) {
-      pendingAcks[i].waiting = false;
-      char targetStr[18];
-      formatMac(pendingAcks[i].targetId, targetStr);
-      Serial.printf("[MESH] ACK timeout para %s (msg %d)\n", targetStr, pendingAcks[i].msgId);
-    }
+      // Broadcast periodico
+      if (now - lastBroadcast >= BROADCAST_INTERVAL_MS) {
+        lastBroadcast = now;
+
+        sendDiscovery();
+
+        // Se somos master, enviar settings tambem
+        if (isMaster && numPeers > 0) {
+          delay(100);  // Pequeno delay para nao colidir
+          sendSettings();
+        }
+
+        updateMasterStatus();
+      }
+
+      // Verificar ACKs pendentes (timeout)
+      for (int i = 0; i < 5; i++) {
+        if (pendingAcks[i].waiting && (now - pendingAcks[i].sentTime > ACK_TIMEOUT_MS)) {
+          pendingAcks[i].waiting = false;
+          char targetStr[18];
+          formatMac(pendingAcks[i].targetId, targetStr);
+          Serial.printf("[MESH] ACK timeout para %s (msg %d)\n", targetStr, pendingAcks[i].msgId);
+        }
+      }
+
+      // Verificar se perdemos todos os peers (timeout de inatividade)
+      if (numPeers == 0 && (now - lastPeerActivity >= MESH_IDLE_TIMEOUT_MS)) {
+        Serial.println("[MESH] Sem peers ha 5 minutos");
+        stopMesh();
+      }
+      break;
   }
 }
 
@@ -1158,7 +1264,7 @@ void setup() {
   Serial.println("║     SISTEMA PRONTO!               ║");
   Serial.println("╚═══════════════════════════════════╝");
   Serial.printf("Device ID: %s\n", deviceIdStr);
-  Serial.printf("Mesh: %s | Role: %s\n", meshEnabled ? "ON" : "OFF", isMaster ? "MASTER" : "SLAVE");
+  Serial.printf("Mesh: %s | Peers: %d\n", getMeshStateName(meshState), numPeers);
   Serial.printf("Modo inicial: AUTO_SOLAR\n");
   Serial.printf("Offset solar: %+d hora(s)\n\n", SOLAR_OFFSET_HOURS);
 

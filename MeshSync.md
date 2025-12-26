@@ -8,6 +8,60 @@ Quando tens vários Proto Circadian Clocks na mesma casa/espaço, eles sincroniz
 - **Mudança de modo instantânea** - Quando mudas o modo num dispositivo, todos os outros mudam imediatamente
 - **Descoberta automática** - Novos dispositivos são detectados automaticamente
 - **Sem configuração** - Funciona out-of-the-box, sem router WiFi necessário
+- **Economia de energia** - WiFi desliga-se automaticamente quando não há outros dispositivos
+
+## Modo Híbrido (Economia de Energia)
+
+O mesh usa uma **máquina de estados adaptativa** para poupar energia:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     MÁQUINA DE ESTADOS                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   ┌──────────────┐                      ┌──────────────┐        │
+│   │   MESH_OFF   │◄────────────────────►│ MESH_ACTIVE  │        │
+│   │  (WiFi OFF)  │    encontrou peers   │  (WiFi ON)   │        │
+│   │   ~0mA WiFi  │◄────────────────────►│   ~95mA      │        │
+│   └──────┬───────┘    perdeu peers      └──────────────┘        │
+│          │            (5 min timeout)          ▲                │
+│          │ Timer 60s                           │                │
+│          ▼                                     │                │
+│   ┌──────────────┐                             │                │
+│   │MESH_SCANNING │─────────────────────────────┘                │
+│   │ (WiFi ON 3s) │     peers responderam                        │
+│   │   ~95mA      │                                              │
+│   └──────────────┘                                              │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Configuração
+
+```cpp
+#define MESH_SCAN_INTERVAL_MS 60000   // Scan a cada 60s quando sozinho
+#define MESH_SCAN_DURATION_MS 3000    // 3s de escuta durante scan
+#define MESH_IDLE_TIMEOUT_MS 300000   // 5 min sem peers = desligar mesh
+```
+
+### Consumo por Estado
+
+| Estado | WiFi | Consumo | Duração |
+|--------|------|---------|---------|
+| MESH_OFF | Desligado | ~20mA (só CPU+display) | 57s |
+| MESH_SCANNING | Ligado | ~95mA | 3s |
+| MESH_ACTIVE | Ligado | ~95mA | Contínuo |
+
+**Consumo médio quando sozinho:**
+```
+(20mA × 57s + 95mA × 3s) / 60s = 23.75mA ≈ 24mA
+```
+
+**Comparação:**
+| Cenário | Antes | Agora | Redução |
+|---------|-------|-------|---------|
+| 1 dispositivo sozinho | 95mA | 24mA | **75%** |
+| 2+ dispositivos | 95mA | 95mA | 0% |
 
 ## Como Funciona
 
