@@ -63,13 +63,30 @@ GPIO 0    →    Button   →    GND
 
 ## Software Dependencies
 
-Install via Arduino Library Manager:
+### ESP32 Board Package
 
-- **ESP32-HUB75-MatrixPanel-I2S-DMA** by mrfaptastic
-- **RTClib** by Adafruit
-- **Dusk2Dawn** by DM Kishi
+In Arduino IDE, add this URL to **File → Preferences → Additional Board Manager URLs**:
+```
+https://espressif.github.io/arduino-esp32/package_esp32_index.json
+```
 
-Install manually:
+Then install **esp32** by Espressif Systems via **Tools → Board → Boards Manager**.
+
+### Arduino Libraries
+
+Install via **Sketch → Include Library → Manage Libraries**:
+
+| Library | Author | Description |
+|---------|--------|-------------|
+| **ESP32-HUB75-MatrixPanel-I2S-DMA** | mrfaptastic | LED matrix driver |
+| **RTClib** | Adafruit | RTC DS3231 support |
+| **Dusk2Dawn** | DM Kishi | Solar calculations |
+| **ESPAsyncWebServer** | me-no-dev | Async web server for captive portal |
+| **AsyncTCP** | me-no-dev | Async TCP for ESP32 |
+
+### Manual Installation
+
+The P10 panel wrapper library (not in Library Manager):
 
 ```bash
 cd ~/Arduino/libraries/
