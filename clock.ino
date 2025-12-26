@@ -5,7 +5,7 @@
 #include <esp_wifi.h>
 #include <Preferences.h>
 #include <Dusk2Dawn.h>
-#include "wifi_credentials.h"
+#include "captive_portal.h"  // Modulo do captive portal
 
 // ============= PINOUT =============
 #define R1_PIN 25
@@ -32,7 +32,6 @@ RTC_DS3231 rtc;
 bool rtcAvailable = false;
 
 // ============= CONFIGURACAO WIFI MULTI-SSID =============
-// WiFi credentials are stored in wifi_credentials.h (not tracked by git)
 const int WIFI_TIMEOUT_MS = 10000;  // 10s por rede
 const int WIFI_RETRY_PER_NETWORK = 2;  // Tentar cada rede 2x
 
@@ -49,12 +48,12 @@ enum SystemStatus {
 SystemStatus currentStatus = STATUS_OFFLINE;
 
 // ============= LOCALIZACAO =============
-const float LATITUDE = 41.5362;
-const float LONGITUDE = -8.7813;
-const int TIMEZONE_OFFSET = 0;
+// Configuracoes dinamicas em captive_portal.h: configLatitude, configLongitude, configTimezone
+// Usar referencias para as variaveis do modulo captive_portal
+#define LATITUDE configLatitude
+#define LONGITUDE configLongitude
+#define TIMEZONE_OFFSET configTimezone
 const int SOLAR_OFFSET_HOURS = 1;
-
-Dusk2Dawn esposende(LATITUDE, LONGITUDE, TIMEZONE_OFFSET);
 
 // ============= DEVICE ID UNICO =============
 // O ESP32 tem um eFuse de 64 bits unico de fabrica
@@ -225,6 +224,8 @@ void formatMac(const uint8_t* mac, char* str);
 void startMeshScan();
 void stopMesh();
 const char* getMeshStateName(MeshState state);
+
+// Captive Portal - declaracoes em captive_portal.h
 
 // ============= ANIMACAO DE BOOT =============
 void showBootAnimation() {
@@ -430,7 +431,7 @@ bool tryConnectWiFi() {
   
   // Tentar cada rede
   for(int net = 0; net < NUM_WIFI_NETWORKS; net++) {
-    Serial.printf("\nRede %d/%d: %s\n", net + 1, NUM_WIFI_NETWORKS, wifiNetworks[net].ssid);
+    Serial.printf("\nRede %d/%d: %s\n", net + 1, NUM_WIFI_NETWORKS, wifiNetworks[net].ssid.c_str());
     
     // Tentar cada rede múltiplas vezes
     for(int attempt = 0; attempt < WIFI_RETRY_PER_NETWORK; attempt++) {
@@ -439,7 +440,7 @@ bool tryConnectWiFi() {
       }
       
       WiFi.mode(WIFI_STA);
-      WiFi.begin(wifiNetworks[net].ssid, wifiNetworks[net].password);
+      WiFi.begin(wifiNetworks[net].ssid.c_str(), wifiNetworks[net].password.c_str());
       
       unsigned long startAttempt = millis();
       bool toggle = false;
@@ -462,7 +463,7 @@ bool tryConnectWiFi() {
       
       if (WiFi.status() == WL_CONNECTED) {
         Serial.println("\n✅ WiFi conectado!");
-        Serial.printf("   SSID: %s\n", wifiNetworks[net].ssid);
+        Serial.printf("   SSID: %s\n", wifiNetworks[net].ssid.c_str());
         Serial.printf("   IP: %s\n", WiFi.localIP().toString().c_str());
         Serial.printf("   RSSI: %d dBm\n", WiFi.RSSI());
         
@@ -1093,6 +1094,41 @@ void updateMeshSync() {
   }
 }
 
+// Funcao auxiliar para mostrar feedback visual do captive portal no display
+void showCaptivePortalDisplay() {
+  display->fillScreen(display->color565(0, 0, 0));
+
+  // Desenhar icone de WiFi estilizado
+  uint16_t lavender = display->color565(167, 139, 250);
+  uint16_t amber = display->color565(251, 191, 36);
+
+  // Arcos de WiFi
+  display->drawPixel(15, 2, lavender);
+  display->drawPixel(16, 2, lavender);
+  display->drawLine(13, 4, 18, 4, lavender);
+  display->drawLine(11, 6, 20, 6, lavender);
+
+  // Texto "SETUP"
+  display->setTextSize(1);
+  display->setTextColor(amber);
+  display->setCursor(4, 9);
+  display->print("SETUP");
+}
+
+// Wrapper para iniciar o captive portal com feedback visual
+void startCaptivePortalWithDisplay() {
+  // Parar mesh se estiver ativo
+  if (meshState != MESH_OFF) {
+    stopMesh();
+  }
+
+  // Iniciar o portal (modulo externo)
+  startCaptivePortal(nullptr);
+
+  // Mostrar feedback no display
+  showCaptivePortalDisplay();
+}
+
 // ============= CONVERSAO TEMPERATURA DE COR =============
 void colorTempToRGB(int kelvin, uint8_t &r, uint8_t &g, uint8_t &b) {
   float temp = kelvin / 100.0;
@@ -1235,6 +1271,23 @@ void setup() {
   
   updateBootStatus(display->color565(50, 0, 0), 40);
 
+  // Verificar se ha configuracao guardada
+  if (!hasStoredConfig()) {
+    Serial.println("\n⚠️  Sem configuracao guardada!");
+    Serial.println("    Iniciando Captive Portal...\n");
+    startCaptivePortalWithDisplay();
+    return;  // Sair do setup - o loop vai gerir o portal
+  }
+
+  // Carregar configuracao
+  loadConfig();
+  initSolarCalc();
+
+  // Aplicar brilho configurado
+  dma_display->setBrightness8(configBrightness);
+
+  updateBootStatus(display->color565(50, 0, 0), 45);
+
   // Inicializar Device ID unico
   initDeviceId();
 
@@ -1293,8 +1346,8 @@ void setup() {
 // ============= INFORMACOES SOLARES =============
 void printSolarInfo() {
   DateTime now = getCurrentTime();
-  int sunrise = esposende.sunrise(now.year(), now.month(), now.day(), true);
-  int sunset = esposende.sunset(now.year(), now.month(), now.day(), true);
+  int sunrise = solarCalc->sunrise(now.year(), now.month(), now.day(), true);
+  int sunset = solarCalc->sunset(now.year(), now.month(), now.day(), true);
   
   Serial.println("\n--- Info Solar ---");
   Serial.printf("Data: %02d/%02d/%04d\n", now.day(), now.month(), now.year());
@@ -1445,18 +1498,73 @@ void displayOff() {
 
 // ============= GESTAO DE BOTAO =============
 void handleButton() {
+  static unsigned long buttonPressStart = 0;
+  static bool longPressTriggered = false;
+  static bool showingProgress = false;
+
   if (buttonPressed) {
     buttonPressed = false;
     delay(20);
 
     if (digitalRead(BUTTON_PIN) == LOW) {
+      // Botao acabou de ser pressionado
+      buttonPressStart = millis();
+      longPressTriggered = false;
+      showingProgress = false;
+    }
+  }
+
+  // Se o botao esta pressionado, verificar duracao
+  if (digitalRead(BUTTON_PIN) == LOW && buttonPressStart > 0) {
+    unsigned long pressDuration = millis() - buttonPressStart;
+
+    // Mostrar progresso visual apos 1 segundo
+    if (pressDuration > 1000 && !showingProgress) {
+      showingProgress = true;
+      display->fillScreen(display->color565(0, 0, 0));
+      display->setTextSize(1);
+      display->setTextColor(display->color565(167, 139, 250));  // Lavender
+      display->setCursor(1, 4);
+      display->print("SETUP");
+    }
+
+    // Atualizar barra de progresso (1s a 5s = 4s total)
+    if (showingProgress && !longPressTriggered) {
+      int progress = constrain(map(pressDuration, 1000, BUTTON_LONG_PRESS_MS, 0, 32), 0, 32);
+      display->fillRect(0, 14, progress, 2, display->color565(251, 191, 36));  // Amber
+    }
+
+    // Long press detectado (5 segundos)
+    if (pressDuration >= BUTTON_LONG_PRESS_MS && !longPressTriggered) {
+      longPressTriggered = true;
+      Serial.println("\n[BUTTON] Long press detectado - entrando em modo config...");
+
+      // Feedback visual
+      display->fillScreen(display->color565(0, 0, 0));
+      display->fillRect(0, 14, 32, 2, display->color565(110, 231, 183));  // Mint green
+
+      delay(500);
+
+      // Iniciar captive portal
+      startCaptivePortalWithDisplay();
+
+      buttonPressStart = 0;
+      return;
+    }
+  }
+  // Botao foi libertado
+  else if (buttonPressStart > 0) {
+    unsigned long pressDuration = millis() - buttonPressStart;
+    buttonPressStart = 0;
+
+    // Short press (< 1s) - mudar modo
+    if (pressDuration < 1000 && !longPressTriggered) {
       currentMode = (Mode)((currentMode + 1) % 3);
 
       const char* modeNames[] = {"AUTO_SOLAR", "THERAPY_RED", "OFF"};
       Serial.printf("\n>>> MODO: %s <<<\n\n", modeNames[currentMode]);
 
       // SYNC IMEDIATO: Broadcast para todos os peers ANTES da animacao
-      // Isto garante que os outros dispositivos mudam instantaneamente
       broadcastModeChange();
 
       // Show beautiful feedback icon with fade animation
@@ -1464,9 +1572,13 @@ void handleButton() {
 
       // Then update to the actual mode display
       updateDisplay();
-
-      while (digitalRead(BUTTON_PIN) == LOW) delay(10);
     }
+    // Medium press (1-5s) - cancelado, restaurar display
+    else if (!longPressTriggered) {
+      updateDisplay();
+    }
+
+    showingProgress = false;
   }
 }
 
@@ -1483,6 +1595,17 @@ void updateDisplay() {
 void loop() {
   static unsigned long lastUpdate = 0;
   static unsigned long lastSync = 0;
+
+  // Se estamos em modo configuracao, processar apenas o captive portal
+  if (configMode) {
+    if (!processCaptivePortal()) {
+      // Timeout - reiniciar
+      Serial.println("\n[CONFIG] Timeout - reiniciando...");
+      ESP.restart();
+    }
+    delay(10);
+    return;
+  }
 
   handleButton();
 
