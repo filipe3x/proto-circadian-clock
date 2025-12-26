@@ -576,6 +576,7 @@ String getConfigPage() {
     (function() {
       var slider = document.getElementById('brightSlider');
       var previewTimeout = null;
+      var animationDuration = 1400; // ~1.3s animation + margin
 
       function previewBrightness(e) {
         // Prevent scroll on touch devices
@@ -587,9 +588,21 @@ String getConfigPage() {
         if (previewTimeout) clearTimeout(previewTimeout);
         previewTimeout = setTimeout(function() {
           var value = slider.value;
+
+          // Disable slider during animation
+          slider.disabled = true;
+          slider.style.opacity = '0.5';
+
           fetch('/preview-brightness?value=' + value)
             .then(function(r) { console.log('Preview:', value); })
-            .catch(function(e) { console.error('Preview error:', e); });
+            .catch(function(e) { console.error('Preview error:', e); })
+            .finally(function() {
+              // Re-enable slider after animation completes
+              setTimeout(function() {
+                slider.disabled = false;
+                slider.style.opacity = '1';
+              }, animationDuration);
+            });
         }, 100);
       }
 
