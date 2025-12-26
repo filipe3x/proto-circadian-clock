@@ -1299,6 +1299,9 @@ void setup() {
   Serial.printf("Modo inicial: AUTO_SOLAR\n");
   Serial.printf("Offset solar: %+d hora(s)\n\n", SOLAR_OFFSET_HOURS);
 
+  // Mostrar animação identificadora do modo atual após boot
+  showModeFeedback(currentMode);
+
   updateDisplay();
 }
 
