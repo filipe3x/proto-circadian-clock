@@ -315,17 +315,19 @@ MSG_HEARTBEAT = DISCOVERY + modo atual
 | Light Sleep | ~0.8mA | CPU pausado, WiFi off |
 | Deep Sleep | ~10µA | Quase tudo off |
 
-### Consumo Atual (Implementação Presente)
+### Consumo Atual (Modo Híbrido Implementado)
 
-**Problema:** O ESP32 está em modo **WiFi STA contínuo** para ESP-NOW.
+**Solução implementada:** Máquina de estados que desliga WiFi quando não há peers.
 
 ```
-Estado atual:
-├── WiFi RX sempre ativo: ~95mA contínuo
-├── Picos de TX (30s): ~240mA × 5ms = desprezável
-└── CPU ativo: incluído nos 95mA
+Quando SOZINHO (1 dispositivo):
+├── MESH_OFF: ~20mA (57s)
+├── MESH_SCANNING: ~95mA (3s)
+└── Consumo médio: ~24mA
 
-Consumo médio: ~95mA
+Quando COM PEERS (2+ dispositivos):
+├── MESH_ACTIVE: ~95mA contínuo
+└── Sync instantâneo (<50ms)
 ```
 
 ### Impacto em Bateria
@@ -439,7 +441,8 @@ Primeira instalacao! Timestamp: 157234567
 |-------|--------------|------------|------------------|
 | Spam de rede | ~40 KB/hora | ✅ Baixa | Nenhuma (aceitável) |
 | Colisões | Backoff implementado | ✅ Baixa | Monitorar em produção |
-| Consumo energia | ~95mA contínuo | ⚠️ Alta | Implementar sleep se bateria |
+| Consumo energia (sozinho) | ~24mA | ✅ OK | Modo híbrido implementado |
+| Consumo energia (com peers) | ~95mA | ⚠️ Média | Aceitável para sync instantâneo |
 | Latência sync | <50ms | ✅ Excelente | Manter |
 
 ## Extensões Futuras

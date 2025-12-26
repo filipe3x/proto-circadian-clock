@@ -21,6 +21,9 @@ ESP32-based LED clock that simulates the natural solar light cycle for circadian
 #include <P10_32x16_QuarterScan.h>  // Custom wrapper: github.com/filipe3x/P10_32x16_QuarterScan
 #include <RTClib.h>                  // Adafruit RTC library
 #include <WiFi.h>                    // ESP32 built-in
+#include <esp_now.h>                 // ESP-NOW mesh protocol
+#include <esp_wifi.h>                // WiFi channel control
+#include <Preferences.h>             // NVS persistent storage
 #include <Dusk2Dawn.h>               // Sunrise/sunset calculations
 ```
 
@@ -107,8 +110,21 @@ const int SOLAR_OFFSET_HOURS = 1;    // Shift solar cycle
 3. Upload Speed: 921600
 4. Ensure all libraries are installed via Arduino Library Manager
 
+## Mesh Sync (Multi-Device)
+
+Multiple Proto Circadian Clocks can automatically synchronize via ESP-NOW:
+
+- **Device ID:** Unique eFuse MAC (48-bit, factory-programmed)
+- **Master Election:** Oldest device (by first boot timestamp) becomes master
+- **Sync:** Mode changes propagate instantly (<50ms) to all peers
+- **Power Saving:** Hybrid mode - WiFi OFF when alone (~24mA), ON with peers (~95mA)
+- **Discovery:** Initial 65s scan on boot, then 3s scans every 60s when alone
+
+See `MeshSync.md` for detailed protocol documentation.
+
 ## Known Limitations
 
 - Text rendering on P10 panel handled by separate component
 - Graphics operations (fillScreen, fillRect, drawPixel) work correctly
 - Quarter-scan mapping handled by P10_32x16_QuarterScan wrapper
+- Mesh sync requires all devices on same WiFi channel (default: 1)
