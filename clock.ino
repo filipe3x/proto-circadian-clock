@@ -49,12 +49,12 @@ enum SystemStatus {
 SystemStatus currentStatus = STATUS_OFFLINE;
 
 // ============= LOCALIZACAO =============
-// Configuracoes dinamicas em captive_portal.h: configLatitude, configLongitude, configTimezone
+// Configuracoes dinamicas em captive_portal.h: configLatitude, configLongitude, configTimezone, configSolarOffset
 // Usar referencias para as variaveis do modulo captive_portal
 #define LATITUDE configLatitude
 #define LONGITUDE configLongitude
 #define TIMEZONE_OFFSET configTimezone
-const int SOLAR_OFFSET_HOURS = 1;
+#define SOLAR_OFFSET_HOURS configSolarOffset
 
 // ============= DEVICE ID UNICO =============
 // O ESP32 tem um eFuse de 64 bits unico de fabrica
@@ -864,7 +864,7 @@ void sendSettings() {
   msg.payload.settings.latitude = LATITUDE;
   msg.payload.settings.longitude = LONGITUDE;
   msg.payload.settings.timezoneOffset = TIMEZONE_OFFSET;
-  msg.payload.settings.solarOffsetHours = SOLAR_OFFSET_HOURS;
+  msg.payload.settings.solarOffsetHours = configSolarOffset;
   msg.payload.settings.mode = currentMode;
   memset(msg.payload.settings.reserved, 0, 5);
 
@@ -890,7 +890,7 @@ void broadcastModeChange() {
   msg.payload.settings.latitude = LATITUDE;
   msg.payload.settings.longitude = LONGITUDE;
   msg.payload.settings.timezoneOffset = TIMEZONE_OFFSET;
-  msg.payload.settings.solarOffsetHours = SOLAR_OFFSET_HOURS;
+  msg.payload.settings.solarOffsetHours = configSolarOffset;
   msg.payload.settings.mode = currentMode;
   memset(msg.payload.settings.reserved, 0, 5);
 
@@ -1301,7 +1301,7 @@ void setup() {
   Serial.printf("Device ID: %s\n", deviceIdStr);
   Serial.printf("Mesh: %s | Peers: %d\n", getMeshStateName(meshState), numPeers);
   Serial.printf("Modo inicial: AUTO_SOLAR\n");
-  Serial.printf("Offset solar: %+d hora(s)\n\n", SOLAR_OFFSET_HOURS);
+  Serial.printf("Offset solar: %+d hora(s)\n\n", configSolarOffset);
 
   // Mostrar animação identificadora do modo atual após boot
   showModeFeedback(currentMode);

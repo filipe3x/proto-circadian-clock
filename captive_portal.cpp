@@ -1,5 +1,13 @@
 #include "captive_portal.h"
 
+// Credenciais de fallback para debug (copia wifi_credentials.h.example para wifi_credentials.h)
+#if DEBUG_MODE && __has_include("wifi_credentials.h")
+  #include "wifi_credentials.h"
+  #define HAS_FALLBACK_WIFI 1
+#else
+  #define HAS_FALLBACK_WIFI 0
+#endif
+
 // ============= VARIAVEIS GLOBAIS =============
 WiFiCredentials wifiNetworks[2];
 int NUM_WIFI_NETWORKS = 2;
@@ -13,6 +21,7 @@ float configLatitude = DEFAULT_LATITUDE;
 float configLongitude = DEFAULT_LONGITUDE;
 int configTimezone = DEFAULT_TIMEZONE;
 int configBrightness = 80;
+int configSolarOffset = DEFAULT_SOLAR_OFFSET;
 
 Dusk2Dawn* solarCalc = nullptr;
 
@@ -57,6 +66,7 @@ void loadConfig() {
   configLongitude = portalPrefs.getFloat("longitude", DEFAULT_LONGITUDE);
   configTimezone = portalPrefs.getInt("timezone", DEFAULT_TIMEZONE);
   configBrightness = portalPrefs.getInt("brightness", 80);
+  configSolarOffset = portalPrefs.getInt("solar_offset", DEFAULT_SOLAR_OFFSET);
 
   portalPrefs.end();
 
@@ -65,11 +75,21 @@ void loadConfig() {
   if (wifiNetworks[0].ssid.length() > 0) NUM_WIFI_NETWORKS++;
   if (wifiNetworks[1].ssid.length() > 0) NUM_WIFI_NETWORKS++;
 
+  // DEBUG: Se nao ha redes configuradas, usar credenciais de wifi_credentials.h
+  #if HAS_FALLBACK_WIFI
+  if (NUM_WIFI_NETWORKS == 0) {
+    wifiNetworks[0].ssid = FALLBACK_WIFI_SSID;
+    wifiNetworks[0].password = FALLBACK_WIFI_PASS;
+    NUM_WIFI_NETWORKS = 1;
+    Serial.println("[DEBUG] Usando credenciais de wifi_credentials.h");
+  }
+  #endif
+
   Serial.println("[CONFIG] Configuracao carregada:");
   Serial.printf("  WiFi 1: %s\n", wifiNetworks[0].ssid.c_str());
   Serial.printf("  WiFi 2: %s\n", wifiNetworks[1].ssid.length() > 0 ? wifiNetworks[1].ssid.c_str() : "(nao configurado)");
   Serial.printf("  Lat: %.4f, Lon: %.4f, TZ: %d\n", configLatitude, configLongitude, configTimezone);
-  Serial.printf("  Brilho: %d\n", configBrightness);
+  Serial.printf("  Brilho: %d, Offset Solar: %+d h\n", configBrightness, configSolarOffset);
 }
 
 void startCaptivePortal(void* displayPtr) {
@@ -130,6 +150,9 @@ void setupCaptiveWebServer() {
     }
     if (request->hasParam("bright", true)) {
       portalPrefs.putInt("brightness", request->getParam("bright", true)->value().toInt());
+    }
+    if (request->hasParam("solar_offset", true)) {
+      portalPrefs.putInt("solar_offset", request->getParam("solar_offset", true)->value().toInt());
     }
 
     portalPrefs.end();
@@ -279,7 +302,7 @@ String getConfigPage() {
           WiFi Principal
         </div>
         <label>Nome da rede (SSID)</label>
-        <input type="text" name="ssid1" required placeholder="Nome da rede WiFi">
+        <input type="text" name="ssid1" placeholder="Nome da rede WiFi">
         <label>Password</label>
         <input type="password" name="pass1" placeholder="Password da rede">
       </div>
@@ -381,6 +404,33 @@ String getConfigPage() {
   html += String(configBrightness);
   html += R"rawliteral(</span>
         </div>
+
+        <label style="margin-top: 1.5rem;">Ajuste de Despertar</label>
+        <div class="slider-container" style="gap: 0.5rem;">
+          <svg class="slider-icon" viewBox="0 0 24 24" fill="currentColor" style="width:24px;height:24px;color:var(--accent-moon);flex-shrink:0;">
+            <path d="M3 5a2 2 0 012-2h14a2 2 0 012 2v2a1 1 0 01-1 1H4a1 1 0 01-1-1V5zm0 6a1 1 0 011-1h16a1 1 0 011 1v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7zm3 2v3h12v-3H6z"/>
+          </svg>
+          <input type="range" name="solar_offset" min="-3" max="3" value=")rawliteral";
+
+  html += String(configSolarOffset);
+  html += R"rawliteral(" oninput="updateOffsetLabel(this.value)" style="flex:1;">
+          <svg class="slider-icon" viewBox="0 0 24 24" fill="currentColor" style="width:24px;height:24px;color:var(--accent-amber);flex-shrink:0;">
+            <path d="M12 2.25a.75.75 0 01.75.75v2.25a.75.75 0 01-1.5 0V3a.75.75 0 01.75-.75zM7.5 12a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM18.894 6.166a.75.75 0 00-1.06-1.06l-1.591 1.59a.75.75 0 101.06 1.061l1.591-1.59zM21.75 12a.75.75 0 01-.75.75h-2.25a.75.75 0 010-1.5H21a.75.75 0 01.75.75zM17.834 18.894a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 10-1.061 1.06l1.59 1.591zM12 18a.75.75 0 01.75.75V21a.75.75 0 01-1.5 0v-2.25A.75.75 0 0112 18zM7.758 17.303a.75.75 0 00-1.061-1.06l-1.591 1.59a.75.75 0 001.06 1.061l1.591-1.59zM6 12a.75.75 0 01-.75.75H3a.75.75 0 010-1.5h2.25A.75.75 0 016 12zM6.697 7.757a.75.75 0 001.06-1.06l-1.59-1.591a.75.75 0 00-1.061 1.06l1.59 1.591z"/>
+          </svg>
+          <span class="slider-value" id="soval" style="min-width:4rem;">)rawliteral";
+
+  // Valor inicial do offset
+  if (configSolarOffset > 0) {
+    html += "+" + String(configSolarOffset) + "h cedo";
+  } else if (configSolarOffset < 0) {
+    html += String(configSolarOffset) + "h tarde";
+  } else {
+    html += "Normal";
+  }
+
+  html += R"rawliteral(</span>
+        </div>
+        <p class="hint">🛏️ Dormir ate mais tarde ← → Acordar mais cedo ☀️</p>
       </div>
 
       <button type="submit" class="btn-submit">Guardar e Reiniciar</button>
@@ -403,6 +453,17 @@ String getConfigPage() {
           { enableHighAccuracy: true, timeout: 10000 }
         );
       } else { alert('Geolocalizacao nao suportada neste browser'); }
+    }
+    function updateOffsetLabel(val) {
+      var label = document.getElementById('soval');
+      var v = parseInt(val);
+      if (v > 0) {
+        label.textContent = '+' + v + 'h cedo';
+      } else if (v < 0) {
+        label.textContent = v + 'h tarde';
+      } else {
+        label.textContent = 'Normal';
+      }
     }
   </script>
 </body>

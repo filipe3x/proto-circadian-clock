@@ -15,10 +15,14 @@
 #define SETUP_TIMEOUT 300000  // 5 minutos sem atividade
 #define BUTTON_LONG_PRESS_MS 5000  // 5 segundos para entrar em setup
 
+// Flag de debug - quando 1, permite WiFi vazio (usa credenciais de wifi_credentials.h)
+#define DEBUG_MODE 1
+
 // Valores padrao de localizacao
 #define DEFAULT_LATITUDE 41.5362
 #define DEFAULT_LONGITUDE -8.7813
 #define DEFAULT_TIMEZONE 0
+#define DEFAULT_SOLAR_OFFSET 0
 
 // ============= ESTRUTURAS =============
 struct WiFiCredentials {
@@ -40,6 +44,7 @@ extern float configLatitude;
 extern float configLongitude;
 extern int configTimezone;
 extern int configBrightness;
+extern int configSolarOffset;  // Offset solar em horas (-12 a +12)
 
 extern Dusk2Dawn* solarCalc;
 
