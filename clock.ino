@@ -196,6 +196,7 @@ void initMeshSync();
 void updateMeshSync();
 void sendDiscovery();
 void sendSettings();
+void broadcastModeChange();
 void sendAck(const uint8_t* targetMac, uint16_t ackMsgId);
 void handleDiscovery(const uint8_t* mac, MeshMessage* msg);
 void handleSettings(MeshMessage* msg);
@@ -730,35 +731,30 @@ void handleDiscovery(const uint8_t* mac, MeshMessage* msg) {
   }
 }
 
-// Processa settings recebidas do master
+// Processa settings recebidas de outro dispositivo
 void handleSettings(MeshMessage* msg) {
-  // So aplicar settings se vierem de um dispositivo mais antigo
-  if (msg->firstBootTime >= myFirstBootTime) {
-    Serial.printf("[MESH] Ignorando settings de dispositivo mais novo\n");
-    return;
-  }
-
   SyncSettings* settings = &msg->payload.settings;
 
-  Serial.println("\n[MESH] === SETTINGS RECEBIDAS ===");
-  Serial.printf("  Latitude: %.4f\n", settings->latitude);
-  Serial.printf("  Longitude: %.4f\n", settings->longitude);
-  Serial.printf("  Timezone: %d\n", settings->timezoneOffset);
-  Serial.printf("  Solar Offset: %d\n", settings->solarOffsetHours);
-  Serial.printf("  Mode: %d\n", settings->mode);
-
-  // Aplicar modo se diferente (opcional - pode ser comentado se preferir controlo local)
+  // MODO: Aceitar de qualquer dispositivo para sync imediato
+  // Isto permite que qualquer pessoa mude o modo e todos sincronizem
   if (settings->mode != currentMode && settings->mode < 3) {
+    const char* modeNames[] = {"AUTO_SOLAR", "THERAPY_RED", "OFF"};
+    Serial.printf("[MESH] Modo sync: %s -> %s\n",
+                  modeNames[currentMode], modeNames[settings->mode]);
+
     currentMode = (Mode)settings->mode;
-    Serial.printf("[MESH] Modo alterado para: %d\n", currentMode);
+
+    // Atualizar display imediatamente (sem animacao para ser instantaneo)
     updateDisplay();
   }
 
-  // Nota: latitude/longitude/timezone sao constantes neste firmware
-  // Para torna-los dinamicos, seria necessario:
-  // 1. Converter para variaveis
-  // 2. Reinicializar o objeto Dusk2Dawn
-  // 3. Guardar em NVS
+  // OUTRAS SETTINGS: So aceitar do master (dispositivo mais antigo)
+  if (msg->firstBootTime < myFirstBootTime) {
+    // Aqui poderiamos aplicar latitude/longitude/timezone se fossem dinamicos
+    // Por agora sao constantes, entao apenas logamos
+    Serial.printf("[MESH] Settings do master recebidas (lat: %.2f, lon: %.2f)\n",
+                  settings->latitude, settings->longitude);
+  }
 }
 
 // Processa ACK recebido
@@ -774,8 +770,13 @@ void handleAck(MeshMessage* msg) {
   }
 }
 
-// Envia ACK
+// Envia ACK com backoff aleatorio para evitar colisoes
 void sendAck(const uint8_t* targetMac, uint16_t ackMsgId) {
+  // Backoff aleatorio: 10-150ms baseado no device ID para distribuir no tempo
+  uint8_t slot = deviceId[5] % 10;  // 0-9
+  int backoff = 10 + (slot * 15) + random(0, 20);  // 10-170ms
+  delay(backoff);
+
   MeshMessage ack;
   ack.magic = SYNC_MAGIC;
   ack.version = SYNC_VERSION;
@@ -854,6 +855,30 @@ void sendSettings() {
   // Enviar broadcast
   esp_now_send(broadcastAddress, (uint8_t*)&msg, sizeof(msg));
   Serial.printf("[MESH] Settings broadcast enviado\n");
+}
+
+// Broadcast imediato de mudanca de modo (para feedback instantaneo)
+// Qualquer dispositivo pode enviar, nao precisa ser master
+void broadcastModeChange() {
+  if (!meshEnabled || numPeers == 0) return;
+
+  MeshMessage msg;
+  msg.magic = SYNC_MAGIC;
+  msg.version = SYNC_VERSION;
+  msg.msgType = MSG_SETTINGS;  // Reutilizar tipo SETTINGS
+  memcpy(msg.senderId, deviceId, 6);
+  msg.firstBootTime = myFirstBootTime;
+  msg.msgId = nextMsgId++;
+
+  msg.payload.settings.latitude = LATITUDE;
+  msg.payload.settings.longitude = LONGITUDE;
+  msg.payload.settings.timezoneOffset = TIMEZONE_OFFSET;
+  msg.payload.settings.solarOffsetHours = SOLAR_OFFSET_HOURS;
+  msg.payload.settings.mode = currentMode;
+  memset(msg.payload.settings.reserved, 0, 5);
+
+  esp_now_send(broadcastAddress, (uint8_t*)&msg, sizeof(msg));
+  Serial.printf("[MESH] Mode change broadcast: %d\n", currentMode);
 }
 
 // Inicializa ESP-NOW mesh
@@ -1304,6 +1329,10 @@ void handleButton() {
 
       const char* modeNames[] = {"AUTO_SOLAR", "THERAPY_RED", "OFF"};
       Serial.printf("\n>>> MODO: %s <<<\n\n", modeNames[currentMode]);
+
+      // SYNC IMEDIATO: Broadcast para todos os peers ANTES da animacao
+      // Isto garante que os outros dispositivos mudam instantaneamente
+      broadcastModeChange();
 
       // Show beautiful feedback icon with fade animation
       showModeFeedback(currentMode);
