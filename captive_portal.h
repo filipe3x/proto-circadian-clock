@@ -100,4 +100,12 @@ String getSuccessPage();
  */
 bool processCaptivePortal();
 
+/**
+ * Prepara o sistema para reiniciar de forma segura
+ * Limpa o display (evita gibberish), desliga WiFi/mesh e reinicia
+ * @param showOK se true, mostra "OK" em amber antes de reiniciar (feedback de sucesso)
+ * Definida em clock.ino
+ */
+extern void prepareForRestart(bool showOK = false);
+
 #endif // CAPTIVE_PORTAL_H

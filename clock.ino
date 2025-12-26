@@ -220,7 +220,85 @@ void startMeshScan();
 void stopMesh();
 const char* getMeshStateName(MeshState state);
 
+// Safe restart (limpa display antes de reiniciar)
+void prepareForRestart(bool showOK = false);
+
 // Captive Portal - declaracoes em captive_portal.h
+
+// ============= SAFE RESTART =============
+// Limpa o display e prepara o sistema antes de reiniciar
+// Evita gibberish de pixels durante o reboot
+// showOK: se true, mostra "OK" em amber com fade in/out antes de limpar
+
+// Helper para desenhar "OK" com brightness variável (para fade)
+void drawOKText(uint8_t brightness) {
+  display->fillScreen(display->color565(0, 0, 0));
+
+  // Amber escalado pelo brightness
+  uint8_t r = (251 * brightness) / 255;
+  uint8_t g = (191 * brightness) / 255;
+  uint8_t b = (36 * brightness) / 255;
+
+  display->setTextSize(1);
+  display->setTextColor(display->color565(r, g, b));
+  display->setCursor(10, 4);
+  display->print("OK");
+}
+
+void prepareForRestart(bool showOK) {
+  Serial.println("\n[RESTART] Preparando reinicio seguro...");
+
+  // 1. Mostrar feedback "OK" se solicitado (usado após guardar configuração)
+  if (showOK && display != nullptr) {
+    // Fade in (0 -> 255)
+    for (int b = 0; b <= 255; b += 15) {
+      drawOKText(b);
+      delay(25);
+    }
+    drawOKText(255);  // Garantir full brightness
+
+    // Hold at full brightness
+    delay(600);
+
+    // Fade out (255 -> 0)
+    for (int b = 255; b >= 0; b -= 15) {
+      drawOKText(b);
+      delay(25);
+    }
+  }
+
+  // 2. Garantir display preto
+  if (display != nullptr) {
+    display->fillScreen(display->color565(0, 0, 0));
+  }
+
+  // 3. Fade out do brilho do hardware para preto total
+  if (dma_display != nullptr) {
+    uint8_t currentBrightness = dma_display->getBrightness();
+    for (int b = currentBrightness; b >= 0; b -= 5) {
+      dma_display->setBrightness8(b);
+      delay(10);
+    }
+    dma_display->setBrightness8(0);
+    dma_display->clearScreen();
+  }
+
+  // 4. Parar mesh/WiFi se estiver ativo
+  if (meshState != MESH_OFF) {
+    esp_now_deinit();
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+  }
+
+  // 5. Pequeno delay para garantir que o display está completamente limpo
+  delay(100);
+
+  Serial.println("[RESTART] Display limpo - reiniciando...");
+  Serial.flush();  // Garantir que o log é enviado antes do restart
+
+  // 6. Reiniciar
+  ESP.restart();
+}
 
 // ============= ANIMACAO DE BOOT =============
 void showBootAnimation() {
@@ -1542,9 +1620,8 @@ void loop() {
   // Se estamos em modo configuracao, processar apenas o captive portal
   if (configMode) {
     if (!processCaptivePortal()) {
-      // Timeout - reiniciar
-      Serial.println("\n[CONFIG] Timeout - reiniciando...");
-      ESP.restart();
+      // Timeout - reiniciar (o prepareForRestart já é chamado em processCaptivePortal)
+      // Este bloco não deve ser alcançado pois prepareForRestart() não retorna
     }
     delay(10);
     return;

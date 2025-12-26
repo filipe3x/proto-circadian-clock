@@ -162,9 +162,9 @@ void setupCaptiveWebServer() {
     // Resposta de sucesso
     request->send(200, "text/html", getSuccessPage());
 
-    // Agendar reinicio
+    // Agendar reinicio seguro (mostra OK e limpa display antes)
     delay(2000);
-    ESP.restart();
+    prepareForRestart(true);  // true = mostrar "OK" em amber
   });
 
   // Captive portal detection (iOS, Android, Windows)
@@ -192,7 +192,7 @@ bool processCaptivePortal() {
   // Timeout de 5 minutos sem atividade
   if (millis() - configModeStart > SETUP_TIMEOUT) {
     Serial.println("\n[CONFIG] Timeout - reiniciando...");
-    ESP.restart();
+    prepareForRestart(false);  // false = sem OK, apenas limpar display
     return false;
   }
 
