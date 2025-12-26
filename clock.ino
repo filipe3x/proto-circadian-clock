@@ -1098,15 +1098,21 @@ void showCaptivePortalDisplay() {
   uint16_t amber = display->color565(251, 191, 36);
 
   // Barras de sinal estilo rede movel (da menor para a maior)
-  display->drawLine(2, 5, 2, 6, lavender);   // Barra 1 - 2px altura
-  display->drawLine(5, 3, 5, 6, lavender);   // Barra 2 - 4px altura
-  display->drawLine(8, 1, 8, 6, lavender);   // Barra 3 - 6px altura
-  display->drawLine(11, 0, 11, 6, lavender); // Barra 4 - 7px altura
+  display->drawLine(0, 5, 0, 6, lavender);   // Barra 1 - 2px altura
+  display->drawLine(1, 5, 1, 6, lavender);   // Barra 1 - 2px altura
+
+  display->drawLine(3, 3, 3, 6, lavender);   // Barra 2 - 4px altura
+  display->drawLine(4, 3, 4, 6, lavender);   // Barra 2 - 4px altura
+
+  display->drawLine(6, 1, 6, 6, lavender);   // Barra 3 - 6px altura
+  display->drawLine(7, 1, 7, 6, lavender);   // Barra 3 - 6px altura
+
+  // display->drawLine(8, 0, 8, 6, lavender); // Barra 4 - 7px altura
 
   // Texto "Wifi" ao lado da barra maior
   display->setTextSize(1);
   display->setTextColor(amber);
-  display->setCursor(14, 0);
+  display->setCursor(8, 0);
   display->print("Wifi");
 
   // Texto "SETUP"
