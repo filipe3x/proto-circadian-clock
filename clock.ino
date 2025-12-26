@@ -5,7 +5,17 @@
 #include <esp_wifi.h>
 #include <Preferences.h>
 #include <Dusk2Dawn.h>
-#include "wifi_credentials.h"
+#include <ESPAsyncWebServer.h>
+#include <AsyncTCP.h>
+#include <DNSServer.h>
+
+// WiFi credentials - loaded from Preferences or fallback
+struct WiFiCredentials {
+  String ssid;
+  String password;
+};
+WiFiCredentials wifiNetworks[2];
+int NUM_WIFI_NETWORKS = 2;
 
 // ============= PINOUT =============
 #define R1_PIN 25
@@ -32,9 +42,28 @@ RTC_DS3231 rtc;
 bool rtcAvailable = false;
 
 // ============= CONFIGURACAO WIFI MULTI-SSID =============
-// WiFi credentials are stored in wifi_credentials.h (not tracked by git)
 const int WIFI_TIMEOUT_MS = 10000;  // 10s por rede
 const int WIFI_RETRY_PER_NETWORK = 2;  // Tentar cada rede 2x
+
+// ============= CAPTIVE PORTAL =============
+const char* AP_SSID = "CircadianClock";
+const char* AP_PASS = "";  // Aberta para facilitar acesso
+const IPAddress AP_IP(192, 168, 4, 1);
+const IPAddress AP_GATEWAY(192, 168, 4, 1);
+const IPAddress AP_SUBNET(255, 255, 255, 0);
+const unsigned long SETUP_TIMEOUT = 300000;  // 5 minutos sem atividade
+const unsigned long BUTTON_LONG_PRESS_MS = 5000;  // 5 segundos para entrar em setup
+
+DNSServer dnsServer;
+AsyncWebServer webServer(80);
+bool configMode = false;
+unsigned long configModeStart = 0;
+
+// Configuracoes dinamicas (carregadas de Preferences)
+float configLatitude = 41.5362;
+float configLongitude = -8.7813;
+int configTimezone = 0;
+int configBrightness = 80;
 
 // ============= STATUS DO SISTEMA =============
 enum SystemStatus {
@@ -49,12 +78,18 @@ enum SystemStatus {
 SystemStatus currentStatus = STATUS_OFFLINE;
 
 // ============= LOCALIZACAO =============
-const float LATITUDE = 41.5362;
-const float LONGITUDE = -8.7813;
-const int TIMEZONE_OFFSET = 0;
+// Valores padrao (podem ser alterados via captive portal)
+#define DEFAULT_LATITUDE 41.5362
+#define DEFAULT_LONGITUDE -8.7813
+#define DEFAULT_TIMEZONE 0
 const int SOLAR_OFFSET_HOURS = 1;
 
-Dusk2Dawn esposende(LATITUDE, LONGITUDE, TIMEZONE_OFFSET);
+// Usar referencias para configuracoes dinamicas
+#define LATITUDE configLatitude
+#define LONGITUDE configLongitude
+#define TIMEZONE_OFFSET configTimezone
+
+Dusk2Dawn* solarCalc = nullptr;  // Inicializado apos carregar config
 
 // ============= DEVICE ID UNICO =============
 // O ESP32 tem um eFuse de 64 bits unico de fabrica
@@ -225,6 +260,17 @@ void formatMac(const uint8_t* mac, char* str);
 void startMeshScan();
 void stopMesh();
 const char* getMeshStateName(MeshState state);
+
+// Captive Portal
+bool hasStoredConfig();
+void loadConfig();
+void saveConfig(AsyncWebServerRequest *request);
+void startCaptivePortal();
+void setupCaptiveWebServer();
+void handleCaptiveRedirect(AsyncWebServerRequest *request);
+String getConfigPage();
+String getSuccessPage();
+void initSolarCalc();
 
 // ============= ANIMACAO DE BOOT =============
 void showBootAnimation() {
@@ -430,7 +476,7 @@ bool tryConnectWiFi() {
   
   // Tentar cada rede
   for(int net = 0; net < NUM_WIFI_NETWORKS; net++) {
-    Serial.printf("\nRede %d/%d: %s\n", net + 1, NUM_WIFI_NETWORKS, wifiNetworks[net].ssid);
+    Serial.printf("\nRede %d/%d: %s\n", net + 1, NUM_WIFI_NETWORKS, wifiNetworks[net].ssid.c_str());
     
     // Tentar cada rede múltiplas vezes
     for(int attempt = 0; attempt < WIFI_RETRY_PER_NETWORK; attempt++) {
@@ -439,7 +485,7 @@ bool tryConnectWiFi() {
       }
       
       WiFi.mode(WIFI_STA);
-      WiFi.begin(wifiNetworks[net].ssid, wifiNetworks[net].password);
+      WiFi.begin(wifiNetworks[net].ssid.c_str(), wifiNetworks[net].password.c_str());
       
       unsigned long startAttempt = millis();
       bool toggle = false;
@@ -462,7 +508,7 @@ bool tryConnectWiFi() {
       
       if (WiFi.status() == WL_CONNECTED) {
         Serial.println("\n✅ WiFi conectado!");
-        Serial.printf("   SSID: %s\n", wifiNetworks[net].ssid);
+        Serial.printf("   SSID: %s\n", wifiNetworks[net].ssid.c_str());
         Serial.printf("   IP: %s\n", WiFi.localIP().toString().c_str());
         Serial.printf("   RSSI: %d dBm\n", WiFi.RSSI());
         
@@ -1093,6 +1139,642 @@ void updateMeshSync() {
   }
 }
 
+// ============= CAPTIVE PORTAL =============
+
+// Inicializa o calculador solar com as coordenadas configuradas
+void initSolarCalc() {
+  if (solarCalc != nullptr) {
+    delete solarCalc;
+  }
+  solarCalc = new Dusk2Dawn(configLatitude, configLongitude, configTimezone);
+  Serial.printf("[CONFIG] Solar calc: lat=%.4f, lon=%.4f, tz=%d\n",
+                configLatitude, configLongitude, configTimezone);
+}
+
+// Verifica se ha configuracao guardada no NVS
+bool hasStoredConfig() {
+  preferences.begin("clock", true);  // read-only
+  bool hasConfig = preferences.isKey("wifi_ssid_1");
+  preferences.end();
+  Serial.printf("[CONFIG] Configuracao guardada: %s\n", hasConfig ? "SIM" : "NAO");
+  return hasConfig;
+}
+
+// Carrega configuracao do NVS
+void loadConfig() {
+  preferences.begin("clock", true);  // read-only
+
+  // WiFi credentials
+  wifiNetworks[0].ssid = preferences.getString("wifi_ssid_1", "");
+  wifiNetworks[0].password = preferences.getString("wifi_pass_1", "");
+  wifiNetworks[1].ssid = preferences.getString("wifi_ssid_2", "");
+  wifiNetworks[1].password = preferences.getString("wifi_pass_2", "");
+
+  // Localizacao
+  configLatitude = preferences.getFloat("latitude", DEFAULT_LATITUDE);
+  configLongitude = preferences.getFloat("longitude", DEFAULT_LONGITUDE);
+  configTimezone = preferences.getInt("timezone", DEFAULT_TIMEZONE);
+  configBrightness = preferences.getInt("brightness", 80);
+
+  preferences.end();
+
+  // Contar redes validas
+  NUM_WIFI_NETWORKS = 0;
+  if (wifiNetworks[0].ssid.length() > 0) NUM_WIFI_NETWORKS++;
+  if (wifiNetworks[1].ssid.length() > 0) NUM_WIFI_NETWORKS++;
+
+  Serial.println("[CONFIG] Configuracao carregada:");
+  Serial.printf("  WiFi 1: %s\n", wifiNetworks[0].ssid.c_str());
+  Serial.printf("  WiFi 2: %s\n", wifiNetworks[1].ssid.length() > 0 ? wifiNetworks[1].ssid.c_str() : "(nao configurado)");
+  Serial.printf("  Lat: %.4f, Lon: %.4f, TZ: %d\n", configLatitude, configLongitude, configTimezone);
+  Serial.printf("  Brilho: %d\n", configBrightness);
+}
+
+// Inicia o Captive Portal (Access Point + Web Server)
+void startCaptivePortal() {
+  Serial.println("\n╔═══════════════════════════════════╗");
+  Serial.println("║     CAPTIVE PORTAL INICIADO       ║");
+  Serial.println("╚═══════════════════════════════════╝");
+
+  configMode = true;
+  configModeStart = millis();
+
+  // Parar mesh se estiver ativo
+  if (meshState != MESH_OFF) {
+    stopMesh();
+  }
+
+  // Configurar Access Point
+  WiFi.mode(WIFI_AP);
+  WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_SUBNET);
+  WiFi.softAP(AP_SSID, AP_PASS);
+
+  // DNS - redireciona tudo para o ESP32
+  dnsServer.start(53, "*", AP_IP);
+
+  // Configurar web server
+  setupCaptiveWebServer();
+
+  // Mostrar no display
+  display->fillScreen(display->color565(0, 0, 0));
+
+  // Desenhar icone de WiFi estilizado
+  uint16_t lavender = display->color565(167, 139, 250);
+  uint16_t amber = display->color565(251, 191, 36);
+
+  // Arcos de WiFi
+  display->drawPixel(15, 2, lavender);
+  display->drawPixel(16, 2, lavender);
+  display->drawLine(13, 4, 18, 4, lavender);
+  display->drawLine(11, 6, 20, 6, lavender);
+
+  // Texto "SETUP"
+  display->setTextSize(1);
+  display->setTextColor(amber);
+  display->setCursor(4, 9);
+  display->print("SETUP");
+
+  Serial.printf("SSID: %s\n", AP_SSID);
+  Serial.printf("IP: %s\n", AP_IP.toString().c_str());
+  Serial.println("Aguardando configuracao...\n");
+}
+
+// Configura o web server para o captive portal
+void setupCaptiveWebServer() {
+  // Pagina principal de configuracao
+  webServer.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200, "text/html", getConfigPage());
+  });
+
+  // Processar formulario
+  webServer.on("/save", HTTP_POST, [](AsyncWebServerRequest *request) {
+    // Guardar configuracoes
+    preferences.begin("clock", false);  // read-write
+
+    if (request->hasParam("ssid1", true)) {
+      preferences.putString("wifi_ssid_1", request->getParam("ssid1", true)->value());
+    }
+    if (request->hasParam("pass1", true)) {
+      preferences.putString("wifi_pass_1", request->getParam("pass1", true)->value());
+    }
+    if (request->hasParam("ssid2", true)) {
+      preferences.putString("wifi_ssid_2", request->getParam("ssid2", true)->value());
+    }
+    if (request->hasParam("pass2", true)) {
+      preferences.putString("wifi_pass_2", request->getParam("pass2", true)->value());
+    }
+    if (request->hasParam("lat", true)) {
+      preferences.putFloat("latitude", request->getParam("lat", true)->value().toFloat());
+    }
+    if (request->hasParam("lon", true)) {
+      preferences.putFloat("longitude", request->getParam("lon", true)->value().toFloat());
+    }
+    if (request->hasParam("tz", true)) {
+      preferences.putInt("timezone", request->getParam("tz", true)->value().toInt());
+    }
+    if (request->hasParam("bright", true)) {
+      preferences.putInt("brightness", request->getParam("bright", true)->value().toInt());
+    }
+
+    preferences.end();
+
+    Serial.println("[CONFIG] Configuracao guardada!");
+
+    // Resposta de sucesso
+    request->send(200, "text/html", getSuccessPage());
+
+    // Agendar reinicio
+    delay(2000);
+    ESP.restart();
+  });
+
+  // Captive portal detection (iOS, Android, Windows)
+  webServer.on("/hotspot-detect.html", HTTP_GET, handleCaptiveRedirect);
+  webServer.on("/generate_204", HTTP_GET, handleCaptiveRedirect);
+  webServer.on("/fwlink", HTTP_GET, handleCaptiveRedirect);
+  webServer.on("/connecttest.txt", HTTP_GET, handleCaptiveRedirect);
+  webServer.on("/redirect", HTTP_GET, handleCaptiveRedirect);
+  webServer.on("/success.txt", HTTP_GET, handleCaptiveRedirect);
+  webServer.onNotFound(handleCaptiveRedirect);
+
+  webServer.begin();
+  Serial.println("[WEB] Servidor iniciado");
+}
+
+// Redireciona para a pagina de configuracao
+void handleCaptiveRedirect(AsyncWebServerRequest *request) {
+  request->redirect("http://192.168.4.1/");
+}
+
+// Pagina HTML de configuracao com design escuro elegante
+String getConfigPage() {
+  String html = R"rawliteral(
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Circadian Clock — Setup</title>
+  <style>
+    :root {
+      --bg-deep: #0a0e1a;
+      --bg-card: #111827;
+      --accent-lavender: #a78bfa;
+      --accent-amber: #fbbf24;
+      --accent-moon: #e0e7ff;
+      --accent-mint: #6ee7b7;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --border-subtle: rgba(167, 139, 250, 0.15);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-deep);
+      min-height: 100vh;
+      padding: 1rem;
+      color: var(--text-primary);
+    }
+    .container {
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    .header {
+      text-align: center;
+      padding: 2rem 0;
+    }
+    .moon-icon {
+      width: 48px;
+      height: 48px;
+      margin-bottom: 1rem;
+    }
+    .title {
+      font-size: 1.75rem;
+      font-weight: 300;
+      color: var(--text-primary);
+      letter-spacing: 0.05em;
+    }
+    .subtitle {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      margin-top: 0.5rem;
+    }
+    .card {
+      background: linear-gradient(145deg, rgba(17, 24, 39, 0.95), rgba(15, 23, 42, 0.9));
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+      backdrop-filter: blur(10px);
+    }
+    .card-title {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      color: var(--accent-lavender);
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    .card-icon {
+      width: 20px;
+      height: 20px;
+      opacity: 0.8;
+    }
+    label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.4rem;
+      margin-top: 1rem;
+    }
+    label:first-of-type { margin-top: 0; }
+    input, select {
+      width: 100%;
+      padding: 0.875rem 1rem;
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      background: rgba(10, 14, 26, 0.8);
+      color: var(--text-primary);
+      font-size: 1rem;
+      transition: all 0.2s;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent-lavender);
+      box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.15);
+    }
+    input::placeholder { color: var(--text-muted); }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 0.75rem;
+      align-items: end;
+    }
+    .btn-gps {
+      padding: 0.875rem 1rem;
+      background: rgba(110, 231, 183, 0.15);
+      border: 1px solid rgba(110, 231, 183, 0.3);
+      border-radius: 10px;
+      color: var(--accent-mint);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .btn-gps:hover {
+      background: rgba(110, 231, 183, 0.25);
+    }
+    .hint {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+    }
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    input[type="range"] {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(167, 139, 250, 0.2);
+      border: none;
+      padding: 0;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--accent-lavender);
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(167, 139, 250, 0.4);
+    }
+    .slider-value {
+      min-width: 3rem;
+      text-align: center;
+      color: var(--accent-moon);
+      font-weight: 500;
+    }
+    .btn-submit {
+      width: 100%;
+      padding: 1rem;
+      margin-top: 1.5rem;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent-lavender), #8b5cf6);
+      color: white;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: 0 4px 15px rgba(167, 139, 250, 0.3);
+    }
+    .btn-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(167, 139, 250, 0.4);
+    }
+    .btn-submit:active {
+      transform: translateY(0);
+    }
+    .footer {
+      text-align: center;
+      padding: 1.5rem;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+    }
+    .footer a {
+      color: var(--accent-lavender);
+      text-decoration: none;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .card { animation: fadeIn 0.5s ease-out forwards; }
+    .card:nth-child(2) { animation-delay: 0.1s; }
+    .card:nth-child(3) { animation-delay: 0.2s; }
+    .card:nth-child(4) { animation-delay: 0.3s; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <svg class="moon-icon" viewBox="0 0 48 48" fill="none">
+        <path d="M24 4C12.954 4 4 12.954 4 24s8.954 20 20 20c7.862 0 14.691-4.535 17.957-11.128.386-.779-.322-1.628-1.166-1.372A16.002 16.002 0 0120 16c0-3.527 1.14-6.787 3.072-9.428.481-.659.066-1.572-.756-1.572H24z" fill="url(#moonGrad)"/>
+        <defs>
+          <linearGradient id="moonGrad" x1="4" y1="4" x2="44" y2="44">
+            <stop stop-color="#e0e7ff"/>
+            <stop offset="1" stop-color="#a78bfa"/>
+          </linearGradient>
+        </defs>
+      </svg>
+      <h1 class="title">Circadian Clock</h1>
+      <p class="subtitle">Configuracao Inicial</p>
+    </header>
+
+    <form action="/save" method="POST">
+      <div class="card">
+        <div class="card-title">
+          <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z"/>
+          </svg>
+          WiFi Principal
+        </div>
+        <label>Nome da rede (SSID)</label>
+        <input type="text" name="ssid1" required placeholder="Nome da rede WiFi">
+        <label>Password</label>
+        <input type="password" name="pass1" placeholder="Password da rede">
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0"/>
+          </svg>
+          WiFi Secundario (opcional)
+        </div>
+        <label>Nome da rede (SSID)</label>
+        <input type="text" name="ssid2" placeholder="Rede alternativa">
+        <label>Password</label>
+        <input type="password" name="pass2" placeholder="Password">
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/>
+            <path d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/>
+          </svg>
+          Localizacao
+        </div>
+        <div class="row">
+          <div>
+            <label>Latitude</label>
+            <input type="number" name="lat" step="0.0001" value=")rawliteral";
+
+  html += String(configLatitude, 4);
+  html += R"rawliteral(" required>
+          </div>
+          <div>
+            <label>Longitude</label>
+            <input type="number" name="lon" step="0.0001" value=")rawliteral";
+
+  html += String(configLongitude, 4);
+  html += R"rawliteral(" required>
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button type="button" class="btn-gps" onclick="getGPS()">📍 GPS</button>
+          </div>
+        </div>
+        <p class="hint">Clica GPS para usar a localizacao do telemovel</p>
+
+        <label>Fuso horario</label>
+        <select name="tz">
+          <option value="-12">UTC-12</option>
+          <option value="-11">UTC-11</option>
+          <option value="-10">UTC-10 (Hawaii)</option>
+          <option value="-9">UTC-9 (Alaska)</option>
+          <option value="-8">UTC-8 (Los Angeles)</option>
+          <option value="-7">UTC-7 (Denver)</option>
+          <option value="-6">UTC-6 (Chicago)</option>
+          <option value="-5">UTC-5 (New York)</option>
+          <option value="-4">UTC-4</option>
+          <option value="-3">UTC-3 (Brasilia)</option>
+          <option value="-2">UTC-2</option>
+          <option value="-1">UTC-1 (Azores)</option>
+          <option value="0")rawliteral";
+
+  if (configTimezone == 0) html += " selected";
+  html += R"rawliteral(>UTC+0 (Lisboa, Londres)</option>
+          <option value="1")rawliteral";
+
+  if (configTimezone == 1) html += " selected";
+  html += R"rawliteral(>UTC+1 (Paris, Berlin)</option>
+          <option value="2">UTC+2</option>
+          <option value="3">UTC+3 (Moscow)</option>
+          <option value="4">UTC+4</option>
+          <option value="5">UTC+5</option>
+          <option value="6">UTC+6</option>
+          <option value="7">UTC+7</option>
+          <option value="8">UTC+8 (Singapore, Hong Kong)</option>
+          <option value="9">UTC+9 (Tokyo)</option>
+          <option value="10">UTC+10 (Sydney)</option>
+          <option value="11">UTC+11</option>
+          <option value="12">UTC+12</option>
+        </select>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/>
+          </svg>
+          Display
+        </div>
+        <label>Brilho</label>
+        <div class="slider-container">
+          <input type="range" name="bright" min="10" max="255" value=")rawliteral";
+
+  html += String(configBrightness);
+  html += R"rawliteral(" oninput="document.getElementById('bval').textContent=this.value">
+          <span class="slider-value" id="bval">)rawliteral";
+
+  html += String(configBrightness);
+  html += R"rawliteral(</span>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-submit">Guardar e Reiniciar</button>
+    </form>
+
+    <footer class="footer">
+      <p>Circadian Clock &bull; Luz natural sincronizada</p>
+    </footer>
+  </div>
+
+  <script>
+    function getGPS() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          function(pos) {
+            document.querySelector('[name=lat]').value = pos.coords.latitude.toFixed(4);
+            document.querySelector('[name=lon]').value = pos.coords.longitude.toFixed(4);
+          },
+          function(err) {
+            alert('Erro ao obter localizacao: ' + err.message);
+          },
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+      } else {
+        alert('Geolocalizacao nao suportada neste browser');
+      }
+    }
+  </script>
+</body>
+</html>
+)rawliteral";
+
+  return html;
+}
+
+// Pagina de sucesso apos guardar configuracao
+String getSuccessPage() {
+  return R"rawliteral(
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configuracao Guardada</title>
+  <style>
+    :root {
+      --bg-deep: #0a0e1a;
+      --accent-mint: #6ee7b7;
+      --accent-lavender: #a78bfa;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-deep);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      color: var(--text-primary);
+    }
+    .container {
+      text-align: center;
+      animation: fadeIn 0.5s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .check {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: rgba(110, 231, 183, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 1.5rem;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(110, 231, 183, 0.4); }
+      50% { box-shadow: 0 0 0 20px rgba(110, 231, 183, 0); }
+    }
+    .check svg {
+      width: 40px;
+      height: 40px;
+      stroke: var(--accent-mint);
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 400;
+      margin-bottom: 0.75rem;
+      color: var(--accent-mint);
+    }
+    p {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+    .loader {
+      margin-top: 2rem;
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    .loader span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-lavender);
+      animation: bounce 1.4s ease-in-out infinite;
+    }
+    .loader span:nth-child(1) { animation-delay: 0s; }
+    .loader span:nth-child(2) { animation-delay: 0.2s; }
+    .loader span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="check">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M5 13l4 4L19 7"/>
+      </svg>
+    </div>
+    <h1>Configuracao Guardada!</h1>
+    <p>O dispositivo vai reiniciar e conectar-se<br>a rede WiFi configurada.</p>
+    <p style="margin-top: 1rem; font-size: 0.8rem;">Pode fechar esta pagina.</p>
+    <div class="loader">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+  </div>
+</body>
+</html>
+)rawliteral";
+}
+
 // ============= CONVERSAO TEMPERATURA DE COR =============
 void colorTempToRGB(int kelvin, uint8_t &r, uint8_t &g, uint8_t &b) {
   float temp = kelvin / 100.0;
@@ -1235,6 +1917,23 @@ void setup() {
   
   updateBootStatus(display->color565(50, 0, 0), 40);
 
+  // Verificar se ha configuracao guardada
+  if (!hasStoredConfig()) {
+    Serial.println("\n⚠️  Sem configuracao guardada!");
+    Serial.println("    Iniciando Captive Portal...\n");
+    startCaptivePortal();
+    return;  // Sair do setup - o loop vai gerir o portal
+  }
+
+  // Carregar configuracao
+  loadConfig();
+  initSolarCalc();
+
+  // Aplicar brilho configurado
+  dma_display->setBrightness8(configBrightness);
+
+  updateBootStatus(display->color565(50, 0, 0), 45);
+
   // Inicializar Device ID unico
   initDeviceId();
 
@@ -1293,8 +1992,8 @@ void setup() {
 // ============= INFORMACOES SOLARES =============
 void printSolarInfo() {
   DateTime now = getCurrentTime();
-  int sunrise = esposende.sunrise(now.year(), now.month(), now.day(), true);
-  int sunset = esposende.sunset(now.year(), now.month(), now.day(), true);
+  int sunrise = solarCalc->sunrise(now.year(), now.month(), now.day(), true);
+  int sunset = solarCalc->sunset(now.year(), now.month(), now.day(), true);
   
   Serial.println("\n--- Info Solar ---");
   Serial.printf("Data: %02d/%02d/%04d\n", now.day(), now.month(), now.year());
@@ -1445,18 +2144,73 @@ void displayOff() {
 
 // ============= GESTAO DE BOTAO =============
 void handleButton() {
+  static unsigned long buttonPressStart = 0;
+  static bool longPressTriggered = false;
+  static bool showingProgress = false;
+
   if (buttonPressed) {
     buttonPressed = false;
     delay(20);
 
     if (digitalRead(BUTTON_PIN) == LOW) {
+      // Botao acabou de ser pressionado
+      buttonPressStart = millis();
+      longPressTriggered = false;
+      showingProgress = false;
+    }
+  }
+
+  // Se o botao esta pressionado, verificar duracao
+  if (digitalRead(BUTTON_PIN) == LOW && buttonPressStart > 0) {
+    unsigned long pressDuration = millis() - buttonPressStart;
+
+    // Mostrar progresso visual apos 1 segundo
+    if (pressDuration > 1000 && !showingProgress) {
+      showingProgress = true;
+      display->fillScreen(display->color565(0, 0, 0));
+      display->setTextSize(1);
+      display->setTextColor(display->color565(167, 139, 250));  // Lavender
+      display->setCursor(1, 4);
+      display->print("SETUP");
+    }
+
+    // Atualizar barra de progresso (1s a 5s = 4s total)
+    if (showingProgress && !longPressTriggered) {
+      int progress = constrain(map(pressDuration, 1000, BUTTON_LONG_PRESS_MS, 0, 32), 0, 32);
+      display->fillRect(0, 14, progress, 2, display->color565(251, 191, 36));  // Amber
+    }
+
+    // Long press detectado (5 segundos)
+    if (pressDuration >= BUTTON_LONG_PRESS_MS && !longPressTriggered) {
+      longPressTriggered = true;
+      Serial.println("\n[BUTTON] Long press detectado - entrando em modo config...");
+
+      // Feedback visual
+      display->fillScreen(display->color565(0, 0, 0));
+      display->fillRect(0, 14, 32, 2, display->color565(110, 231, 183));  // Mint green
+
+      delay(500);
+
+      // Iniciar captive portal
+      startCaptivePortal();
+
+      buttonPressStart = 0;
+      return;
+    }
+  }
+  // Botao foi libertado
+  else if (buttonPressStart > 0) {
+    unsigned long pressDuration = millis() - buttonPressStart;
+    buttonPressStart = 0;
+
+    // Short press (< 1s) - mudar modo
+    if (pressDuration < 1000 && !longPressTriggered) {
       currentMode = (Mode)((currentMode + 1) % 3);
 
       const char* modeNames[] = {"AUTO_SOLAR", "THERAPY_RED", "OFF"};
       Serial.printf("\n>>> MODO: %s <<<\n\n", modeNames[currentMode]);
 
       // SYNC IMEDIATO: Broadcast para todos os peers ANTES da animacao
-      // Isto garante que os outros dispositivos mudam instantaneamente
       broadcastModeChange();
 
       // Show beautiful feedback icon with fade animation
@@ -1464,9 +2218,13 @@ void handleButton() {
 
       // Then update to the actual mode display
       updateDisplay();
-
-      while (digitalRead(BUTTON_PIN) == LOW) delay(10);
     }
+    // Medium press (1-5s) - cancelado, restaurar display
+    else if (!longPressTriggered) {
+      updateDisplay();
+    }
+
+    showingProgress = false;
   }
 }
 
@@ -1483,6 +2241,20 @@ void updateDisplay() {
 void loop() {
   static unsigned long lastUpdate = 0;
   static unsigned long lastSync = 0;
+
+  // Se estamos em modo configuracao, processar apenas o captive portal
+  if (configMode) {
+    dnsServer.processNextRequest();
+
+    // Timeout de 5 minutos sem atividade
+    if (millis() - configModeStart > SETUP_TIMEOUT) {
+      Serial.println("\n[CONFIG] Timeout - reiniciando...");
+      ESP.restart();
+    }
+
+    delay(10);
+    return;
+  }
 
   handleButton();
 
