@@ -202,7 +202,7 @@ bool processCaptivePortal() {
 String getConfigPage() {
   String html = R"rawliteral(
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -258,14 +258,7 @@ String getConfigPage() {
     }
     input:focus, select:focus { outline: none; border-color: var(--accent-lavender); box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.15); }
     input::placeholder { color: var(--text-muted); }
-    .row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.75rem; align-items: end; }
-    .btn-gps {
-      padding: 0.875rem 1rem;
-      background: rgba(110, 231, 183, 0.15); border: 1px solid rgba(110, 231, 183, 0.3);
-      border-radius: 10px; color: var(--accent-mint);
-      font-size: 0.85rem; cursor: pointer; transition: all 0.2s; white-space: nowrap;
-    }
-    .btn-gps:hover { background: rgba(110, 231, 183, 0.25); }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; align-items: end; }
     .hint { font-size: 0.7rem; color: var(--text-muted); margin-top: 0.5rem; }
     .slider-container { display: flex; align-items: center; gap: 1rem; }
     input[type="range"] { flex: 1; -webkit-appearance: none; height: 6px; border-radius: 3px; background: rgba(167, 139, 250, 0.2); border: none; padding: 0; }
@@ -290,7 +283,7 @@ String getConfigPage() {
         <defs><linearGradient id="moonGrad" x1="4" y1="4" x2="44" y2="44"><stop stop-color="#e0e7ff"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs>
       </svg>
       <h1 class="title">Circadian Clock</h1>
-      <p class="subtitle">Configuracao Inicial</p>
+      <p class="subtitle">Initial Setup</p>
     </header>
 
     <form action="/save" method="POST">
@@ -299,12 +292,12 @@ String getConfigPage() {
           <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z"/>
           </svg>
-          WiFi Principal
+          Primary WiFi
         </div>
-        <label>Nome da rede (SSID)</label>
-        <input type="text" name="ssid1" placeholder="Nome da rede WiFi">
+        <label>Network name (SSID)</label>
+        <input type="text" name="ssid1" placeholder="WiFi network name">
         <label>Password</label>
-        <input type="password" name="pass1" placeholder="Password da rede">
+        <input type="password" name="pass1" placeholder="Network password">
       </div>
 
       <div class="card">
@@ -312,10 +305,10 @@ String getConfigPage() {
           <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0"/>
           </svg>
-          WiFi Secundario (opcional)
+          Backup WiFi (optional)
         </div>
-        <label>Nome da rede (SSID)</label>
-        <input type="text" name="ssid2" placeholder="Rede alternativa">
+        <label>Network name (SSID)</label>
+        <input type="text" name="ssid2" placeholder="Alternative network">
         <label>Password</label>
         <input type="password" name="pass2" placeholder="Password">
       </div>
@@ -326,31 +319,115 @@ String getConfigPage() {
             <path d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/>
             <path d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/>
           </svg>
-          Localizacao
+          Location
         </div>
-        <div class="row">
+        <label>Select a city (or enter coordinates manually)</label>
+        <select id="citySelect" onchange="setCity(this.value)">
+          <option value="">-- Select a city --</option>
+          <optgroup label="Portugal">
+            <option value="38.7223,-9.1393">Lisbon</option>
+            <option value="38.6979,-9.4215">Cascais</option>
+            <option value="41.1579,-8.6291">Porto</option>
+            <option value="41.5362,-8.7813">Braga</option>
+            <option value="41.5339,-8.7820">Esposende</option>
+            <option value="40.2033,-8.4103">Coimbra</option>
+            <option value="37.0194,-7.9304">Faro</option>
+          </optgroup>
+          <optgroup label="Spain">
+            <option value="40.4168,-3.7038">Madrid</option>
+            <option value="41.3851,2.1734">Barcelona</option>
+            <option value="37.3891,-5.9845">Seville</option>
+            <option value="39.4699,-0.3763">Valencia</option>
+          </optgroup>
+          <optgroup label="United Kingdom">
+            <option value="51.5074,-0.1278">London</option>
+            <option value="53.4808,-2.2426">Manchester</option>
+            <option value="55.9533,-3.1883">Edinburgh</option>
+          </optgroup>
+          <optgroup label="France">
+            <option value="48.8566,2.3522">Paris</option>
+            <option value="43.2965,5.3698">Marseille</option>
+            <option value="45.7640,4.8357">Lyon</option>
+          </optgroup>
+          <optgroup label="Germany">
+            <option value="52.5200,13.4050">Berlin</option>
+            <option value="48.1351,11.5820">Munich</option>
+            <option value="50.1109,8.6821">Frankfurt</option>
+          </optgroup>
+          <optgroup label="Italy">
+            <option value="41.9028,12.4964">Rome</option>
+            <option value="45.4642,9.1900">Milan</option>
+          </optgroup>
+          <optgroup label="Netherlands">
+            <option value="52.3676,4.9041">Amsterdam</option>
+          </optgroup>
+          <optgroup label="Belgium">
+            <option value="50.8503,4.3517">Brussels</option>
+          </optgroup>
+          <optgroup label="Switzerland">
+            <option value="47.3769,8.5417">Zurich</option>
+            <option value="46.2044,6.1432">Geneva</option>
+          </optgroup>
+          <optgroup label="USA - East">
+            <option value="40.7128,-74.0060">New York</option>
+            <option value="25.7617,-80.1918">Miami</option>
+            <option value="42.3601,-71.0589">Boston</option>
+            <option value="38.9072,-77.0369">Washington DC</option>
+          </optgroup>
+          <optgroup label="USA - Central">
+            <option value="41.8781,-87.6298">Chicago</option>
+            <option value="29.7604,-95.3698">Houston</option>
+            <option value="32.7767,-96.7970">Dallas</option>
+          </optgroup>
+          <optgroup label="USA - West">
+            <option value="34.0522,-118.2437">Los Angeles</option>
+            <option value="37.7749,-122.4194">San Francisco</option>
+            <option value="47.6062,-122.3321">Seattle</option>
+            <option value="33.4484,-112.0740">Phoenix</option>
+            <option value="36.1699,-115.1398">Las Vegas</option>
+          </optgroup>
+          <optgroup label="Canada">
+            <option value="43.6532,-79.3832">Toronto</option>
+            <option value="45.5017,-73.5673">Montreal</option>
+            <option value="49.2827,-123.1207">Vancouver</option>
+          </optgroup>
+          <optgroup label="Brazil">
+            <option value="-23.5505,-46.6333">Sao Paulo</option>
+            <option value="-22.9068,-43.1729">Rio de Janeiro</option>
+            <option value="-15.7942,-47.8825">Brasilia</option>
+          </optgroup>
+          <optgroup label="Australia">
+            <option value="-33.8688,151.2093">Sydney</option>
+            <option value="-37.8136,144.9631">Melbourne</option>
+          </optgroup>
+          <optgroup label="Asia">
+            <option value="35.6762,139.6503">Tokyo</option>
+            <option value="22.3193,114.1694">Hong Kong</option>
+            <option value="1.3521,103.8198">Singapore</option>
+            <option value="31.2304,121.4737">Shanghai</option>
+            <option value="37.5665,126.9780">Seoul</option>
+            <option value="19.0760,72.8777">Mumbai</option>
+          </optgroup>
+        </select>
+        <div class="row" style="margin-top: 1rem;">
           <div>
             <label>Latitude</label>
-            <input type="number" name="lat" step="0.0001" value=")rawliteral";
+            <input type="number" name="lat" id="latInput" step="0.0001" value=")rawliteral";
 
   html += String(configLatitude, 4);
   html += R"rawliteral(" required>
           </div>
           <div>
             <label>Longitude</label>
-            <input type="number" name="lon" step="0.0001" value=")rawliteral";
+            <input type="number" name="lon" id="lonInput" step="0.0001" value=")rawliteral";
 
   html += String(configLongitude, 4);
   html += R"rawliteral(" required>
           </div>
-          <div>
-            <label>&nbsp;</label>
-            <button type="button" class="btn-gps" onclick="getGPS()">📍 GPS</button>
-          </div>
         </div>
-        <p class="hint">Clica GPS para usar a localizacao do telemovel</p>
+        <p class="hint">Select a city above to auto-fill, or enter your coordinates manually</p>
 
-        <label>Fuso horario</label>
+        <label>Timezone</label>
         <select name="tz">
           <option value="-12">UTC-12</option>
           <option value="-11">UTC-11</option>
@@ -393,7 +470,7 @@ String getConfigPage() {
           </svg>
           Display
         </div>
-        <label>Brilho</label>
+        <label>Brightness</label>
         <div class="slider-container">
           <input type="range" name="bright" min="10" max="255" value=")rawliteral";
 
@@ -405,7 +482,7 @@ String getConfigPage() {
   html += R"rawliteral(</span>
         </div>
 
-        <label style="margin-top: 1.5rem;">Ajuste de Despertar</label>
+        <label style="margin-top: 1.5rem;">Wake Adjustment</label>
         <div class="slider-container" style="gap: 0.5rem;">
           <svg class="slider-icon" viewBox="0 0 24 24" fill="currentColor" style="width:24px;height:24px;color:var(--accent-moon);flex-shrink:0;">
             <path d="M3 5a2 2 0 012-2h14a2 2 0 012 2v2a1 1 0 01-1 1H4a1 1 0 01-1-1V5zm0 6a1 1 0 011-1h16a1 1 0 011 1v7a2 2 0 01-2 2H5a2 2 0 01-2-2v-7zm3 2v3h12v-3H6z"/>
@@ -421,46 +498,41 @@ String getConfigPage() {
 
   // Valor inicial do offset
   if (configSolarOffset > 0) {
-    html += "+" + String(configSolarOffset) + "h cedo";
+    html += "+" + String(configSolarOffset) + "h early";
   } else if (configSolarOffset < 0) {
-    html += String(configSolarOffset) + "h tarde";
+    html += String(-configSolarOffset) + "h late";
   } else {
     html += "Normal";
   }
 
   html += R"rawliteral(</span>
         </div>
-        <p class="hint">🛏️ Dormir ate mais tarde ← → Acordar mais cedo ☀️</p>
+        <p class="hint">Sleep in later ← → Wake up earlier</p>
       </div>
 
-      <button type="submit" class="btn-submit">Guardar e Reiniciar</button>
+      <button type="submit" class="btn-submit">Save and Restart</button>
     </form>
 
     <footer class="footer">
-      <p>Circadian Clock &bull; Luz natural sincronizada</p>
+      <p>Circadian Clock &bull; Natural light synchronized</p>
     </footer>
   </div>
 
   <script>
-    function getGPS() {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          function(pos) {
-            document.querySelector('[name=lat]').value = pos.coords.latitude.toFixed(4);
-            document.querySelector('[name=lon]').value = pos.coords.longitude.toFixed(4);
-          },
-          function(err) { alert('Erro ao obter localizacao: ' + err.message); },
-          { enableHighAccuracy: true, timeout: 10000 }
-        );
-      } else { alert('Geolocalizacao nao suportada neste browser'); }
+    function setCity(val) {
+      if (val) {
+        var coords = val.split(',');
+        document.getElementById('latInput').value = coords[0];
+        document.getElementById('lonInput').value = coords[1];
+      }
     }
     function updateOffsetLabel(val) {
       var label = document.getElementById('soval');
       var v = parseInt(val);
       if (v > 0) {
-        label.textContent = '+' + v + 'h cedo';
+        label.textContent = '+' + v + 'h early';
       } else if (v < 0) {
-        label.textContent = v + 'h tarde';
+        label.textContent = Math.abs(v) + 'h late';
       } else {
         label.textContent = 'Normal';
       }
@@ -476,11 +548,11 @@ String getConfigPage() {
 String getSuccessPage() {
   return R"rawliteral(
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Configuracao Guardada</title>
+  <title>Configuration Saved</title>
   <style>
     :root { --bg-deep: #0a0e1a; --accent-mint: #6ee7b7; --accent-lavender: #a78bfa; --text-primary: #f1f5f9; --text-secondary: #94a3b8; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -505,9 +577,9 @@ String getSuccessPage() {
     <div class="check">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>
     </div>
-    <h1>Configuracao Guardada!</h1>
-    <p>O dispositivo vai reiniciar e conectar-se<br>a rede WiFi configurada.</p>
-    <p style="margin-top: 1rem; font-size: 0.8rem;">Pode fechar esta pagina.</p>
+    <h1>Configuration Saved!</h1>
+    <p>The device will restart and connect<br>to the configured WiFi network.</p>
+    <p style="margin-top: 1rem; font-size: 0.8rem;">You can close this page.</p>
     <div class="loader"><span></span><span></span><span></span></div>
   </div>
 </body>
