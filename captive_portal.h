@@ -108,4 +108,12 @@ bool processCaptivePortal();
  */
 extern void prepareForRestart(bool showOK = false);
 
+/**
+ * Mostra animacao de preview do brilho no painel LED
+ * Faz fade in/out com luz vermelha para demonstrar o brilho configurado
+ * @param brightness valor de brilho (10-255)
+ * Definida em clock.ino
+ */
+extern void previewBrightness(int brightness);
+
 #endif // CAPTIVE_PORTAL_H
