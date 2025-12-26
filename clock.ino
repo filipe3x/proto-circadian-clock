@@ -153,7 +153,7 @@ struct PendingAck {
 PendingAck pendingAcks[5];
 
 // Callback de recepcao ESP-NOW (declaracao antecipada)
-void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len);
+void onDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len);
 void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 
 // ============= BOTAO =============
@@ -648,7 +648,7 @@ void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
 }
 
 // Callback quando dados sao recebidos
-void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
+void onDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len) {
   if (len < sizeof(MeshMessage)) return;
 
   MeshMessage* msg = (MeshMessage*)data;
@@ -668,12 +668,12 @@ void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
 
   switch (msg->msgType) {
     case MSG_DISCOVERY:
-      handleDiscovery(info->src_addr, msg);
+      handleDiscovery(mac_addr, msg);
       break;
     case MSG_SETTINGS:
       handleSettings(msg);
       // Enviar ACK
-      sendAck(info->src_addr, msg->msgId);
+      sendAck(mac_addr, msg->msgId);
       break;
     case MSG_REQUEST:
       // Se somos master, enviar settings

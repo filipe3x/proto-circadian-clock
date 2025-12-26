@@ -72,17 +72,22 @@ https://espressif.github.io/arduino-esp32/package_esp32_index.json
 
 Then install **esp32** by Espressif Systems via **Tools → Board → Boards Manager**.
 
+> ⚠️ **Important:** Use **ESP32 Arduino 2.0.x** (tested with 2.0.14), NOT version 3.x.
+> The ESP32-HUB75-MatrixPanel-I2S-DMA library has compatibility issues with ESP32 Arduino 3.x
+> due to breaking changes in the ESP-IDF 5.x I2S and DMA APIs. Version 2.0.x uses ESP-IDF 4.4
+> which provides stable support for HUB75 LED panels.
+
 ### Arduino Libraries
 
 Install via **Sketch → Include Library → Manage Libraries**:
 
-| Library | Author | Description |
-|---------|--------|-------------|
-| **ESP32-HUB75-MatrixPanel-I2S-DMA** | mrfaptastic | LED matrix driver |
-| **RTClib** | Adafruit | RTC DS3231 support |
-| **Dusk2Dawn** | DM Kishi | Solar calculations |
-| **ESPAsyncWebServer** | me-no-dev | Async web server for captive portal |
-| **AsyncTCP** | me-no-dev | Async TCP for ESP32 |
+| Library | Version | Author | Description |
+|---------|---------|--------|-------------|
+| **ESP32-HUB75-MatrixPanel-I2S-DMA** | 3.0.x | mrcodetenz (mrfaptastic) | LED matrix driver |
+| **RTClib** | 2.1.x | Adafruit | RTC DS3231 support |
+| **Dusk2Dawn** | 1.0.x | DM Kishi | Solar calculations |
+| **ESPAsyncWebServer** | 1.2.x | me-no-dev | Async web server for captive portal |
+| **AsyncTCP** | 1.1.x | me-no-dev | Async TCP for ESP32 |
 
 ### Manual Installation
 
@@ -214,6 +219,11 @@ Potential future enhancements:
 - **Web Interface** - Configuration via WiFi AP mode
 - **Multiple Profiles** - Different settings per day of week
 - **Home Assistant Integration** - MQTT control
+
+## Authors
+
+- **Filipe Marques** ([@filipe3x](https://github.com/filipe3x)) - Creator and maintainer
+- **Claude** (Anthropic) - AI pair programming assistant
 
 ## License
 
