@@ -577,7 +577,12 @@ String getConfigPage() {
       var slider = document.getElementById('brightSlider');
       var previewTimeout = null;
 
-      function previewBrightness() {
+      function previewBrightness(e) {
+        // Prevent scroll on touch devices
+        if (e && e.type === 'touchend') {
+          e.preventDefault();
+        }
+
         // Debounce to avoid multiple calls
         if (previewTimeout) clearTimeout(previewTimeout);
         previewTimeout = setTimeout(function() {
@@ -591,8 +596,8 @@ String getConfigPage() {
       // Mouse events (desktop)
       slider.addEventListener('mouseup', previewBrightness);
 
-      // Touch events (mobile)
-      slider.addEventListener('touchend', previewBrightness);
+      // Touch events (mobile) - passive: false to allow preventDefault
+      slider.addEventListener('touchend', previewBrightness, { passive: false });
     })();
   </script>
 </body>
