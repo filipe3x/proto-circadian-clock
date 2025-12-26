@@ -5,24 +5,14 @@
 #include <esp_wifi.h>
 #include <Preferences.h>
 #include <Dusk2Dawn.h>
-#include "captive_portal.h"  // Modulo do captive portal
+#include "board_config.h"     // Configuração de placa (DEVE vir antes dos outros headers)
+#include "captive_portal.h"   // Modulo do captive portal
 #include "auto_solar.h"       // Modulo de calculo solar
 
 // ============= PINOUT =============
-#define R1_PIN 25
-#define G1_PIN 26
-#define B1_PIN 27
-#define R2_PIN 14
-#define G2_PIN 12
-#define B2_PIN 13
-#define A_PIN 23
-#define B_PIN 19
-#define C_PIN 5
-#define D_PIN 17
-#define E_PIN -1
-#define LAT_PIN 4
-#define OE_PIN 15
-#define CLK_PIN 16
+// Agora definido em board_config.h com compilação condicional
+// Para alterar a placa, editar BOARD_MATRIXPORTAL_S3 em board_config.h
+// ou passar -DBOARD_MATRIXPORTAL_S3=1 como build flag
 
 // ============= DISPLAY =============
 MatrixPanel_I2S_DMA *dma_display = nullptr;
@@ -157,12 +147,23 @@ void onDataRecv(const uint8_t *mac_addr, const uint8_t *data, int len);
 void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 
 // ============= BOTAO =============
-#define BUTTON_PIN 0
+// BUTTON_PIN agora definido em board_config.h
+// Matrix Portal S3: GPIO 6 (UP) e GPIO 7 (DOWN)
+// ESP32 Dev Module: GPIO 0 (BOOT)
 volatile bool buttonPressed = false;
+#if BOARD_MATRIXPORTAL_S3 && BUTTON_COUNT > 1
+volatile bool buttonDownPressed = false;
+#endif
 
 void IRAM_ATTR buttonISR() {
   buttonPressed = true;
 }
+
+#if BOARD_MATRIXPORTAL_S3 && BUTTON_COUNT > 1
+void IRAM_ATTR buttonDownISR() {
+  buttonDownPressed = true;
+}
+#endif
 
 // ============= MODOS =============
 enum Mode {
@@ -1167,9 +1168,15 @@ void setup() {
   
   Serial.println("\n\n");
   Serial.println("╔═══════════════════════════════════╗");
-  Serial.println("║     RELÓGIO SOLAR LED v3.0        ║");
+  Serial.println("║     RELÓGIO SOLAR LED v3.1        ║");
   Serial.println("║   Multi-WiFi + Mesh Sync          ║");
   Serial.println("╚═══════════════════════════════════╝");
+  Serial.printf("Placa: %s\n", BOARD_INFO_STRING);
+  #if BOARD_MATRIXPORTAL_S3
+    Serial.println("Modo: Matrix Portal S3");
+  #else
+    Serial.println("Modo: ESP32 Dev Module");
+  #endif
   
   // Configurar pinos
   HUB75_I2S_CFG::i2s_pins _pins = {
@@ -1201,16 +1208,41 @@ void setup() {
   showBootAnimation();
   updateBootStatus(display->color565(50, 0, 0), 10);
   
-  // Botão
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  // Botões
+  #if BUTTON_NEEDS_PULLUP
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+  #else
+    pinMode(BUTTON_PIN, INPUT);
+  #endif
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
+
+  #if BOARD_MATRIXPORTAL_S3 && BUTTON_COUNT > 1
+    // Matrix Portal S3 tem botão DOWN adicional
+    #if BUTTON_NEEDS_PULLUP
+      pinMode(BUTTON_DOWN_PIN, INPUT_PULLUP);
+    #else
+      pinMode(BUTTON_DOWN_PIN, INPUT);
+    #endif
+    attachInterrupt(digitalPinToInterrupt(BUTTON_DOWN_PIN), buttonDownISR, FALLING);
+    Serial.println("✅ Botões UP/DOWN configurados (Matrix Portal S3)");
+  #else
+    Serial.println("✅ Botão configurado");
+  #endif
+
   currentMode = AUTO_SOLAR;
-  
-  Serial.println("✅ Botão configurado");
   updateBootStatus(display->color565(50, 0, 0), 20);
   
-  // RTC
-  Wire.begin(21, 22);
+  // RTC (I2C)
+  // Pinos I2C definidos em board_config.h
+  // Matrix Portal S3: SDA=16, SCL=17 (STEMMA QT)
+  // ESP32 Dev Module: SDA=21, SCL=22
+  Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+  Serial.printf("I2C inicializado em SDA=%d, SCL=%d\n", I2C_SDA_PIN, I2C_SCL_PIN);
+
+  #if BOARD_MATRIXPORTAL_S3
+    Serial.println("⚠️  Nota: LIS3DH integrado em 0x19 (não usar este endereço)");
+  #endif
+
   if (rtc.begin()) {
     rtcAvailable = true;
     Serial.println("✅ RTC DS3231 encontrado");
@@ -1452,6 +1484,41 @@ void handleButton() {
   }
 }
 
+// ============= HANDLER BOTÃO DOWN (Matrix Portal S3) =============
+#if BOARD_MATRIXPORTAL_S3 && BUTTON_COUNT > 1
+void handleButtonDown() {
+  if (!buttonDownPressed) return;
+  buttonDownPressed = false;
+  delay(50);  // Debounce
+
+  if (digitalRead(BUTTON_DOWN_PIN) == LOW) {
+    // Botão DOWN pressionado - diminuir brilho
+    static uint8_t brightnessLevels[] = {20, 40, 80, 120, 180, 255};
+    static int brightnessIndex = 2;  // Começa em 80
+
+    // Ciclar para baixo (ou voltar ao máximo)
+    brightnessIndex = (brightnessIndex + 1) % 6;
+    uint8_t newBrightness = brightnessLevels[brightnessIndex];
+
+    dma_display->setBrightness8(newBrightness);
+    configBrightness = newBrightness;
+
+    // Guardar na NVS
+    preferences.begin("clock", false);
+    preferences.putUChar("brightness", newBrightness);
+    preferences.end();
+
+    Serial.printf("[BRIGHTNESS] Nível %d: %d/255 (%d%%)\n",
+                  brightnessIndex + 1, newBrightness, (newBrightness * 100) / 255);
+
+    // Feedback visual rápido
+    display->fillScreen(display->color565(newBrightness, newBrightness, newBrightness));
+    delay(150);
+    updateDisplay();
+  }
+}
+#endif
+
 // ============= ATUALIZAR DISPLAY =============
 void updateDisplay() {
   switch (currentMode) {
@@ -1478,6 +1545,10 @@ void loop() {
   }
 
   handleButton();
+
+  #if BOARD_MATRIXPORTAL_S3 && BUTTON_COUNT > 1
+    handleButtonDown();  // Botão DOWN para ajuste de brilho
+  #endif
 
   // Atualizar mesh sync
   updateMeshSync();
