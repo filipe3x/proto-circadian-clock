@@ -1513,7 +1513,9 @@ void displayTherapyRed() {
   color.r = 255;
   color.g = 0;
   color.b = 0;
-  color.brightness = 100;
+  // Usar configBrightness mas limitado a 240 para terapia vermelha
+  // (evita desconforto visual e consumo excessivo nos 5V)
+  color.brightness = min(configBrightness, 240);
   color.colorTemp = 0;
   fillPanel(color);
 }
