@@ -1,246 +1,473 @@
-# Alimentação do ESP32
+# Power Supply - Circadian Clock
 
-Este documento descreve estratégias seguras para alimentar o ESP32 a partir de uma fonte DC 5V externa, partilhada com o painel P10.
-
-## Contexto
-
-O painel P10 32x16 RGB requer uma fonte 5V com pelo menos 2-4A. É conveniente alimentar o ESP32 a partir da mesma fonte, eliminando a necessidade de um carregador USB separado.
-
-## Requisitos de Energia
-
-| Componente | Tensão | Corrente Típica | Corrente Máxima |
-|------------|--------|-----------------|-----------------|
-| ESP32 Dev Module | 5V (via VIN/USB) | 80-150mA | 500mA |
-| Painel P10 32x16 | 5V | 1-2A | 4A |
-| DS3231 RTC | 3.3V | 1mA | 3mA |
-| **Total** | 5V | ~2A | ~4.5A |
-
-> **Recomendação:** Fonte 5V 5A para margem de segurança.
+Este documento descreve a arquitetura de alimentação unificada para o Circadian Clock, utilizando uma única fonte 5V para alimentar o painel LED P10 e o ESP32.
 
 ---
 
-## Estratégia 1: Cabo DC para USB-C (Mais Simples)
+## 1. Requisitos de Energia
 
-A forma mais fácil de alimentar o ESP32 é usar um cabo adaptador que converte a ficha DC da fonte para USB-C.
+### 1.1 Consumo por Componente
 
-### Vantagens
-- Sem soldadura
-- Usa a proteção interna do ESP32
-- Fácil de desconectar para programação
+| Componente | Tensão | Corrente Típica | Corrente Máxima | Notas |
+|------------|--------|-----------------|-----------------|-------|
+| Painel P10 32x16 RGB | 5V | 1-2A | 4A | Depende do brilho e padrão |
+| ESP32-WROOM-32E | 3.3V | 80-150mA | 500mA | WiFi ativo aumenta consumo |
+| DS3231 RTC | 3.3V | 1mA | 3mA | Backup: bateria CR2032 |
+| 74AHCT245 (x2) | 5V | 10mA | 20mA | Level shifters |
+| LEDs indicadores (x3) | 3.3V | 30mA | 60mA | Power, WiFi, Error |
+| **TOTAL** | 5V | **~2.5A** | **~5A** | |
 
-### Desvantagens
-- Mais um cabo no projeto
-- Dependente da qualidade do cabo
+### 1.2 Especificações da Fonte
 
-### O que comprar (AliExpress)
+| Parâmetro | Mínimo | Recomendado | Máximo |
+|-----------|--------|-------------|--------|
+| Tensão de saída | 4.75V | 5.0V | 5.25V |
+| Corrente | 4A | 5A | 10A |
+| Ripple | - | <50mV | 100mV |
+| Regulação | - | ±2% | ±5% |
 
-| Pesquisa | Preço estimado |
-|----------|----------------|
-| `"DC 5.5x2.1 to USB C cable"` | ~1-2€ |
-| `"DC barrel jack to USB-C adapter"` | ~1-2€ |
+> **Recomendação:** Fonte 5V/5A com ficha DC 5.5x2.1mm, certificação CE/UL.
 
-### Esquema
+### 1.3 Pior Caso: Painel P10 a 100%
 
 ```
-Fonte 5V DC ────[Cabo DC→USB-C]──── USB-C (ESP32)
-     │
-     └── Painel P10 (5V + GND)
+Consumo máximo do painel (todos os LEDs brancos a 100%):
+═══════════════════════════════════════════════════════════════
+
+  32 colunas × 16 linhas × 3 cores (RGB) = 1536 LEDs
+
+  Cada LED: ~20mA (máximo)
+  Duty cycle scan: 1/16 (apenas 1 linha ativa)
+
+  Corrente instantânea: 32 × 3 × 20mA = 1.92A (por linha)
+  Corrente média: 1.92A × 1/16 + overhead = ~150mA (mínimo)
+
+  Na prática com PWM e cores mistas:
+  - Brilho 25%: ~0.5A
+  - Brilho 50%: ~1.0A
+  - Brilho 75%: ~1.5A
+  - Brilho 100%: ~2.0A
+
+  Picos transitórios: até 4A
+
+═══════════════════════════════════════════════════════════════
 ```
 
 ---
 
-## Estratégia 2: Alimentação pelos Pinos (Mais Elegante)
+## 2. Arquitetura de Alimentação
 
-Alimentar diretamente pelo pino **VIN** ou **5V** do ESP32, com circuito de proteção.
-
-### Vantagens
-- Instalação mais limpa
-- Menos cabos
-- Proteção personalizada
-
-### Desvantagens
-- Requer soldadura
-- Perde alguma proteção do regulador USB
-
-### Circuito de Proteção Recomendado
+### 2.1 Diagrama de Blocos
 
 ```
-                    Fusível PTC        Díodo Schottky
-Fonte 5V (+) ────────┤ 500mA ├──────────┤>├──────┬────── VIN (ESP32)
-                                                 │
-                                          100µF ═╪═ 100nF
-                                                 │
-Fonte 5V (-) ────────────────────────────────────┴────── GND (ESP32)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        POWER SUPPLY ARCHITECTURE                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ENTRADA                PROTEÇÕES                  DISTRIBUIÇÃO            │
+│   ═══════                ═════════                  ════════════            │
+│                                                                             │
+│                    ┌──────────────────────────────────────────┐            │
+│  ┌──────────┐      │  ┌─────┐   ┌─────┐   ┌─────┐   ┌─────┐  │            │
+│  │ FONTE    │      │  │ D1  │   │ F1  │   │ D2  │   │ C1  │  │            │
+│  │ 5V/5A    │──────┼──┤Schot├───┤ PTC ├───┤ TVS ├───┤Cap  ├──┼─┬─► +5V_SAFE
+│  │ DC 5.5mm │      │  │SS54 │   │2.5A │   │5.0A │   │100µF│  │ │          │
+│  └──────────┘      │  └─────┘   └─────┘   └─────┘   └─────┘  │ │          │
+│       │            │                                          │ │          │
+│       │            │  Inversão  Curto     Sobre    Filtragem │ │          │
+│       │            │  Polarid.  Circuito  Tensão              │ │          │
+│       │            └──────────────────────────────────────────┘ │          │
+│       │                                                          │          │
+│       └──────────────────────────────────────────────────────────┴─► GND   │
+│                                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   +5V_SAFE                                                                  │
+│      │                                                                      │
+│      ├────────────────────────────────────────────────► PAINEL P10 (5V)    │
+│      │                                                   ~2-4A              │
+│      │                                                                      │
+│      ├───────────────────────────────────────────────► 74AHCT245 x2 (5V)   │
+│      │                                                   ~20mA              │
+│      │                                                                      │
+│      │     ┌───────────────────────┐                                       │
+│      └────►│    AMS1117-3.3V       │──────────────────► ESP32 (3.3V)       │
+│            │    LDO Regulator      │                     ~150mA             │
+│            │    (Max 1A output)    │                                        │
+│            └───────────────────────┘                                        │
+│                      │                                                      │
+│                      └────────────────────────────────► DS3231 RTC (3.3V)  │
+│                                                          ~1mA               │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Componentes de Proteção
+### 2.2 Fluxo de Proteção
 
-#### 1. Díodo Schottky (Proteção de Polaridade)
+```
+Sequência de Proteção (Entrada → Carga):
+═══════════════════════════════════════════════════════════════
 
-Previne danos se os fios forem ligados ao contrário.
+ ENTRADA    │    PROTEÇÃO 1      │    PROTEÇÃO 2      │    PROTEÇÃO 3
+ 5V DC      │    Inversão        │    Curto-Circuito  │    Sobretensão
+            │    Polaridade      │                    │
+            │                    │                    │
+    ───────►│◄─── D1 SS54 ──────►│◄─── F1 PTC ───────►│◄─── D2 TVS ──────►
+            │                    │                    │
+  Se        │  Díodo bloqueia    │  Fusível abre     │  TVS clampa a
+  invertido │  corrente reversa  │  em >5A           │  ~9V e limita
+            │                    │                    │
+            │    PROTEÇÃO 4      │    PROTEÇÃO 5      │    SAÍDA
+            │    Filtragem       │    ESD             │
+            │                    │                    │
+    ───────►│◄─── C1 100µF ─────►│◄─── SRV05 ────────►│─── +5V_SAFE ──────►
+            │     C2 100nF       │    (I2C/USB)       │
+            │                    │                    │
+  Absorve   │  Filtra ruído      │  Protege           │  Tensão limpa
+  picos     │  alta frequência   │  interfaces        │  e protegida
 
-| Componente | Especificação | Pesquisa AliExpress |
-|------------|---------------|---------------------|
-| 1N5822 | 3A, 40V, Vf=0.3V | `"1N5822 schottky diode"` |
-| SS34 | 3A, 40V, Vf=0.35V | `"SS34 schottky diode"` |
-| SS54 | 5A, 40V, Vf=0.35V | `"SS54 schottky diode"` |
-
-> **Nota:** Schottky tem queda de tensão baixa (~0.3V), resultando em 4.7V para o ESP32 (aceitável).
-
-#### 2. Capacitores de Filtragem (Supressão de Ruído)
-
-Absorvem picos de tensão e filtram ruído da fonte.
-
-| Componente | Função | Pesquisa AliExpress |
-|------------|--------|---------------------|
-| 100µF 16V Eletrolítico | Filtragem geral | `"100uF 16V electrolytic capacitor"` |
-| 100nF (0.1µF) Cerâmico | Ruído alta frequência | `"100nF ceramic capacitor"` ou `"104 capacitor"` |
-
-> **Dica:** O código "104" em capacitores cerâmicos significa 100nF.
-
-#### 3. Fusível Resettável PTC (Proteção de Curto-Circuito)
-
-Corta a corrente em caso de curto-circuito e reseta automaticamente.
-
-| Componente | Especificação | Pesquisa AliExpress |
-|------------|---------------|---------------------|
-| PPTC 500mA | Hold: 500mA, Trip: 1A | `"PPTC fuse 500mA"` |
-| MF-R050 | 500mA resettable | `"MF-R050 fuse"` |
+═══════════════════════════════════════════════════════════════
+```
 
 ---
 
-## Estratégia 3: Módulo Buck Converter (Mais Robusta)
+## 3. Circuito de Proteção Detalhado
 
-Se a fonte não for perfeitamente estável ou tiver tensão ligeiramente superior a 5V.
+### 3.1 Esquema Completo
 
-### Quando usar
-- Fonte com tensão 6-12V
-- Fonte não regulada ou ruidosa
-- Necessidade de isolamento adicional
+```
+                 ENTRADA                           PROTEÇÕES                              SAÍDA
+═════════════════════════════════════════════════════════════════════════════════════════════════════
 
-### O que comprar
+                              D1              F1              D2
+    DC Jack 5.5x2.1mm      SS54/SS56      MF-MSMF250      SMBJ5.0A
+         (+) ─────────────────┤>├─────────┤ PTC ├───────────┬─┤>├──┬──────────────── +5V_SAFE
+                             │            │     │           │      │
+                         Schottky      Fuse 2.5A          TVS     │
+                         5A 40V       (trips @5A)         5.0V    │
+                         Vf=0.3V                                  │
+                                                                  │
+                                                          C1     ═╧═    C2
+                                                        100µF   GND   100nF
+                                                         16V          X7R
+                                                          │            │
+                                                          │            │
+         (-) ─────────────────────────────────────────────┴────────────┴──────────────── GND
+
+═════════════════════════════════════════════════════════════════════════════════════════════════════
+
+NOTAS:
+- D1 (SS54): Proteção inversão polaridade, queda ~0.3V → 5V - 0.3V = 4.7V (aceitável)
+- F1 (MF-MSMF250): Hold 2.5A, Trip 5.0A, auto-reseta após arrefecimento
+- D2 (SMBJ5.0A): Standoff 5V, clampa a 9.2V, 600W pico
+- C1: Absorve transientes, estabiliza tensão
+- C2: Filtra ruído de alta frequência do switching
+
+═════════════════════════════════════════════════════════════════════════════════════════════════════
+```
+
+### 3.2 Regulador 3.3V para ESP32
+
+```
+                   AMS1117-3.3 (U3)
+                   ═════════════════
+
+                     ┌─────────────┐
+    +5V_SAFE ──┬────►│ VIN    VOUT │───┬────────────► +3.3V
+               │     │             │   │
+              ═╧═    │     GND     │  ═╧═
+         C3  22µF    └──────┬──────┘  22µF  C4
+             10V            │          10V
+               │            │           │
+    GND ───────┴────────────┴───────────┴────────────► GND
+
+
+Especificações AMS1117-3.3:
+- Tensão entrada: 4.5V - 12V
+- Tensão saída: 3.3V ±2%
+- Corrente máxima: 1A
+- Dropout: 1.1V @ 1A
+- Package: SOT-223
+
+Margem de tensão:
+- Entrada mínima: 3.3V + 1.1V = 4.4V
+- Após D1 Schottky: 5V - 0.3V = 4.7V ✓
+- Headroom: 4.7V - 4.4V = 0.3V (OK)
+```
+
+---
+
+## 4. Componentes e BOM
+
+### 4.1 Lista de Componentes de Proteção
+
+| Ref | Componente | Especificação | Package | Qty | Preço | Fornecedor |
+|-----|------------|---------------|---------|-----|-------|------------|
+| D1 | SS54 ou SS56 | Schottky 5A 40V | SMC | 1 | €0.15 | LCSC, AliExpress |
+| F1 | MF-MSMF250 | PTC Fuse 2.5A hold | 1206 | 1 | €0.20 | LCSC |
+| D2 | SMBJ5.0A | TVS 5V 600W | SMB | 1 | €0.30 | LCSC |
+| U3 | AMS1117-3.3 | LDO 3.3V 1A | SOT-223 | 1 | €0.10 | LCSC |
+| C1 | 100µF 16V | Electrolítico | 8x10mm | 1 | €0.10 | LCSC |
+| C2 | 100nF X7R | Cerâmico 16V | 0402 | 1 | €0.02 | LCSC |
+| C3, C4 | 22µF X5R | Cerâmico 10V | 0805 | 2 | €0.05 | LCSC |
+| J1 | DC Jack | 5.5x2.1mm | Through-hole | 1 | €0.20 | AliExpress |
+
+**Total componentes proteção: ~€1.20**
+
+### 4.2 Fonte de Alimentação Recomendada
+
+| Opção | Especificações | Preço | Pesquisa AliExpress |
+|-------|----------------|-------|---------------------|
+| **Recomendada** | 5V 5A 25W, DC 5.5x2.1mm | ~€5-8 | `"5V 5A power adapter DC 5.5mm"` |
+| Alternativa | 5V 4A 20W, DC 5.5x2.1mm | ~€4-6 | `"5V 4A power supply DC jack"` |
+| Premium | 5V 6A 30W, Mean Well | ~€10-15 | `"Mean Well 5V 6A"` |
+
+> **IMPORTANTE:** Escolher fonte com certificação CE/UL para segurança.
+
+### 4.3 Pesquisas AliExpress - Componentes
+
+| Componente | Pesquisa | Preço (pack) |
+|------------|----------|--------------|
+| Díodos SS54 | `"SS54 schottky diode SMC"` | ~€2 (50pcs) |
+| Fusíveis PTC | `"PPTC fuse 2.5A 1206"` | ~€2 (20pcs) |
+| TVS SMBJ5.0A | `"SMBJ5.0A TVS diode"` | ~€2 (20pcs) |
+| AMS1117-3.3 | `"AMS1117-3.3 SOT-223"` | ~€1 (10pcs) |
+| Capacitores 100µF | `"100uF 16V electrolytic capacitor"` | ~€1 (20pcs) |
+| Capacitores 22µF | `"22uF ceramic capacitor 0805"` | ~€1 (50pcs) |
+| DC Jack | `"DC power jack 5.5x2.1 PCB"` | ~€1 (10pcs) |
+
+---
+
+## 5. Alternativa: Alimentação via USB-C
+
+Para desenvolvimento e testes, pode usar-se a porta USB-C do ESP32 com um adaptador.
+
+### 5.1 Diagrama
+
+```
+                                         ┌─────────────┐
+                                         │    ESP32    │
+    Fonte 5V ───┬──[Proteções]──────────►│    Dev      │──► HUB75 ──► Painel
+         │      │                        │   Module    │       │
+         │      │                        │             │       │
+         │      └──[Splitter DC]─────────┤ USB-C      │       │
+         │                               └─────────────┘       │
+         │                                                     │
+         └─────────────────────────────────────────────────────┘
+                            5V direto ao painel
+```
+
+### 5.2 Cabo Adaptador DC→USB-C
 
 | Pesquisa AliExpress | Preço |
 |---------------------|-------|
-| `"MP1584 buck converter"` | ~1€ |
-| `"LM2596 DC-DC step down"` | ~1-2€ |
-| `"mini 360 buck converter"` | ~0.5€ |
+| `"DC 5.5x2.1 to USB C cable"` | ~€2 |
+| `"DC barrel jack USB C adapter"` | ~€1-2 |
 
-### Esquema
-
-```
-Fonte 5-12V ────[Buck Converter]──── 5V ──── VIN (ESP32)
-                    │
-                  Ajustar para 5V
-```
-
-> **Importante:** Ajusta o potenciómetro do módulo para 5V **antes** de ligar ao ESP32!
+> **Nota:** Esta opção é mais simples mas adiciona pontos de falha. Recomendado apenas para prototipagem.
 
 ---
 
-## Lista de Compras AliExpress
-
-### Kit Básico (Estratégia 1)
-
-| Item | Quantidade | Pesquisa | Preço |
-|------|------------|----------|-------|
-| Cabo DC para USB-C | 1 | `"DC 5.5x2.1 to USB C"` | ~2€ |
-
-**Total: ~2€**
-
-### Kit Completo (Estratégia 2)
-
-| Item | Quantidade | Pesquisa | Preço |
-|------|------------|----------|-------|
-| Díodos 1N5822 | 10+ | `"1N5822 schottky"` | ~1€ |
-| Capacitores 100µF 16V | 10+ | `"100uF 16V electrolytic"` | ~1€ |
-| Capacitores 100nF | 20+ | `"100nF ceramic capacitor"` | ~1€ |
-| Fusíveis PTC 500mA | 10+ | `"PPTC 500mA fuse"` | ~1€ |
-| Fichas DC fêmea | 5+ | `"DC 5.5x2.1 female terminal"` | ~1€ |
-| Placa perfurada | 2+ | `"PCB prototype board 5x7"` | ~1€ |
-
-**Total: ~6€**
-
----
-
-## Cuidados de Segurança
-
-### Antes de ligar
-
-- [ ] Verificar polaridade com multímetro
-- [ ] Confirmar tensão da fonte (deve ser 4.8V - 5.5V)
-- [ ] Inspecionar soldaduras (sem curtos)
-- [ ] Testar circuito de proteção sem ESP32 primeiro
-
-### Riscos e Mitigações
-
-| Risco | Consequência | Proteção |
-|-------|--------------|----------|
-| Tensão > 6V | Queima o regulador | Buck converter ou fonte regulada |
-| Polaridade invertida | Curto-circuito | Díodo Schottky |
-| Picos de tensão | Danos nos componentes | Capacitores de filtragem |
-| Curto-circuito | Sobreaquecimento/fogo | Fusível PTC |
-| Ruído elétrico | Comportamento errático | Capacitores cerâmicos |
-
-### Teste do Circuito de Proteção
-
-1. **Sem ESP32**, liga a fonte ao circuito
-2. Mede a tensão na saída (deve ser ~4.7V devido ao díodo)
-3. Provoca um curto momentâneo na saída - o fusível deve atuar
-4. Aguarda 30 segundos - o fusível deve resetar
-5. Se tudo OK, liga o ESP32
-
----
-
-## Sequência de Arranque Recomendada
-
-Quando a fonte é partilhada entre o painel P10 e o ESP32:
+## 6. Diagrama de Ligações Final
 
 ```
-1. Liga a fonte 5V
-2. Painel P10 arranca (pico de corrente inicial)
-3. Aguarda 1-2 segundos
-4. ESP32 arranca (se alimentação separada por switch)
-```
+═══════════════════════════════════════════════════════════════════════════════════════
+                              CIRCADIAN CLOCK - POWER DISTRIBUTION
+═══════════════════════════════════════════════════════════════════════════════════════
 
-> **Nota:** Na prática, ambos podem arrancar juntos se a fonte tiver capacidade suficiente (5A+). O pico inicial do painel P10 é breve.
+                    POWER ENTRY                          MAIN BOARD
+                 ════════════════                    ═══════════════════
 
----
+                                    PROTECTION CIRCUIT
+                                 ┌──────────────────────────────────────────────┐
+   ┌────────────┐                │                                              │
+   │            │                │   D1        F1        D2                     │
+   │  FONTE     │    DC JACK     │  SS54    PTC 2.5A   TVS 5V                   │
+   │  5V / 5A   ├────[J1]────────┼───┤>├─────┤▒▒├──────┬─┤>├──┬─────────────────┼─────►
+   │            │                │                      │     │                 │  +5V_SAFE
+   │  25W       │                │                     ═╧═   ═╧═                │
+   │            │                │               C1 100µF    C2 100nF           │
+   └────────────┘                │                      │     │                 │
+         ║                       │                      │     │                 │
+         ║ GND ──────────────────┼──────────────────────┴─────┴─────────────────┼─────►
+         ║                       │                                              │   GND
+         ║                       └──────────────────────────────────────────────┘
+         ║
+         ║
+═══════════════════════════════════════════════════════════════════════════════════════
+                                    POWER DISTRIBUTION
+═══════════════════════════════════════════════════════════════════════════════════════
 
-## Diagrama de Ligações Completo
+              +5V_SAFE                                GND
+                 │                                     │
+                 │                                     │
+    ┌────────────┼─────────────────────────────────────┼────────────────────┐
+    │            │                                     │                    │
+    │            ├───────────────────────────┐         │                    │
+    │            │                           │         │                    │
+    │       ┌────┴────┐                 ┌────┴────┐    │                    │
+    │       │  U3     │                 │ 74AHCT  │    │                    │
+    │       │AMS1117  │                 │  245    │────┼────────────────────┤
+    │       │  3.3V   │                 │  x2     │    │                    │
+    │       └────┬────┘                 └────┬────┘    │                    │
+    │            │                           │         │                    │
+    │            │ +3.3V                     │ 5V      │                    │
+    │            │                           │ logic   │                    │
+    │       ┌────┴────────────────┐          │         │                    │
+    │       │                     │          │         │                    │
+    │  ┌────┴────┐          ┌─────┴───┐  ┌───┴────┐    │                    │
+    │  │  ESP32  │◄────────►│  DS3231 │  │ HUB75  │    │                    │
+    │  │         │   I2C    │   RTC   │  │ Header │    │                    │
+    │  │  ~150mA │          │   ~1mA  │  │        │    │                    │
+    │  └─────────┘          └─────────┘  └────┬───┘    │                    │
+    │                                         │        │                    │
+    │                                         │        │                    │
+    └─────────────────────────────────────────┼────────┘                    │
+                                              │                             │
+                                              │                             │
+═══════════════════════════════════════════════════════════════════════════════════════
+                                        PAINEL P10
+═══════════════════════════════════════════════════════════════════════════════════════
 
-```
-                                    ┌─────────────────────────┐
-                                    │      ESP32 Dev Module   │
-                                    │                         │
-Fonte 5V ──┬── Fusível ── Díodo ──┬─┤ VIN              GPIO25 ├──→ R1
-    (+)    │   500mA     1N5822   │ │                  GPIO26 ├──→ G1
-           │                      │ │                  GPIO27 ├──→ B1
-           │               100µF ═╪═│                  GPIO14 ├──→ R2
-           │               100nF  │ │                  GPIO12 ├──→ G2    Painel
-           │                      │ │                  GPIO13 ├──→ B2     P10
-           │                      │ │                  GPIO23 ├──→ A    (HUB75)
-           │                      │ │                  GPIO19 ├──→ B
-           │                      │ │                   GPIO5 ├──→ C
-           │                      │ │                  GPIO17 ├──→ D
-           │                      │ │                   GPIO4 ├──→ LAT
-           │                      │ │                  GPIO15 ├──→ OE
-           │                      │ │                  GPIO16 ├──→ CLK
-           │                      │ │                         │
-           │            ┌─────────┼─┤ GND                 GND ├──→ GND
-           │            │         │ │                         │
-    (-)────┴────────────┴─────────┘ └─────────────────────────┘
-           │
-           └──────────────────────────────────────────────────────→ GND (P10)
-           │
-           └──────────────────────────────────────────────────────→ 5V (P10)
+                                    ┌─────────────────────────────────────┐
+                                    │                                     │
+    +5V_SAFE ───────────────────────┤  VCC                    P10 PANEL   │
+                                    │                                     │
+    GND ────────────────────────────┤  GND                    32x16 RGB   │
+                                    │                                     │
+    HUB75 Cable ────────────────────┤  DATA (R1,G1,B1,R2,G2,B2,          │
+       (16 pins)                    │        A,B,C,D,CLK,LAT,OE)         │
+                                    │                                     │
+                                    │  Consumo: 1-4A (dependendo brilho) │
+                                    │                                     │
+                                    └─────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════════════
 ```
 
 ---
 
-## Referências
+## 7. Cuidados de Segurança
 
-- [ESP32 Dev Module Pinout](https://randomnerdtutorials.com/esp32-pinout-reference-gpios/)
-- [ESP32 Power Supply Guide](https://randomnerdtutorials.com/esp32-power-supply/)
-- [Schottky Diode Protection](https://electronics.stackexchange.com/questions/tagged/reverse-polarity-protection)
-- [PTC Fuse Selection](https://www.littelfuse.com/technical-resources/technical-centers/resettable-ptcs.aspx)
+### 7.1 Checklist Antes de Ligar
+
+- [ ] Verificar polaridade da fonte (centro = positivo)
+- [ ] Medir tensão da fonte com multímetro (4.75V - 5.25V)
+- [ ] Inspecionar soldaduras (sem curtos-circuitos)
+- [ ] Confirmar orientação de díodos (marca = cátodo)
+- [ ] Testar circuito de proteção sem carga primeiro
+
+### 7.2 Teste do Circuito de Proteção
+
+```
+Procedimento de Teste:
+═══════════════════════════════════════════════════════════════
+
+1. SEM CARGA - Ligar fonte ao circuito
+   → Medir: +5V_SAFE deve ser ~4.7V (após queda do Schottky)
+
+2. TESTE INVERSÃO - Inverter polaridade brevemente
+   → Resultado: Nenhuma tensão na saída (D1 bloqueia)
+
+3. TESTE CURTO - Com fonte a 1A max, curto-circuitar saída
+   → Resultado: F1 aquece e corta em <1s
+   → Esperar 30s, fusível reseta automaticamente
+
+4. TESTE SOBRETENSÃO - Se possível, aplicar 7V momentâneo
+   → Resultado: D2 clampa, saída não excede 6V
+
+5. COM CARGA - Ligar ESP32 + Painel gradualmente
+   → Verificar: tensões estáveis, sem aquecimento anormal
+
+═══════════════════════════════════════════════════════════════
+```
+
+### 7.3 Riscos e Mitigações
+
+| Risco | Consequência | Proteção | Componente |
+|-------|--------------|----------|------------|
+| Polaridade invertida | Curto-circuito, componentes queimados | Díodo Schottky bloqueia | D1 SS54 |
+| Curto-circuito | Sobreaquecimento, fogo | Fusível PTC corta | F1 MF-MSMF250 |
+| Sobretensão >6V | Danos ao ESP32 e painel | TVS clampa tensão | D2 SMBJ5.0A |
+| Picos transitórios | Comportamento errático | Capacitores absorvem | C1, C2 |
+| ESD (descarga estática) | Danos a interfaces | TVS array protege | SRV05-4 |
+| Ruído da fonte | Flickering nos LEDs | Filtragem | C1 100µF + C2 100nF |
+
+---
+
+## 8. Sequência de Arranque
+
+```
+Timeline de Arranque:
+═══════════════════════════════════════════════════════════════
+
+  t=0ms     Liga fonte 5V
+    │
+    ├──────── C1 carrega (soft-start ~10ms)
+    │
+  t=10ms    +5V_SAFE estabiliza a 4.7V
+    │
+    ├──────── AMS1117 arranca, 3.3V disponível
+    │
+  t=50ms    ESP32 inicia boot
+    │         │
+    │         ├── Pico de corrente WiFi ~500mA
+    │         │
+    │         └── Painel P10 recebe dados HUB75
+    │
+  t=200ms   Painel mostra primeira frame
+    │
+  t=2000ms  Sistema estável, WiFi conectado
+    │
+    ▼
+  OPERAÇÃO NORMAL
+
+═══════════════════════════════════════════════════════════════
+
+NOTAS:
+- Fonte 5A suporta picos transitórios sem problemas
+- Não é necessário sequenciamento especial
+- Painel e ESP32 podem arrancar simultaneamente
+```
+
+---
+
+## 9. FAQ - Perguntas Frequentes
+
+### Porque usar 5V/5A se o consumo típico é ~2.5A?
+
+Margem de segurança para:
+- Picos transitórios do painel (até 4A)
+- Pico WiFi do ESP32 (~500mA)
+- Degradação da fonte ao longo do tempo
+- Operação em ambientes quentes
+
+### O díodo Schottky não desperdiça energia?
+
+Perda = Vf × I = 0.3V × 2A = 0.6W
+
+É aceitável para a proteção que oferece. Alternativa com P-MOSFET (Si2301) tem perda <0.1W mas é mais complexo.
+
+### Posso usar fonte de telemóvel 5V/2A?
+
+**Não recomendado.** Insuficiente para picos do painel. Mínimo 5V/4A.
+
+### E se a fonte for 5.5V ou 6V?
+
+O TVS (D2) protege até ~6V. Para fontes >6V, usar buck converter entre a fonte e o circuito de proteção.
+
+---
+
+## 10. Referências
+
+- [ESP32 Power Design Guidelines](https://docs.espressif.com/projects/esp-hardware-design-guidelines/en/latest/esp32/power-supply.html)
+- [P10 LED Panel Specifications](https://www.aliexpress.com/item/32x16-P10-RGB-LED-Panel.html)
+- [AMS1117 Datasheet](https://www.advanced-monolithic.com/pdf/ds1117.pdf)
+- [SS54 Schottky Datasheet](https://www.vishay.com/docs/88751/ss54.pdf)
+- [SMBJ5.0A TVS Datasheet](https://www.littelfuse.com/~/media/electronics/datasheets/tvs_diodes/smbj.pdf)
+
+---
+
+*Documento criado: Dezembro 2024*
+*Última atualização: Dezembro 2024*
+*Versão: 2.0 - Consolidado com PCB_DESIGN_GUIDE.md*
