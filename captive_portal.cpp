@@ -149,7 +149,8 @@ void setupCaptiveWebServer() {
       portalPrefs.putInt("timezone", request->getParam("tz", true)->value().toInt());
     }
     if (request->hasParam("bright", true)) {
-      portalPrefs.putInt("brightness", request->getParam("bright", true)->value().toInt());
+      int brightness = constrain(request->getParam("bright", true)->value().toInt(), 10, 255);
+      portalPrefs.putInt("brightness", brightness);
     }
     if (request->hasParam("solar_offset", true)) {
       portalPrefs.putInt("solar_offset", request->getParam("solar_offset", true)->value().toInt());
