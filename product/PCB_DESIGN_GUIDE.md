@@ -104,6 +104,33 @@ Este documento descreve o design de uma PCB integrada profissional para o Circad
 | 15 | OE | GPIO 15 |
 | 16 | GND | GND |
 
+### 1.10 Level Shifters (NOVO - Baseado em Adafruit MatrixPortal S3)
+
+> **Referência:** O design do [Adafruit MatrixPortal S3](https://github.com/adafruit/Adafruit-MatrixPortal-S3-PCB)
+> utiliza level shifting integrado para converter sinais 3.3V do ESP32 para 5V do painel HUB75.
+
+| Ref | Componente | Especificação | Package | Qty | Preço Unit. | Função |
+|-----|------------|---------------|---------|-----|-------------|--------|
+| **U6** | **74AHCT245PW** | Octal bus transceiver | TSSOP-20 | 1 | €0.30 | Level shift sinais RGB + Row |
+| **U7** | **74AHCT245PW** | Octal bus transceiver | TSSOP-20 | 1 | €0.30 | Level shift CLK, LAT, OE, C, D |
+| U8 | CH340C | USB-UART bridge | SOP-16 | 1 | €0.40 | Programação via USB |
+| C14, C15 | 100nF | Cerâmico X7R 16V | 0402 | 2 | €0.02 | Bypass level shifters |
+
+**Porquê 74AHCT245?**
+- Aceita entrada 3.3V (Vih = 2.0V) ✓
+- Saída 5V quando alimentado a 5V ✓
+- 8 canais bidirecionais (usamos unidirecional) ✓
+- Propagation delay: ~7ns (rápido para LEDs) ✓
+- Disponível e barato na LCSC ✓
+
+**Alternativas:**
+| Componente | Canais | Vantagem | Desvantagem |
+|------------|--------|----------|-------------|
+| 74AHCT245 | 8 | Standard, barato | Precisa 2 ICs |
+| 74HCT245 | 8 | Ainda mais barato | Mais lento |
+| TXB0108 | 8 | Bidirecional auto | Mais caro, sensível |
+| SN74LV1T34 | 1 | Pequeno | Precisa 13 ICs! |
+
 ---
 
 ## 2. Circuitos de Proteção Detalhados
@@ -262,6 +289,164 @@ Quando GPIO = LOW:
 - Protege transistor e GPIO
 ```
 
+### 2.6 Level Shifter 3.3V → 5V para HUB75 (NOVO)
+
+> **Baseado no design Adafruit MatrixPortal S3**
+> Fonte: https://github.com/adafruit/Adafruit-MatrixPortal-S3-PCB
+
+```
+ANTES (Design Original - Ligação Direta):
+═══════════════════════════════════════════════════════════════
+
+    ESP32 (3.3V logic)              P10 Panel (5V logic)
+    ─────────────────               ─────────────────────
+    GPIO 25 ─────────────────────── R1   ⚠️ PROBLEMA!
+    GPIO 26 ─────────────────────── G1
+    GPIO 27 ─────────────────────── B1   Os painéis HUB75 esperam
+    GPIO 14 ─────────────────────── R2   sinais 5V (Vih ≈ 3.5V)
+    GPIO 12 ─────────────────────── G2
+    GPIO 13 ─────────────────────── B2   ESP32 output = 3.3V
+    GPIO 23 ─────────────────────── A    Pode funcionar, mas é
+    GPIO 19 ─────────────────────── B    marginal e instável!
+    GPIO 5  ─────────────────────── C
+    GPIO 17 ─────────────────────── D
+    GPIO 16 ─────────────────────── CLK
+    GPIO 4  ─────────────────────── LAT
+    GPIO 15 ─────────────────────── OE
+
+Problemas:
+- Sinais 3.3V são marginais para lógica 5V
+- Painéis diferentes têm thresholds diferentes
+- Pode causar flickering ou cores erradas
+- Falhas intermitentes difíceis de diagnosticar
+
+═══════════════════════════════════════════════════════════════
+
+DEPOIS (Design Melhorado - Com Level Shifter):
+═══════════════════════════════════════════════════════════════
+
+                              VCC = 5V
+                                 │
+                  ┌──────────────┴──────────────┐
+                  │         74AHCT245 (U6)      │
+                  │           VCC=5V            │
+                  │                             │
+    ESP32         │                             │         HUB75
+    ─────         │  DIR  OE                    │         ─────
+    GPIO25 ───────┤A1  │   │                 B1├───────── R1
+    GPIO26 ───────┤A2  │   │                 B2├───────── G1
+    GPIO27 ───────┤A3  │   │                 B3├───────── B1
+    GPIO14 ───────┤A4  │   │                 B4├───────── R2
+    GPIO12 ───────┤A5  │   │                 B5├───────── G2
+    GPIO13 ───────┤A6  │   │                 B6├───────── B2
+    GPIO23 ───────┤A7  │   │                 B7├───────── A
+    GPIO19 ───────┤A8  │   │                 B8├───────── B
+                  │    │   │                    │
+                  │   GND GND                   │
+                  │    │   │                    │
+                  └────┴───┴────────────────────┘
+                       │
+                      GND
+                       │
+                  ┌────┴───┬────────────────────┐
+                  │    │   │                    │
+                  │   GND GND                   │
+                  │    │   │                    │
+                  │  DIR  OE                    │
+    GPIO5  ───────┤A1  │   │                 B1├───────── C
+    GPIO17 ───────┤A2  │   │                 B2├───────── D
+    GPIO4  ───────┤A3  │   │                 B3├───────── LAT
+    GPIO15 ───────┤A4  │   │                 B4├───────── OE
+    GPIO16 ───────┤A5  │   │                 B5├───────── CLK
+    NC ────────────┤A6                       B6├───────── NC
+    NC ────────────┤A7                       B7├───────── NC
+    NC ────────────┤A8                       B8├───────── NC
+                  │                             │
+                  │         74AHCT245 (U7)      │
+                  │           VCC=5V            │
+                  └──────────────┬──────────────┘
+                                 │
+                                GND
+
+Ligações 74AHCT245:
+- Pin 1 (OE active low): GND (sempre ativo)
+- Pin 19 (DIR): GND (A→B, unidirecional)
+- Pin 10 (GND): GND
+- Pin 20 (VCC): +5V
+
+Condensadores bypass:
+- C14: 100nF entre VCC e GND do U6 (o mais perto possível)
+- C15: 100nF entre VCC e GND do U7 (o mais perto possível)
+
+═══════════════════════════════════════════════════════════════
+
+Vantagens do Design Melhorado:
+✓ Sinais robustos 5V para o painel
+✓ Compatível com qualquer painel HUB75
+✓ Sem flickering ou cores erradas
+✓ Protege GPIOs do ESP32 de backfeed
+✓ Custo adicional: apenas €0.60
+
+═══════════════════════════════════════════════════════════════
+```
+
+**Pinout 74AHCT245 (TSSOP-20):**
+
+```
+        ┌────────────────────┐
+   OE ──┤1                 20├── VCC (5V)
+   A1 ──┤2                 19├── DIR
+   A2 ──┤3                 18├── B1
+   A3 ──┤4                 17├── B2
+   A4 ──┤5                 16├── B3
+   A5 ──┤6                 15├── B4
+   A6 ──┤7                 14├── B5
+   A7 ──┤8                 13├── B6
+   A8 ──┤9                 12├── B7
+  GND ──┤10                11├── B8
+        └────────────────────┘
+
+OE = Output Enable (active LOW) → GND
+DIR = Direction (LOW = A→B) → GND
+```
+
+**Layout Tips (Adafruit Style):**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     PCB LAYOUT TIPS                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  1. POSICIONAMENTO                                          │
+│     ┌─────────┐                                             │
+│     │  ESP32  │──── curto ────┌─────────┐                   │
+│     └─────────┘      <2cm     │74AHCT245│─── curto ──[HUB75]│
+│                               └─────────┘     <2cm          │
+│                                                             │
+│  2. BYPASS CAPS - O mais perto possível do IC               │
+│                                                             │
+│     ┌─────────────────────────┐                             │
+│     │      74AHCT245          │                             │
+│     │  VCC ────┬──── GND      │                             │
+│     │         ═╪═             │                             │
+│     │       [100nF]           │   ← Mesmo lado do IC        │
+│     │          │              │                             │
+│     └──────────┼──────────────┘                             │
+│               GND                                           │
+│                                                             │
+│  3. GROUND PLANE - Retorno de corrente direto               │
+│                                                             │
+│     Top Layer: Sinais                                       │
+│     Bottom Layer: GND plane (contínuo sob os ICs)           │
+│                                                             │
+│  4. TRACE WIDTH                                             │
+│     - Sinais: 0.2mm (8mil) mínimo                          │
+│     - VCC/GND: 0.4mm (16mil) ou mais                       │
+│     - HUB75 CLK: manter curto, evitar vias                 │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ---
 
 ## 3. Esquema de Blocos
@@ -289,11 +474,19 @@ Quando GPIO = LOW:
 │           ┌────────────────────────────┼────────────────────────────┐      │
 │           ▼                            ▼                            ▼      │
 │  ┌─────────────────┐     ┌─────────────────────────┐    ┌───────────────┐ │
-│  │    DS3231 RTC   │     │     ESP32-WROOM-32E     │    │  P10 LED      │ │
-│  │                 │◄───►│                         │───►│  PANEL        │ │
-│  │  I2C (SDA/SCL)  │     │  GPIO 25-27: R1,G1,B1   │    │  (HUB75)      │ │
-│  │  3.3V + CR2032  │     │  GPIO 12-14: R2,G2,B2   │    │  32x16 RGB    │ │
-│  └─────────────────┘     │  GPIO 4,5,15-17,19,23   │    └───────────────┘ │
+│  │    DS3231 RTC   │     │     ESP32-WROOM-32E     │    │  74AHCT245    │ │
+│  │                 │◄───►│                         │───►│  Level Shift  │ │
+│  │  I2C (SDA/SCL)  │     │  GPIO 25-27: R1,G1,B1   │    │  (U6 + U7)    │ │
+│  │  3.3V + CR2032  │     │  GPIO 12-14: R2,G2,B2   │    │  3.3V → 5V    │ │
+│  └─────────────────┘     │  GPIO 4,5,15-17,19,23   │    └───────┬───────┘ │
+│                          │                         │            │         │
+│                          │                         │            ▼         │
+│                          │                         │    ┌───────────────┐ │
+│                          │                         │    │  P10 LED      │ │
+│                          │                         │    │  PANEL        │ │
+│                          │                         │    │  (HUB75)      │ │
+│                          │                         │    │  32x16 RGB    │ │
+│                          │                         │    └───────────────┘ │
 │                          │  GPIO 0: Mode Button    │                       │
 │  ┌─────────────────┐     │  GPIO 21,22: I2C        │    ┌───────────────┐ │
 │  │   BUTTONS       │     │  EN: Reset Button       │    │  STATUS LEDs  │ │
@@ -511,4 +704,6 @@ Para Assembly (SMT):
 ---
 
 *Documento criado: Dezembro 2024*
-*Versão: 1.0*
+*Última atualização: Dezembro 2024*
+*Versão: 1.1*
+*Changelog: Adicionada secção 1.10 (Level Shifters) e 2.6 (Circuito Level Shifter) baseado em Adafruit MatrixPortal S3*
