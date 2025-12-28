@@ -497,7 +497,7 @@ Teensy/ESP32 (3.3V) ──► 74AHCT245 ──► HUB75 (5V)
 | Projeto | Lição a Incorporar |
 |---------|-------------------|
 | **ESP32-Trinity** | Documentação extensiva, comunidade Discord, exemplos prontos |
-| **MatrixPortal S3** | Level shifter 74AHCT125/245, layout profissional, ESP32-S3 |
+| **MatrixPortal S3** | Level shifter 74AHCT125/245, layout profissional |
 | **Rorosaurus** | Simplicidade, baixo custo, Gerbers prontos |
 | **ModischFab** | KiCad workflow, proteções básicas, GitHub Actions (KiBot) |
 | **SmartMatrix** | Software otimizado, clock speed tuning |
@@ -536,22 +536,17 @@ Com base na análise competitiva, as seguintes decisões do Proto Circadian Cloc
 
 ### 10.2 Prioridade Média (Considerar)
 
-4. **Migração para ESP32-S3**
-   - Dual-core WiFi+Display
-   - USB nativo
-   - Mais RAM
-
-5. **Sensor de Luz Ambiente**
+4. **Sensor de Luz Ambiente**
    - ALS-PT19 ou similar
    - Ajuste automático de brilho
 
 ### 10.3 Prioridade Baixa (Futuro)
 
-6. **Acelerómetro LIS3DH**
+5. **Acelerómetro LIS3DH**
    - Wake on movement
    - Orientação automática
 
-7. **NeoPixel Status**
+6. **NeoPixel Status**
    - RGB animado vs LEDs discretos
    - Mais flexível mas mais complexo
 
