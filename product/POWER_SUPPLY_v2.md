@@ -94,7 +94,7 @@ Baseado no [Adafruit Matrix Portal S3](https://learn.adafruit.com/adafruit-matri
 │                       │        │             │                         │  │
 │                       │        │             ▼                         │  │
 │                       │        │       ┌──────────┐                    │  │
-│                       │        │       │ AMS1117  │                    │  │
+│                       │        │       │ AP2112K  │                    │  │
 │                       │        │       │  3.3V    │                    │  │
 │                       │        │       └────┬─────┘                    │  │
 │                       │        │            │                          │  │
@@ -188,7 +188,7 @@ Circuito Simplificado (Sem negociação PD):
     │         │                 │                 │             │
     │         ▼                 ▼                 ▼             │
     │   ┌───────────┐    ┌───────────┐    ┌───────────┐        │
-    │   │ AMS1117   │    │ 74AHCT245 │    │ TERMINAIS │        │
+    │   │ AP2112K   │    │ 74AHCT245 │    │ TERMINAIS │        │
     │   │  3.3V     │    │ (5V VCC)  │    │ PARAFUSO  │        │
     │   └─────┬─────┘    └───────────┘    └─────┬─────┘        │
     │         │                                  │              │
@@ -273,7 +273,7 @@ Usar uma tensão USB-C mais alta (9V, 15V ou 20V) e converter para 5V internamen
 │                       │  └────┬───┘       │         │                   │ │
 │                       │       │           │         ▼                   │ │
 │                       │       │           │   ┌──────────┐              │ │
-│                       │       │           │   │ AMS1117  │              │ │
+│                       │       │           │   │ AP2112K  │              │ │
 │                       │       │           │   │  3.3V    │              │ │
 │                       │       │           │   └────┬─────┘              │ │
 │                       │       │           │        │                    │ │
@@ -524,7 +524,7 @@ Circuito Típico MP1584EN:
 │         │          │                  │                  │                  │
 │         │          ▼                  ▼                  ▼                  │
 │         │   ┌────────────┐    ┌────────────┐    ┌────────────────┐          │
-│         │   │  AMS1117   │    │  74AHCT245 │    │   TERMINAIS    │          │
+│         │   │  AP2112K   │    │  74AHCT245 │    │   TERMINAIS    │          │
 │         │   │   3.3V     │    │   (x2)     │    │   PARAFUSO     │          │
 │         │   └──────┬─────┘    └────────────┘    └───────┬────────┘          │
 │         │          │                                     │                  │
@@ -872,6 +872,42 @@ Proteção nos Terminais de Parafuso:
 ═══════════════════════════════════════════════════════════════
 ```
 
+### 5.3 LEDs Indicadores de Power (Inspirado no MatrixPortal S3)
+
+O [Adafruit Matrix Portal S3](https://github.com/adafruit/Adafruit-MatrixPortal-S3-PCB) inclui LEDs indicadores para diagnóstico visual do estado de alimentação. Esta é uma boa prática que facilita a resolução de problemas.
+
+```
+LEDs de Indicação de Power:
+═══════════════════════════════════════════════════════════════
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │                                                             │
+  │  +5V ────[R1 1kΩ]────┬────[LED Verde]────► GND             │
+  │                      │                                      │
+  │                      └── Indica: 5V presente               │
+  │                                                             │
+  │  3.3V ───[R2 1kΩ]────┬────[LED Verde]────► GND             │
+  │                      │                                      │
+  │                      └── Indica: Regulador 3.3V OK         │
+  │                                                             │
+  └─────────────────────────────────────────────────────────────┘
+
+  Especificações:
+  ───────────────
+  - LED: Verde 0603 ou 0805 (~2V forward, 5-10mA)
+  - R1: 1kΩ para 5V → (5V - 2V) / 1kΩ = 3mA
+  - R2: 1kΩ para 3.3V → (3.3V - 2V) / 1kΩ = 1.3mA
+
+  Vantagens:
+  ──────────
+  ✓ Diagnóstico visual imediato
+  ✓ Confirma que ambos os rails estão activos
+  ✓ Baixo consumo (~4mA total)
+  ✓ Útil para debugging durante desenvolvimento
+
+═══════════════════════════════════════════════════════════════
+```
+
 ---
 
 ## 6. Comparação das Estratégias
@@ -973,7 +1009,26 @@ Tabela Comparativa:
 | **Total (módulo)** | | | | | **€2.95** | |
 | **Total (IC)** | | | | | **€3.00** | |
 
-### 7.3 Resistor SET para IP2721
+### 7.3 Regulador 3.3V e LEDs (Comum a ambas estratégias)
+
+| Ref | Componente | Especificação | Package | Qty | Preço | LCSC |
+|-----|------------|---------------|---------|-----|-------|------|
+| U_REG | AP2112K-3.3 | LDO 3.3V 600mA | SOT-23-5 | 1 | €0.15 | C51118 |
+| C_IN | Capacitor | 10µF 10V X5R | 0603 | 1 | €0.02 | C19702 |
+| C_OUT | Capacitor | 10µF 10V X5R | 0603 | 1 | €0.02 | C19702 |
+| LED1 | LED Verde | 0805 ~2V 20mA | 0805 | 1 | €0.02 | C2297 |
+| LED2 | LED Verde | 0805 ~2V 20mA | 0805 | 1 | €0.02 | C2297 |
+| R_LED1 | Resistor | 1kΩ 1% | 0402 | 1 | €0.01 | C11702 |
+| R_LED2 | Resistor | 1kΩ 1% | 0402 | 1 | €0.01 | C11702 |
+| **Total** | | | | | **€0.25** | |
+
+> **Nota:** O AP2112K-3.3 foi escolhido em vez do AMS1117 por ter:
+> - Menor dropout (0.4V vs 1.0V)
+> - Pino de enable para soft-start
+> - Package mais compacto (SOT-23-5)
+> - Usado no Adafruit MatrixPortal S3
+
+### 7.4 Resistor SET para IP2721
 
 | Tensão Desejada | Resistor SET |
 |-----------------|--------------|
@@ -1011,7 +1066,7 @@ Tabela Comparativa:
 │                        │       │    │                        │       │ │  │
 │                        │       ▼    ▼                        ▼       ▼ │  │
 │                        │  ┌────────────┐  ┌────────────┐  ┌────────────┐│  │
-│                        │  │ CH340C     │  │ AMS1117    │  │ SCREW     ││  │
+│                        │  │ CH340C     │  │ AP2112K    │  │ SCREW     ││  │
 │                        │  │ USB-UART   │  │ 3.3V       │  │ TERMINALS ││  │
 │                        │  └─────┬──────┘  └──────┬─────┘  └─────┬─────┘│  │
 │                        │        │                │              │      │  │
@@ -1195,6 +1250,15 @@ public:
 - [CYPD3177 USB PD Sink Controller](https://hackaday.io/project/168762-usb-c-power-delivery-sink-cypd3177)
 - [FUSB302B USB Type-C Controller](https://www.onsemi.com/products/interfaces/usb-type-c/fusb302b)
 - [Cat-Sink USB-C PD Board](https://github.com/ElectronicCats/Cat-Sink)
+- [AP2112K Datasheet (Diodes Inc)](https://www.diodes.com/assets/Datasheets/AP2112.pdf)
+
+### Análise de Esquemas de Referência
+- **MatrixPortal S3 Schematic Analysis (Dez 2024)**: Análise do esquema Eagle confirmou:
+  - Design usa 5V direto sem PD controller (apenas resistências 5.1kΩ nos CC)
+  - Regulador 3.3V: AP2112K-3.3 (600mA, low dropout)
+  - Level shifters: 74AHCT245 (x2) para HUB75
+  - LEDs indicadores de 5V e 3.3V para diagnóstico
+  - Limitação: depende de fonte externa para correntes >3A
 
 ### USB Power Delivery
 - [USB PD Specification Overview (Tom's Hardware)](https://www.tomshardware.com/peripherals/usb/the-usb-power-delivery-pd-specification-everything-you-need-to-know-about-usb-pd)
@@ -1203,4 +1267,5 @@ public:
 ---
 
 *Documento criado: Dezembro 2024*
-*Versão: 2.0 - USB-C Power Delivery*
+*Versão: 2.1 - USB-C Power Delivery*
+*Atualizado: Dezembro 2024 - Análise do esquema MatrixPortal S3, substituição AMS1117→AP2112K, LEDs indicadores*
