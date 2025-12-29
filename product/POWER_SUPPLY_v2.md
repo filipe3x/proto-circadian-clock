@@ -1123,6 +1123,76 @@ Tabela Comparativa:
 
 > **💡 Dica:** Muitos utilizadores já têm carregadores USB-C de laptops que funcionam perfeitamente com a Estratégia B.
 
+### 9.3 Cabo USB-C Incluído
+
+O produto inclui um cabo USB-C na caixa. O carregador/transformador **não está incluído** - o utilizador usa um carregador USB-C PD que já possui (laptop, tablet, etc.) ou adquire separadamente.
+
+```
+Especificações do Cabo USB-C:
+═══════════════════════════════════════════════════════════════
+
+  Tipo:           USB-C para USB-C
+  Comprimento:    1 metro (±5cm)
+  Potência:       60W mínimo (20V/3A)
+  Dados:          USB 2.0 (480Mbps) ← OBRIGATÓRIO!
+  Cor:            Preto
+  Conectores:     Reforçados/moldados
+
+  ⚠️ IMPORTANTE: O cabo DEVE suportar dados USB 2.0!
+     Cabos "charging only" não funcionam para programar o ESP32.
+
+═══════════════════════════════════════════════════════════════
+
+  Porque NÃO precisa de cabo especial 5A (e-marked):
+  ──────────────────────────────────────────────────
+
+  Com a Estratégia B (PD + Buck), a corrente no cabo é baixa:
+
+  ┌────────────────────────────────────────────────────────────┐
+  │  Potência necessária: 25W (5V × 5A no painel)              │
+  │                                                            │
+  │  Se PD negoceia 20V:  25W ÷ 20V = 1.25A  ← Cabo 3A OK!    │
+  │  Se PD negoceia 15V:  25W ÷ 15V = 1.67A  ← Cabo 3A OK!    │
+  │  Se PD negoceia 12V:  25W ÷ 12V = 2.08A  ← Cabo 3A OK!    │
+  │  Se PD negoceia 9V:   25W ÷ 9V  = 2.78A  ← Cabo 3A OK!    │
+  │                                                            │
+  │  ✓ Qualquer cabo USB-C 60W/3A standard é suficiente       │
+  └────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════
+```
+
+**Fornecedores sugeridos (bulk):**
+
+| Fornecedor | Preço/unidade | MOQ | Entrega |
+|------------|---------------|-----|---------|
+| AliExpress (bulk) | €1.00-1.50 | 50+ | 2-4 semanas |
+| Amazon Business | €3-5 | 10+ | 1-3 dias |
+
+### 9.4 Conteúdo da Embalagem
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    CONTEÚDO DA CAIXA                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ✅ PCB Circadian Clock v2 (montado e testado)                 │
+│  ✅ Painel LED P10 32x16 RGB                                   │
+│  ✅ Cabo USB-C 1m (60W, com dados USB 2.0)                     │
+│  ✅ Guia de início rápido                                      │
+│                                                                 │
+│  ❌ Carregador USB-C (não incluído)                            │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+
+  📋 Texto sugerido para embalagem/manual:
+
+  "Requer carregador USB-C PD 45W ou superior (não incluído).
+   Compatível com carregadores de laptops e tablets:
+   MacBook, Dell, Lenovo, HP, Samsung, etc."
+
+```
+
 ---
 
 ## 10. Firmware: Detecção Automática de Potência
@@ -1267,5 +1337,5 @@ public:
 ---
 
 *Documento criado: Dezembro 2024*
-*Versão: 2.1 - USB-C Power Delivery*
-*Atualizado: Dezembro 2024 - Análise do esquema MatrixPortal S3, substituição AMS1117→AP2112K, LEDs indicadores*
+*Versão: 2.2 - USB-C Power Delivery*
+*Atualizado: Dezembro 2024 - Cabo USB-C incluído, conteúdo da embalagem, análise MatrixPortal S3*
