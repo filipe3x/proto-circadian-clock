@@ -22,8 +22,6 @@ Este documento descreve o design de uma PCB integrada profissional para o Circad
 | Ref | Componente | Especificação | Package | Qty | Preço Unit. | Notas |
 |-----|------------|---------------|---------|-----|-------------|-------|
 | U3 | AMS1117-3.3 | LDO 3.3V 1A | SOT-223 | 1 | €0.10 | Para ESP32 |
-| U4 | MP1584EN | Buck 3A adjustable | Module/QFN | 1 | €0.80 | 5V para LEDs (opcional) |
-| J1 | DC Barrel Jack | 5.5x2.1mm | Through-hole | 1 | €0.20 | Entrada principal |
 | J2 | USB-C Connector | USB 2.0 power+data | SMD | 1 | €0.40 | Alternativa/programação |
 
 ### 1.3 Proteções (CRÍTICO)
@@ -62,26 +60,19 @@ Este documento descreve o design de uma PCB integrada profissional para o Circad
 
 | Ref | Cor | Especificação | Package | Qty | Função |
 |-----|-----|---------------|---------|-----|--------|
-| LED1 | Verde | 3.0V 20mA | 0603 | 1 | Power ON |
-| LED2 | Azul | 3.2V 20mA | 0603 | 1 | WiFi status |
-| LED3 | Vermelho | 2.0V 20mA | 0603 | 1 | Error/mode |
+| LED2 | Vermelho | 3.2V 20mA | 0603 | 1 | WiFi status |
 
 ### 1.7 Botões e Interface
 
 | Ref | Componente | Especificação | Package | Qty | Notas |
 |-----|------------|---------------|---------|-----|-------|
 | SW1 | Tactile Switch | 6x6mm, 160gf | Through-hole | 1 | Mode button (GPIO0) |
-| SW2 | Tactile Switch | 6x6mm, 160gf | Through-hole | 1 | Reset button (EN) |
-| SW3 | Tactile Switch | 3.5x6mm SMD | SMD | 1 | Boot button (GPIO0) - programação |
 
 ### 1.8 Conectores
 
 | Ref | Componente | Especificação | Package | Qty | Função |
 |-----|------------|---------------|---------|-----|--------|
 | J3 | HUB75 Header | 2x8 pins 2.54mm | Through-hole | 1 | Painel LED P10 |
-| J4 | I2C Header | 1x4 pins 2.54mm | Through-hole | 1 | Expansão sensores |
-| J5 | UART Header | 1x4 pins 2.54mm | Through-hole | 1 | Debug/programação |
-| J6 | GPIO Header | 1x6 pins 2.54mm | Through-hole | 1 | Expansão futura |
 
 ### 1.9 Conectores HUB75 (Painel LED)
 
@@ -610,8 +601,8 @@ DIR = Direction (LOW = A→B) → GND
 │  ┌──────────────┐     ┌──────────────────────────────────────────────────┐ │
 │  │   POWER IN   │     │              PROTEÇÕES                           │ │
 │  │              │     │  ┌─────┐  ┌─────┐  ┌─────┐  ┌─────┐             │ │
-│  │  DC 5V 3A    ├────►│  │ D1  │─►│ F1  │─►│ D2  │─►│ TVS │──►+5V_SAFE  │ │
-│  │  ou USB-C    │     │  │Schot│  │ PTC │  │ TVS │  │ ESD │             │ │
+│  │              ├────►│  │ D1  │─►│ F1  │─►│ D2  │─►│ TVS │──►+5V_SAFE  │ │
+│  │     USB-C    │     │  │Schot│  │ PTC │  │ TVS │  │ ESD │             │ │
 │  │              │     │  └─────┘  └─────┘  └─────┘  └─────┘             │ │
 │  └──────────────┘     └──────────────────────────────────────────────────┘ │
 │                                        │                                    │
@@ -640,19 +631,11 @@ DIR = Direction (LOW = A→B) → GND
 │                          │                         │    └───────────────┘ │
 │                          │  GPIO 0: Mode Button    │                       │
 │  ┌─────────────────┐     │  GPIO 21,22: I2C        │    ┌───────────────┐ │
-│  │   BUTTONS       │     │  EN: Reset Button       │    │  STATUS LEDs  │ │
-│  │  SW1: Mode      │────►│                         │───►│  PWR/WiFi/ERR │ │
+│  │   BUTTONS       │     │  EN: Reset Button       │    │  STATUS LED   │ │
+│  │  SW1: Mode      │────►│                         │───►│     /WiFi/    │ │
 │  │  SW2: Reset     │     │  USB-C: UART + Power    │    └───────────────┘ │
 │  │  SW3: Boot      │     └─────────────────────────┘                       │
 │  └─────────────────┘                                                        │
-│                                                                             │
-│  ┌───────────────────────────────────────────────────────────────────────┐ │
-│  │                         EXPANSION HEADERS                             │ │
-│  │   J4: I2C (3.3V, GND, SDA, SCL) - Sensores futuros                   │ │
-│  │   J5: UART (3.3V, GND, TX, RX) - Debug                               │ │
-│  │   J6: GPIO (3.3V, GND, GPIO32, GPIO33, GPIO34, GPIO35) - Expansão    │ │
-│  └───────────────────────────────────────────────────────────────────────┘ │
-│                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -664,13 +647,13 @@ DIR = Direction (LOW = A→B) → GND
 
 | Software | Custo | Nível | Prós | Contras | Recomendação |
 |----------|-------|-------|------|---------|--------------|
-| **KiCad 8** | Grátis | Intermédio | Open-source, completo, JLCPCB integração | Curva aprendizagem | ⭐⭐⭐⭐⭐ **RECOMENDADO** |
+| **KiCad 9** | Grátis | Intermédio | Open-source, completo, JLCPCB integração | Curva aprendizagem | ⭐⭐⭐⭐⭐ **RECOMENDADO** |
 | **EasyEDA** | Grátis | Iniciante | Browser-based, integração JLCPCB/LCSC | Limitado offline | ⭐⭐⭐⭐ Bom para começar |
 | **Altium Designer** | €3000+/ano | Profissional | Industry standard, poderoso | Caro, complexo | ⭐⭐⭐ Overkill |
 | **Eagle** | €500/ano | Intermédio | Estabelecido, boas libs | Autodesk lock-in | ⭐⭐⭐ |
 | **Fusion 360 Electronics** | Grátis* | Iniciante | Integrado com CAD mecânico | Limitações grátis | ⭐⭐⭐ |
 
-### 4.2 Workflow Recomendado: KiCad 8
+### 4.2 Workflow Recomendado: KiCad 9 
 
 ```
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
@@ -686,7 +669,7 @@ DIR = Direction (LOW = A→B) → GND
                                                          └─────────────┘
 ```
 
-**Instalação KiCad 8:**
+**Instalação KiCad 9:**
 ```bash
 # Ubuntu/Debian
 sudo add-apt-repository ppa:kicad/kicad-8.0-releases
@@ -845,7 +828,7 @@ Para Assembly (SMT):
 
 ## 8. Próximos Passos
 
-1. **Semana 1:** Instalar KiCad 8 + bibliotecas
+1. **Semana 1:** Instalar KiCad 9 + bibliotecas
 2. **Semana 2:** Desenhar esquemático completo
 3. **Semana 3:** Layout PCB + DRC/ERC
 4. **Semana 4:** Revisão + encomendar protótipos
@@ -854,7 +837,7 @@ Para Assembly (SMT):
 
 ---
 
-*Documento criado: Dezembro 2024*
-*Última atualização: Dezembro 2024*
+*Documento criado: Dezembro 2025*
+*Última atualização: Dezembro 2025*
 *Versão: 1.1*
 *Changelog: Adicionada secção 1.10 (Level Shifters) e 2.6 (Circuito Level Shifter) baseado em Adafruit MatrixPortal S3*
