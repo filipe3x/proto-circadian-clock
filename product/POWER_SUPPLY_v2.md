@@ -208,6 +208,64 @@ Notas:
 ═══════════════════════════════════════════════════════════════
 ```
 
+#### 2.3.1 Proteção ESD Completa (VBUS + Linhas de Dados)
+
+Para proteção robusta contra ESD e surges, usamos **dois tipos de TVS**:
+
+```
+Proteção USB-C Completa:
+═══════════════════════════════════════════════════════════════
+
+  USB-C Connector
+  ┌─────────────────┐
+  │                 │
+  │ VBUS ───────────┼───┬───[F1 PTC]───[D1 SMBJ5.0A]───┬─► +5V
+  │                 │   │                              │
+  │                 │   │   ┌──────────────────────────┘
+  │                 │   │   │
+  │                 │   │   │    ┌─────────────────────────┐
+  │                 │   │   │    │    D2: D3V3XA4B10LP     │
+  │                 │   │   │    │    (4-channel ESD TVS)  │
+  │                 │   │   │    │                         │
+  │ D+ ─────────────┼───┼───┼────┤ CH1 ────────────────────┼─► D+ (CH340C)
+  │                 │   │   │    │                         │
+  │ D- ─────────────┼───┼───┼────┤ CH2 ────────────────────┼─► D- (CH340C)
+  │                 │   │   │    │                         │
+  │ CC1 ────────────┼───┼───┼────┤ CH3 ──┬──[5.1kΩ]── GND │
+  │                 │   │   │    │       │                 │
+  │ CC2 ────────────┼───┼───┼────┤ CH4 ──┼──[5.1kΩ]── GND │
+  │                 │   │   │    │       │                 │
+  │ GND ────────────┼───┴───┴────┤ GND ──┴─────────────────┘
+  │                 │            │
+  └─────────────────┘            └─────────────────────────┘
+
+═══════════════════════════════════════════════════════════════
+
+  Componentes de Proteção:
+  ────────────────────────
+
+  ┌─────────────┬────────────────┬─────────────────────────────┐
+  │ Componente  │ Protege        │ Características             │
+  ├─────────────┼────────────────┼─────────────────────────────┤
+  │ SMBJ5.0A    │ VBUS (5V)      │ 600W surge, alta corrente   │
+  │ D3V3XA4B10LP│ D+, D-, CC1/2  │ 0.28pF, ESD ±15kV          │
+  │ PTC Fuse    │ Overcurrent    │ 3A hold, 6A trip           │
+  └─────────────┴────────────────┴─────────────────────────────┘
+
+  Porque dois TVS diferentes?
+  ───────────────────────────
+  • VBUS: Precisa de alta capacidade de corrente (surges de rede)
+         → SMBJ5.0A (600W, pode absorver grandes surges)
+
+  • D+/D-: Precisa de baixa capacitância (USB 2.0 = 480Mbps)
+         → D3V3XA4B10LP (0.28pF, não afecta sinal)
+
+  • CC1/CC2: Comunicação com carregador PD
+         → D3V3XA4B10LP (protege negociação PD)
+
+═══════════════════════════════════════════════════════════════
+```
+
 ### 2.4 Análise de Consumo vs Disponibilidade
 
 ```
@@ -981,12 +1039,13 @@ Tabela Comparativa:
 | J1 | USB-C Receptacle | 16-pin, USB 2.0 | SMD | 1 | €0.40 | C165948 |
 | R1, R2 | Resistor 5.1kΩ | 1% 0.1W | 0402 | 2 | €0.01 | C25905 |
 | F1 | PTC Fuse | 3A hold, 6A trip | 1812 | 1 | €0.15 | C369159 |
-| D1 | TVS SMBJ5.0A | 5V 600W | SMB | 1 | €0.20 | C123799 |
+| D1 | TVS SMBJ5.0A | 5V 600W (VBUS) | SMB | 1 | €0.20 | C123799 |
+| D2 | TVS D3V3XA4B10LP | 4-ch ESD (D+/D-/CC) | UDFN2510 | 1 | €0.25 | C2827654 |
 | C1 | Capacitor | 470µF 16V electrolítico | Φ10mm | 1 | €0.15 | C134768 |
 | C2 | Capacitor | 100µF 10V cerâmico | 1206 | 1 | €0.30 | C408880 |
 | C3 | Capacitor | 100nF 16V X7R | 0402 | 1 | €0.01 | C307331 |
 | J2 | Screw Terminal | 2-pin 5.0mm 10A | THT | 1 | €0.10 | C430646 |
-| **Total** | | | | | **€1.32** | |
+| **Total** | | | | | **€1.57** | |
 
 ### 7.2 Estratégia B: Alta Tensão + Buck
 
@@ -998,16 +1057,17 @@ Tabela Comparativa:
 | U2 | MP1584EN | Buck 3A module | Module | 1 | €0.80 | Módulo |
 | ou | TPS54531 | Buck 5A IC | HTSSOP-14 | 1 | €0.60 | C130162 |
 | L1 | Indutor | 22µH 5A (se TPS54531) | 10x10mm | 1 | €0.30 | C339828 |
-| D2 | Schottky | SS54 5A (se TPS54531) | SMC | 1 | €0.10 | C123806 |
+| D_BUCK | Schottky | SS54 5A (se TPS54531) | SMC | 1 | €0.10 | C123806 |
 | F1 | PTC Fuse | 3A hold | 1812 | 1 | €0.15 | C369159 |
-| D1 | TVS SMBJ24A | 24V (entrada) | SMB | 1 | €0.25 | C114152 |
+| D1 | TVS SMBJ24A | 24V (VBUS) | SMB | 1 | €0.25 | C114152 |
+| D2 | TVS D3V3XA4B10LP | 4-ch ESD (D+/D-/CC) | UDFN2510 | 1 | €0.25 | C2827654 |
 | C1 | Capacitor | 100µF 35V electrolítico | Φ8mm | 1 | €0.15 | C249490 |
 | C2 | Capacitor | 470µF 10V electrolítico | Φ10mm | 1 | €0.15 | C134768 |
 | C3 | Capacitor | 100µF 10V cerâmico | 1206 | 1 | €0.30 | C408880 |
 | C4 | Capacitor | 22µF 35V (entrada buck) | 1206 | 2 | €0.10 | C159770 |
 | J2 | Screw Terminal | 2-pin 5.0mm 10A | THT | 1 | €0.10 | C430646 |
-| **Total (módulo)** | | | | | **€2.95** | |
-| **Total (IC)** | | | | | **€3.00** | |
+| **Total (módulo)** | | | | | **€3.20** | |
+| **Total (IC)** | | | | | **€3.25** | |
 
 ### 7.3 Regulador 3.3V e LEDs (Comum a ambas estratégias)
 
@@ -1321,6 +1381,7 @@ public:
 - [FUSB302B USB Type-C Controller](https://www.onsemi.com/products/interfaces/usb-type-c/fusb302b)
 - [Cat-Sink USB-C PD Board](https://github.com/ElectronicCats/Cat-Sink)
 - [AP2112K Datasheet (Diodes Inc)](https://www.diodes.com/assets/Datasheets/AP2112.pdf)
+- [D3V3XA4B10LP TVS Array Datasheet (Diodes Inc)](https://www.diodes.com/datasheet/download/D3V3XA4B10LP.pdf)
 
 ### Análise de Esquemas de Referência
 - **MatrixPortal S3 Schematic Analysis (Dez 2024)**: Análise do esquema Eagle confirmou:
@@ -1337,5 +1398,5 @@ public:
 ---
 
 *Documento criado: Dezembro 2024*
-*Versão: 2.2 - USB-C Power Delivery*
-*Atualizado: Dezembro 2024 - Cabo USB-C incluído, conteúdo da embalagem, análise MatrixPortal S3*
+*Versão: 2.3 - USB-C Power Delivery*
+*Atualizado: Dezembro 2024 - Proteção ESD completa (D3V3XA4B10LP), cabo USB-C, análise MatrixPortal S3*
