@@ -10,6 +10,7 @@ An ESP32-powered LED clock that simulates the natural solar light cycle to suppo
 - **Offline Operation** - Works without internet using RTC or internal clock
 - **NTP Synchronization** - Keeps time accurate via internet time servers
 - **Low Power** - Disconnects WiFi after sync to save energy
+- **Startup Sound & Alerts** - Retro-style 8-bit chiptune sounds on boot (can be disabled via captive portal)
 
 ## Hardware Requirements
 
@@ -19,6 +20,7 @@ An ESP32-powered LED clock that simulates the natural solar light cycle to suppo
 | Display | P10 32×16 RGB LED Panel (HUB75, 1/4 scan, SMD3535) |
 | RTC (Optional) | DS3231 module |
 | Button | Momentary push button |
+| Buzzer (Optional) | MLT-5030 piezo buzzer or similar (passive, 3V, 5×5mm) |
 | Power | 5V 2A minimum |
 
 ## Wiring
@@ -60,6 +62,24 @@ GND       →    GND
 ```
 GPIO 0    →    Button   →    GND
 ```
+
+### Buzzer (Optional)
+
+```
+ESP32          Buzzer Circuit
+─────          ──────────────
+GPIO 18   →    R1 (1kΩ)   →   Base (NPN)
+                               │
+                               ├── Collector → Buzzer+ → 5V
+                               │
+                               └── Emitter → GND
+
+D1 (1N4148) across Buzzer (cathode to +5V)
+```
+
+Recommended transistor: 2N2222 or BC547
+
+**Note:** GPIO 18 is used because GPIO 6-11 are internally connected to the ESP32 flash SPI and unavailable.
 
 ## Software Dependencies
 
@@ -154,6 +174,16 @@ Press the button (GPIO 0) to cycle through modes:
 | **AUTO_SOLAR** | Automatic color based on sun position |
 | **THERAPY_RED** | Constant red light for therapy/relaxation |
 | **OFF** | Display turned off |
+
+### Startup Sound
+
+If buzzer is installed, the clock plays a retro-style 8-bit startup melody on boot. The sound can be:
+
+- **Enabled/Disabled** via the captive portal web interface
+- **Customized** with different chiptune melodies (NES/GameBoy style)
+- **Future use** as alarm/notification sounds
+
+The buzzer uses PWM to generate classic pulse wave tones with configurable duty cycles (12.5%, 25%, 50%) for authentic retro sound.
 
 ### Status Indicators (Boot)
 
