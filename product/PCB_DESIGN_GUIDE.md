@@ -471,7 +471,7 @@ Driver Transistor para Buzzer Piezo Passivo
                             └────────┤
                                      │ C (Collector)
     ESP32                          ┌─┴─┐
-    GPIO10 ──────[R11]─────────────┤ B │ Q2 (2N2222)
+    GPIO18 ──────[R11]─────────────┤ B │ Q2 (2N2222)
                   1kΩ               └─┬─┘ NPN SOT-23
                                      │ E (Emitter)
                                      │
@@ -479,20 +479,23 @@ Driver Transistor para Buzzer Piezo Passivo
 
 Especificações:
 ───────────────
-- GPIO: GPIO 10 (PWM channel 0, suporta ledcWrite)
+- GPIO: GPIO 18 (PWM channel 0, suporta ledcWrite)
 - R11: 1kΩ (limita corrente base, Ib ≈ 3mA)
 - Q2: 2N2222 (hFE ≈ 100-300, Ic_max = 800mA, mais que suficiente)
 - D4: 1N4148 (proteção flyback contra picos indutivos)
 - BZ1: MLT-5030 (Vop = 3V, I = 100mA @ ressonância 4kHz)
 
+**Nota:** GPIO 18 foi escolhido porque GPIO 6-11 estão internamente
+ligados à flash SPI do ESP32-WROOM-32E e não devem ser usados.
+
 Funcionamento:
 ──────────────
-1. GPIO10 = HIGH (3.3V via PWM):
+1. GPIO18 = HIGH (3.3V via PWM):
    - Corrente base: Ib = (3.3V - 0.7V) / 1kΩ ≈ 2.6mA
    - Corrente coletor: Ic = Ib × hFE ≈ 2.6mA × 100 = 260mA (suficiente!)
    - Transistor satura → Buzzer toca
 
-2. GPIO10 = LOW (0V):
+2. GPIO18 = LOW (0V):
    - Transistor corta → Buzzer silencioso
    - D4 dissipa energia indutiva residual
 
@@ -512,7 +515,7 @@ Exemplo código:
 ───────────────
 void setup() {
   ledcSetup(0, 2000, 8);      // Canal 0, 2kHz, 8-bit
-  ledcAttachPin(10, 0);        // GPIO10
+  ledcAttachPin(18, 0);        // GPIO18
 }
 
 void startupSound() {
@@ -536,7 +539,7 @@ void tone(int freq, int dur, int duty) {
 Layout Tips PCB:
 ────────────────
 1. Q2 próximo do buzzer BZ1 (minimizar trace Collector)
-2. R11 próximo do GPIO10 header
+2. R11 próximo do GPIO18 header
 3. D4 paralelo ao buzzer, o mais próximo possível
 4. Ground return path curto e direto
 5. Buzzer longe da antena WiFi (ruído EMI)
@@ -752,7 +755,7 @@ DIR = Direction (LOW = A→B) → GND
 │  │  SW1: Mode      │────►│                         │───►│     /WiFi/    │ │
 │  │  SW2: Reset     │     │  USB-C: UART + Power    │    └───────────────┘ │
 │  │  SW3: Boot      │     │                         │    ┌───────────────┐ │
-│  └─────────────────┘     │  GPIO 10: Buzzer (PWM)  ├───►│   BUZZER      │ │
+│  └─────────────────┘     │  GPIO 18: Buzzer (PWM)  ├───►│   BUZZER      │ │
 │                          │                         │    │  MLT-5030     │ │
 │                          └─────────────────────────┘    │  Startup/Alarm│ │
 │                                                         └───────────────┘ │

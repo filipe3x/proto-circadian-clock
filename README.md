@@ -68,7 +68,7 @@ GPIO 0    →    Button   →    GND
 ```
 ESP32          Buzzer Circuit
 ─────          ──────────────
-GPIO 10   →    R1 (1kΩ)   →   Base (NPN)
+GPIO 18   →    R1 (1kΩ)   →   Base (NPN)
                                │
                                ├── Collector → Buzzer+ → 5V
                                │
@@ -78,6 +78,8 @@ D1 (1N4148) across Buzzer (cathode to +5V)
 ```
 
 Recommended transistor: 2N2222 or BC547
+
+**Note:** GPIO 18 is used because GPIO 6-11 are internally connected to the ESP32 flash SPI and unavailable.
 
 ## Software Dependencies
 
