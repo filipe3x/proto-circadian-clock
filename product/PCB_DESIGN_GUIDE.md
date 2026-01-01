@@ -961,6 +961,14 @@ Para Assembly (SMT):
 ---
 
 *Documento criado: Dezembro 2025*
-*Última atualização: Dezembro 2025*
-*Versão: 1.1*
-*Changelog: Adicionada secção 1.10 (Level Shifters) e 2.6 (Circuito Level Shifter) baseado em Adafruit MatrixPortal S3*
+*Última atualização: Janeiro 2026*
+*Versão: 1.2*
+
+**Changelog:**
+- **v1.2 (Jan 2026):** Adicionada secção 1.8 (Buzzer e Audio) para startup sound retro estilo NES/GameBoy
+  - MLT-5030 piezo buzzer com driver 2N2222 (GPIO 18)
+  - Circuito completo na secção 2.6 com exemplo de código
+  - Suporte para pulse waves, arpeggios, pitch bends
+  - Configuração via captive portal
+- **v1.1 (Dez 2025):** Adicionada secção 1.11 (Level Shifters) e 2.7 (Circuito Level Shifter) baseado em Adafruit MatrixPortal S3
+- **v1.0 (Dez 2025):** Versão inicial
