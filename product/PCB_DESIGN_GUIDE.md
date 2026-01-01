@@ -17,23 +17,87 @@ Este documento descreve o design de uma PCB integrada profissional para o Circad
 | Y1 | Crystal 32.768kHz | Para DS3231 (integrado) | - | 0 | - | - |
 | BT1 | CR2032 Holder | SMD battery holder | SMD | 1 | €0.30 | LCSC |
 
-### 1.2 Alimentação e Regulação
+### 1.2 Alimentação e Regulação (USB-C Power Delivery)
+
+> **Referência:** Arquitetura baseada em [POWER_SUPPLY_v2.md](./POWER_SUPPLY_v2.md) - USB-C Power Delivery
+> com duas estratégias possíveis: 5V Direto ou Alta Tensão + Buck Converter.
+
+#### Estratégia A: 5V Direto (Simples - Prototipagem)
 
 | Ref | Componente | Especificação | Package | Qty | Preço Unit. | Notas |
 |-----|------------|---------------|---------|-----|-------------|-------|
-| U3 | AMS1117-3.3 | LDO 3.3V 1A | SOT-223 | 1 | €0.10 | Para ESP32 |
-| J2 | USB-C Connector | USB 2.0 power+data | SMD | 1 | €0.40 | Alternativa/programação |
+| J1 | USB-C Receptacle | 16-pin, USB 2.0 | SMD | 1 | €0.40 | Alimentação + dados |
+| R_CC1, R_CC2 | Resistor 5.1kΩ | 1% 0.1W | 0402 | 2 | €0.01 | USB-C sink detection (5V/3A) |
+| U3 | **AP2112K-3.3** | LDO 3.3V 600mA | SOT-23-5 | 1 | €0.15 | Para ESP32 (baixo dropout) |
+| C_IN | Capacitor | 10µF 10V X5R | 0603 | 1 | €0.02 | Entrada LDO |
+| C_OUT | Capacitor | 10µF 10V X5R | 0603 | 1 | €0.02 | Saída LDO |
+| J2 | Screw Terminal | 2-pin 5.0mm 10A | THT | 1 | €0.10 | Alimentação painel LED |
+
+> **Nota:** O AP2112K-3.3 foi escolhido em vez do AMS1117 por ter menor dropout (0.4V vs 1.0V),
+> pino de enable para soft-start, e package compacto (SOT-23-5). Usado no Adafruit MatrixPortal S3.
+
+#### Estratégia B: Alta Tensão + Buck Converter (Robusto - Produto Final)
+
+| Ref | Componente | Especificação | Package | Qty | Preço Unit. | Notas |
+|-----|------------|---------------|---------|-----|-------------|-------|
+| J1 | USB-C Receptacle | 16-pin, USB 2.0 | SMD | 1 | €0.40 | Alimentação + dados |
+| U_PD | IP2721 | PD Controller 5-20V | DFN-10 | 1 | €0.35 | Negociação USB PD |
+| R_SET | Resistor | Ver tabela tensão | 0402 | 1 | €0.01 | Seleção tensão PD |
+| U_BUCK | MP1584EN | Buck 3A module | Module | 1 | €0.80 | Step-down para 5V |
+| U3 | **AP2112K-3.3** | LDO 3.3V 600mA | SOT-23-5 | 1 | €0.15 | Para ESP32 |
+| C_BUCK_IN | Capacitor | 100µF 35V electrolítico | Φ8mm | 1 | €0.15 | Entrada buck |
+| C_BULK | Capacitor | 470µF 10V electrolítico | Φ10mm | 1 | €0.15 | Bulk capacitor saída |
+| J2 | Screw Terminal | 2-pin 5.0mm 10A | THT | 1 | €0.10 | Alimentação painel LED |
+
+**Resistor SET para IP2721 (Seleção de Tensão PD):**
+
+| Tensão Desejada | Resistor SET | Corrente Cabo | Notas |
+|-----------------|--------------|---------------|-------|
+| 20V | 0Ω (curto) | 1.25A @ 25W | Menor corrente, menos perdas |
+| 15V | 10kΩ | 1.67A @ 25W | Boa compatibilidade |
+| 12V | 20kΩ | 2.08A @ 25W | **Recomendado** |
+| 9V | 33kΩ | 2.78A @ 25W | Compatível com muitas fontes |
+| 5V | 56kΩ | 5A @ 25W | Não recomendado (alta corrente) |
 
 ### 1.3 Proteções (CRÍTICO)
 
+> **Referência:** Proteção USB-C completa baseada em [POWER_SUPPLY_v2.md](./POWER_SUPPLY_v2.md) secção 2.3.1
+
+#### Proteção VBUS (Linha de Alimentação)
+
 | Ref | Componente | Especificação | Package | Qty | Preço Unit. | Função |
 |-----|------------|---------------|---------|-----|-------------|--------|
-| **D1** | **SS54 / SS56** | Schottky 5A 40V | SMC | 1 | €0.15 | **Proteção inversão polaridade** |
-| **F1** | **MF-MSMF250** | PTC Fuse 2.5A resettable | 1206 | 1 | €0.20 | **Proteção curto-circuito** |
-| **U5** | **SRV05-4** | TVS Diode Array | SOT-23-6 | 2 | €0.25 | **Proteção ESD (USB, I2C)** |
-| **D2** | **SMBJ5.0A** | TVS 5V unidirectional | SMB | 1 | €0.30 | **Proteção sobretensão** |
-| **D3** | **1N5819** | Schottky flyback | SOD-123 | 2 | €0.05 | **Proteção indutiva** |
-| **Z1** | **PESD5V0S1BA** | ESD protection | SOD-323 | 4 | €0.08 | **ESD nos GPIOs críticos** |
+| **F1** | **MF-MSMF300** | PTC Fuse 3A hold, 6A trip | 1812 | 1 | €0.15 | **Proteção curto-circuito/overcurrent** |
+| **D1** | **SMBJ5.0A** | TVS 5V 600W unidirectional | SMB | 1 | €0.20 | **Proteção sobretensão VBUS** |
+| **D1_HV** | **SMBJ24A** | TVS 24V (só Estratégia B) | SMB | 1 | €0.25 | **Proteção sobretensão alta tensão** |
+
+#### Proteção Linhas de Dados e CC (USB-C)
+
+| Ref | Componente | Especificação | Package | Qty | Preço Unit. | Função |
+|-----|------------|---------------|---------|-----|-------------|--------|
+| **D2** | **D3V3XA4B10LP** | TVS Array 4-ch ESD ±15kV | UDFN2510 | 1 | €0.25 | **Proteção ESD D+/D-/CC1/CC2** |
+
+> **Porquê D3V3XA4B10LP?**
+> - 4 canais num único chip (protege D+, D-, CC1, CC2)
+> - Capacitância ultra-baixa: 0.28pF (não afeta USB 2.0 a 480Mbps)
+> - ESD rating: ±15kV (HBM), ±8kV (contacto)
+> - Package compacto UDFN2510 (2.5x1.0mm)
+> - LCSC: C2827654
+
+#### Proteção Terminais de Parafuso (Saída para Painel)
+
+| Ref | Componente | Especificação | Package | Qty | Preço Unit. | Função |
+|-----|------------|---------------|---------|-----|-------------|--------|
+| **Q_REV** | **Si2301CDS** | P-MOSFET -20V -2.8A | SOT-23 | 1 | €0.10 | **Proteção inversão polaridade** |
+| **D_BODY** | (integrado) | Body diode Si2301 | - | 0 | - | Bloqueio polaridade invertida |
+
+#### Proteção Adicional (I2C, GPIOs)
+
+| Ref | Componente | Especificação | Package | Qty | Preço Unit. | Função |
+|-----|------------|---------------|---------|-----|-------------|--------|
+| **U5** | **SRV05-4** | TVS Diode Array | SOT-23-6 | 1 | €0.25 | **Proteção ESD I2C** |
+| **Z1** | **PESD5V0S1BA** | ESD protection | SOD-323 | 2 | €0.08 | **ESD GPIO0 (botão), EN** |
+| **D3** | **1N5819** | Schottky flyback | SOD-123 | 2 | €0.05 | **Proteção indutiva (futuro)** |
 
 ### 1.4 Condensadores
 
@@ -355,22 +419,86 @@ Se tensão > limite: TL431 dispara SCR → curto-circuito → fusível abre
 
 ### 2.3 Proteção ESD (Electrostatic Discharge)
 
+#### 2.3.1 Proteção USB-C Completa (VBUS + D+/D- + CC1/CC2)
+
+> **Referência:** [POWER_SUPPLY_v2.md](./POWER_SUPPLY_v2.md) secção 2.3.1
+
 ```
-Proteção USB-C e I2C
+Proteção USB-C Completa:
+═══════════════════════════════════════════════════════════════
+
+  USB-C Connector
+  ┌─────────────────┐
+  │                 │
+  │ VBUS ───────────┼───┬───[F1 PTC]───[D1 SMBJ5.0A]───┬─► +5V
+  │                 │   │                              │
+  │                 │   │   ┌──────────────────────────┘
+  │                 │   │   │
+  │                 │   │   │    ┌─────────────────────────┐
+  │                 │   │   │    │    D2: D3V3XA4B10LP     │
+  │                 │   │   │    │    (4-channel ESD TVS)  │
+  │                 │   │   │    │                         │
+  │ D+ ─────────────┼───┼───┼────┤ CH1 ────────────────────┼─► D+ (CH340C)
+  │                 │   │   │    │                         │
+  │ D- ─────────────┼───┼───┼────┤ CH2 ────────────────────┼─► D- (CH340C)
+  │                 │   │   │    │                         │
+  │ CC1 ────────────┼───┼───┼────┤ CH3 ──┬──[5.1kΩ]── GND │
+  │                 │   │   │    │       │                 │
+  │ CC2 ────────────┼───┼───┼────┤ CH4 ──┼──[5.1kΩ]── GND │
+  │                 │   │   │    │       │                 │
+  │ GND ────────────┼───┴───┴────┤ GND ──┴─────────────────┘
+  │                 │            │
+  └─────────────────┘            └─────────────────────────┘
+
+═══════════════════════════════════════════════════════════════
+
+  Componentes de Proteção:
+  ────────────────────────
+
+  ┌─────────────┬────────────────┬─────────────────────────────┐
+  │ Componente  │ Protege        │ Características             │
+  ├─────────────┼────────────────┼─────────────────────────────┤
+  │ SMBJ5.0A    │ VBUS (5V)      │ 600W surge, alta corrente   │
+  │ D3V3XA4B10LP│ D+, D-, CC1/2  │ 0.28pF, ESD ±15kV          │
+  │ PTC Fuse    │ Overcurrent    │ 3A hold, 6A trip           │
+  └─────────────┴────────────────┴─────────────────────────────┘
+
+  Porque dois TVS diferentes?
+  ───────────────────────────
+  • VBUS: Precisa de alta capacidade de corrente (surges de rede)
+         → SMBJ5.0A (600W, pode absorver grandes surges)
+
+  • D+/D-: Precisa de baixa capacitância (USB 2.0 = 480Mbps)
+         → D3V3XA4B10LP (0.28pF, não afecta sinal)
+
+  • CC1/CC2: Comunicação com carregador PD
+         → D3V3XA4B10LP (protege negociação PD)
+
+═══════════════════════════════════════════════════════════════
+```
+
+#### 2.3.2 Proteção I2C
+
+```
+Proteção I2C com SRV05-4
 ═══════════════════════════════════════════════════════════════
 
               ┌─────────────────────────┐
-    USB_D+ ───┤1    SRV05-4 (U5)      4├─── VCC (5V)
-    USB_D- ───┤2                      5├─── I2C_SDA
-    GND ──────┤3                      6├─── I2C_SCL
+    I2C_SDA ──┤1    SRV05-4 (U5)      4├─── VCC (3.3V)
+    I2C_SCL ──┤2                      5├─── NC
+    GND ──────┤3                      6├─── NC
               └─────────────────────────┘
 
 Especificações SRV05-4:
 - Tensão de clamping: 8.5V @ 1A
 - Capacitância: 0.5pF (baixa, boa para dados)
 - ESD rating: ±15kV (ar), ±8kV (contacto)
+```
 
-Proteção GPIO Críticos (Botão, etc.)
+#### 2.3.3 Proteção GPIO Críticos (Botão, etc.)
+
+```
+Proteção GPIO0 (Botão Mode)
 ═══════════════════════════════════════════════════════════════
 
     GPIO0 (Button) ───┬───[PESD5V0S1BA]───┬─── GND
@@ -431,7 +559,106 @@ Quando GPIO = LOW:
 - Protege transistor e GPIO
 ```
 
-### 2.6 Level Shifter 3.3V → 5V para HUB75 (NOVO)
+### 2.6 Inrush Current Limiting (Soft-Start)
+
+> **Referência:** [POWER_SUPPLY_v2.md](./POWER_SUPPLY_v2.md) secção 4.3
+
+```
+Proteção contra Inrush Current:
+═══════════════════════════════════════════════════════════════
+
+  Problema: Ao ligar, condensadores grandes causam pico de corrente
+            que pode disparar proteções da fonte USB.
+
+  Solução 1: NTC Thermistor (Simples e Económico)
+  ───────────────────────────────────────────────
+
+  +5V_USB ──[NTC 10Ω@25°C]───► +5V_LOAD
+                │
+               ═╧═
+           C_BULK 470µF
+
+  - Frio: alta resistência, limita corrente (~0.5A inicial)
+  - Aquece: baixa resistência (<1Ω), operação normal
+  - Custo: €0.10
+  - Desvantagem: não recupera instantaneamente após desligar
+
+═══════════════════════════════════════════════════════════════
+
+  Solução 2: P-MOSFET com RC Delay (Melhor performance)
+  ─────────────────────────────────────────────────────
+
+  +5V_USB ──┬───[R1 10Ω]───┬───────────────────────► +5V_LOAD
+            │               │
+            │        ┌──────┴──────┐
+            │        │   Q1 P-FET  │
+            │        │  (Si2301)   │
+            │        │   S     D   │
+            │        └──────┬──────┘
+            │               │
+            │     ┌─────────┘
+            │     │
+            │     │   ┌─────────────┐
+            │     │   │   RC Timer  │
+            │     └───┤   100ms     │
+            │         │   R=100k    │
+            │         │   C=1µF     │
+            │         └──────┬──────┘
+            │                │
+  GND ──────┴────────────────┴────────────────────────► GND
+
+  Sequência:
+  1. t=0: Fonte liga, corrente passa por R1 (limitada a 0.5A)
+  2. t=100ms: Timer ativa Q1, MOSFET bypassa R1
+  3. t>100ms: Corrente flui livremente pelo MOSFET (<0.1Ω)
+
+═══════════════════════════════════════════════════════════════
+```
+
+### 2.7 Proteção nos Terminais de Parafuso (Inversão de Polaridade)
+
+> **Referência:** [POWER_SUPPLY_v2.md](./POWER_SUPPLY_v2.md) secção 5.2
+
+```
+Proteção contra Ligação Inversa nos Terminais:
+═══════════════════════════════════════════════════════════════
+
+  ⚠️ Utilizadores podem ligar fios invertidos!
+
+  Solução: P-MOSFET com Body Diode
+  ─────────────────────────────────
+
+  +5V_INTERNO ──┬──[Q1 Si2301]──┬──[TERMINAL +]
+                │    P-MOSFET   │
+                │               │
+               ─┴─ D1          ═╧═ C1
+            Body diode         100µF
+                │               │
+  GND ──────────┴───────────────┴──[TERMINAL -]
+
+  Funcionamento:
+  - Polaridade correcta: Vgs negativo → MOSFET conduz (Rds ~50mΩ)
+  - Polaridade invertida: Vgs positivo → MOSFET bloqueia
+  - Perda: ~0.05W @ 1A (muito menor que díodo Schottky)
+
+═══════════════════════════════════════════════════════════════
+
+  Componentes:
+  ────────────
+  Q1: Si2301CDS (P-ch MOSFET, -20V, -2.8A, Rds=80mΩ)
+  R_GATE: 10kΩ (pull-down gate para GND)
+
+  Alternativa simples (com mais perda):
+  ─────────────────────────────────────
+
+  +5V_INTERNO ──[D1 SS54 Schottky]──[TERMINAL +]
+
+  Perda: 0.3V × 3A = 0.9W (aceitável mas gera calor)
+
+═══════════════════════════════════════════════════════════════
+```
+
+### 2.8 Level Shifter 3.3V → 5V para HUB75
 
 > **Baseado no design Adafruit MatrixPortal S3**
 > Fonte: https://github.com/adafruit/Adafruit-MatrixPortal-S3-PCB
@@ -593,49 +820,97 @@ DIR = Direction (LOW = A→B) → GND
 
 ## 3. Esquema de Blocos
 
+> **Referência:** Arquitetura baseada em [POWER_SUPPLY_v2.md](./POWER_SUPPLY_v2.md)
+
+### 3.1 Estratégia A: 5V Direto (Prototipagem)
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         CIRCADIAN CLOCK PCB v2.0                            │
+│                    CIRCADIAN CLOCK PCB v2.0 - ESTRATÉGIA A                   │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  ┌──────────────┐     ┌──────────────────────────────────────────────────┐ │
-│  │   POWER IN   │     │              PROTEÇÕES                           │ │
-│  │              │     │  ┌─────┐  ┌─────┐  ┌─────┐  ┌─────┐             │ │
-│  │              ├────►│  │ D1  │─►│ F1  │─►│ D2  │─►│ TVS │──►+5V_SAFE  │ │
-│  │     USB-C    │     │  │Schot│  │ PTC │  │ TVS │  │ ESD │             │ │
-│  │              │     │  └─────┘  └─────┘  └─────┘  └─────┘             │ │
-│  └──────────────┘     └──────────────────────────────────────────────────┘ │
-│                                        │                                    │
-│                                        ▼                                    │
-│  ┌───────────────────────────────────────────────────────────────────────┐ │
-│  │                         POWER REGULATION                              │ │
-│  │   +5V_SAFE ───► [AMS1117-3.3] ───► +3.3V (ESP32, RTC)                │ │
-│  │   +5V_SAFE ───► Direct ───► +5V (LED Panel via HUB75)                │ │
-│  └───────────────────────────────────────────────────────────────────────┘ │
-│                                        │                                    │
-│           ┌────────────────────────────┼────────────────────────────┐      │
-│           ▼                            ▼                            ▼      │
-│  ┌─────────────────┐     ┌─────────────────────────┐    ┌───────────────┐ │
-│  │    DS3231 RTC   │     │     ESP32-WROOM-32E     │    │  74AHCT245    │ │
-│  │                 │◄───►│                         │───►│  Level Shift  │ │
-│  │  I2C (SDA/SCL)  │     │  GPIO 25-27: R1,G1,B1   │    │  (U6 + U7)    │ │
-│  │  3.3V + CR2032  │     │  GPIO 12-14: R2,G2,B2   │    │  3.3V → 5V    │ │
-│  └─────────────────┘     │  GPIO 4,5,15-17,19,23   │    └───────┬───────┘ │
-│                          │                         │            │         │
-│                          │                         │            ▼         │
-│                          │                         │    ┌───────────────┐ │
-│                          │                         │    │  P10 LED      │ │
-│                          │                         │    │  PANEL        │ │
-│                          │                         │    │  (HUB75)      │ │
-│                          │                         │    │  32x16 RGB    │ │
-│                          │                         │    └───────────────┘ │
-│                          │  GPIO 0: Mode Button    │                       │
-│  ┌─────────────────┐     │  GPIO 21,22: I2C        │    ┌───────────────┐ │
-│  │   BUTTONS       │     │  EN: Reset Button       │    │  STATUS LED   │ │
-│  │  SW1: Mode      │────►│                         │───►│     /WiFi/    │ │
-│  │  SW2: Reset     │     │  USB-C: UART + Power    │    └───────────────┘ │
-│  │  SW3: Boot      │     └─────────────────────────┘                       │
-│  └─────────────────┘                                                        │
+│  ┌────────────┐      ┌─────────────────────────────────────────────────┐   │
+│  │            │      │                    PCB                          │   │
+│  │  FONTE     │      │                                                 │   │
+│  │  USB-C     │      │   ┌────────┐    ┌─────────┐    ┌────────────┐  │   │
+│  │  5V/3A     ├──────┤──►│ USB-C  │───►│ FUSÍVEL │───►│ TERMINAIS  │  │   │
+│  │  (15W)     │      │   │ Recept.│    │+TVS+ESD │    │ PARAFUSO   │  │   │
+│  │            │      │   └────┬───┘    └────┬────┘    └─────┬──────┘  │   │
+│  └────────────┘      │        │             │               │         │   │
+│                      │        │  D3V3XA4B10LP               │         │   │
+│                      │        │  (ESD D+/D-/CC)             ▼         │   │
+│                      │        ▼             │         ┌───────────┐   │   │
+│                      │   ┌────────┐         │         │  PAINEL   │   │   │
+│                      │   │ CH340C │         │         │   P10     │   │   │
+│                      │   │ USB-   │         │         │ 32x16 RGB │   │   │
+│                      │   │ UART   │         │         └───────────┘   │   │
+│                      │   └────┬───┘         ▼                         │   │
+│                      │        │       ┌──────────┐                    │   │
+│                      │        │       │ AP2112K  │                    │   │
+│                      │        │       │  3.3V    │                    │   │
+│                      │        │       └────┬─────┘                    │   │
+│                      │        │            │                          │   │
+│                      │        ▼            ▼                          │   │
+│                      │   ┌─────────────────────┐                      │   │
+│                      │   │      ESP32          │◄──► DS3231 RTC       │   │
+│                      │   │   (3.3V logic)      │                      │   │
+│                      │   └─────────┬───────────┘                      │   │
+│                      │             │                                  │   │
+│                      │             ▼                                  │   │
+│                      │   ┌──────────────────┐                         │   │
+│                      │   │   74AHCT245 (x2) │──► HUB75 Header        │   │
+│                      │   │   3.3V → 5V      │                         │   │
+│                      │   └──────────────────┘                         │   │
+│                      └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 3.2 Estratégia B: Alta Tensão + Buck (Produto Final)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    CIRCADIAN CLOCK PCB v2.0 - ESTRATÉGIA B                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ┌────────────┐                                                            │
+│   │            │      ┌──────────────────────────────────────────────────┐ │
+│   │  FONTE     │      │                      PCB                         │ │
+│   │  USB-C PD  │      │                                                  │ │
+│   │  45-65W    │      │  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐ │ │
+│   │            ├──────┤─►│ USB-C  │─►│  PD    │─►│ BUCK   │─►│TERMINAL│ │ │
+│   │  9V/12V/   │      │  │ Recept.│  │IP2721  │  │MP1584EN│  │PARAFUSO│ │ │
+│   │  15V/20V   │      │  └────┬───┘  └────┬───┘  └────┬───┘  └───┬────┘ │ │
+│   │            │      │       │           │           │          │      │ │
+│   └────────────┘      │       │  D3V3XA4B10LP         │          │      │ │
+│                       │       │  (ESD D+/D-/CC)       │          ▼      │ │
+│                       │       ▼           │           ▼    ┌────────┐   │ │
+│                       │  ┌────────┐       │     ┌────────┐ │ PAINEL │   │ │
+│                       │  │ CH340C │       │     │ +5V    │ │  P10   │   │ │
+│                       │  │ USB-   │       │     │ Rail   │ │ (5V)   │   │ │
+│                       │  │ UART   │       │     └───┬────┘ └────────┘   │ │
+│                       │  └────┬───┘       │         │                   │ │
+│                       │       │           ▼         ▼                   │ │
+│                       │       │     ┌──────────┐  ┌───────────┐         │ │
+│                       │       │     │ AP2112K  │  │ 74AHCT245 │         │ │
+│                       │       │     │  3.3V    │  │   (x2)    │         │ │
+│                       │       │     └────┬─────┘  └─────┬─────┘         │ │
+│                       │       │          │              │               │ │
+│                       │       ▼          ▼              ▼               │ │
+│                       │  ┌────────────────────────────────────┐         │ │
+│                       │  │            ESP32 + DS3231          │         │ │
+│                       │  │                                    │         │ │
+│                       │  │  ← UART      3.3V logic    HUB75 →│         │ │
+│                       │  └────────────────────────────────────┘         │ │
+│                       │                                                  │ │
+│                       └──────────────────────────────────────────────────┘ │
+│                                                                             │
+│   Vantagens Estratégia B:                                                   │
+│   ✓ Fontes 45-65W USB-C são MUITO comuns (laptops, tablets)                │
+│   ✓ Menor corrente no cabo = menores perdas (I²R)                          │
+│   ✓ Buck converter fornece 5V estável com alta eficiência (>90%)           │
+│   ✓ Maior margem para picos de corrente                                    │
+│   ✓ Brilho 100% disponível sem restrições                                  │
+│                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -800,6 +1075,44 @@ Para Assembly (SMT):
 └── CPL.csv                    (Component Placement List)
 ```
 
+### 6.3 BOM USB-C Power (Resumo)
+
+> **Referência:** BOM completo em [POWER_SUPPLY_v2.md](./POWER_SUPPLY_v2.md) secção 7
+
+#### Estratégia A: 5V Direto (€1.82 total power + proteção)
+
+| Ref | Componente | Especificação | Package | Qty | Preço | LCSC |
+|-----|------------|---------------|---------|-----|-------|------|
+| J1 | USB-C Receptacle | 16-pin, USB 2.0 | SMD | 1 | €0.40 | C165948 |
+| R_CC1, R_CC2 | Resistor 5.1kΩ | 1% 0.1W | 0402 | 2 | €0.01 | C25905 |
+| F1 | PTC Fuse | 3A hold, 6A trip | 1812 | 1 | €0.15 | C369159 |
+| D1 | TVS SMBJ5.0A | 5V 600W (VBUS) | SMB | 1 | €0.20 | C123799 |
+| D2 | TVS D3V3XA4B10LP | 4-ch ESD (D+/D-/CC) | UDFN2510 | 1 | €0.25 | C2827654 |
+| C_BULK | Capacitor | 470µF 16V electrolítico | Φ10mm | 1 | €0.15 | C134768 |
+| U3 | AP2112K-3.3 | LDO 3.3V 600mA | SOT-23-5 | 1 | €0.15 | C51118 |
+| J2 | Screw Terminal | 2-pin 5.0mm 10A | THT | 1 | €0.10 | C430646 |
+| LED1, LED2 | LED Verde | 0805 ~2V 20mA | 0805 | 2 | €0.04 | C2297 |
+| R_LED1, R_LED2 | Resistor | 1kΩ 1% | 0402 | 2 | €0.02 | C11702 |
+
+#### Estratégia B: Alta Tensão + Buck (€3.45 total power + proteção)
+
+| Ref | Componente | Especificação | Package | Qty | Preço | LCSC |
+|-----|------------|---------------|---------|-----|-------|------|
+| J1 | USB-C Receptacle | 16-pin, USB 2.0 | SMD | 1 | €0.40 | C165948 |
+| U_PD | IP2721 | PD Controller 5-20V | DFN-10 | 1 | €0.35 | C2889848 |
+| R_SET | Resistor | 20kΩ (para 12V) | 0402 | 1 | €0.01 | - |
+| U_BUCK | MP1584EN | Buck 3A module | Module | 1 | €0.80 | Módulo |
+| F1 | PTC Fuse | 3A hold | 1812 | 1 | €0.15 | C369159 |
+| D1 | TVS SMBJ24A | 24V (VBUS HV) | SMB | 1 | €0.25 | C114152 |
+| D2 | TVS D3V3XA4B10LP | 4-ch ESD (D+/D-/CC) | UDFN2510 | 1 | €0.25 | C2827654 |
+| C_BUCK_IN | Capacitor | 100µF 35V electrolítico | Φ8mm | 1 | €0.15 | C249490 |
+| C_BULK | Capacitor | 470µF 10V electrolítico | Φ10mm | 1 | €0.15 | C134768 |
+| U3 | AP2112K-3.3 | LDO 3.3V 600mA | SOT-23-5 | 1 | €0.15 | C51118 |
+| J2 | Screw Terminal | 2-pin 5.0mm 10A | THT | 1 | €0.10 | C430646 |
+| Q_REV | Si2301CDS | P-MOSFET inversão | SOT-23 | 1 | €0.10 | C10487 |
+| LED1, LED2 | LED Verde | 0805 ~2V 20mA | 0805 | 2 | €0.04 | C2297 |
+| R_LED1, R_LED2 | Resistor | 1kΩ 1% | 0402 | 2 | €0.02 | C11702 |
+
 ---
 
 ## 7. Estimativa de Custos
@@ -839,5 +1152,17 @@ Para Assembly (SMT):
 
 *Documento criado: Dezembro 2025*
 *Última atualização: Dezembro 2025*
-*Versão: 1.1*
-*Changelog: Adicionada secção 1.10 (Level Shifters) e 2.6 (Circuito Level Shifter) baseado em Adafruit MatrixPortal S3*
+*Versão: 2.0*
+
+**Changelog v2.0:**
+- Secção 1.2: Atualizada com USB-C Power Delivery (Estratégias A e B), AP2112K, PD controller IP2721, Buck converter MP1584EN, terminais de parafuso
+- Secção 1.3: Atualizada com proteção ESD USB-C completa (D3V3XA4B10LP para D+/D-/CC1/CC2), proteção VBUS (SMBJ5.0A/SMBJ24A), proteção terminais (Si2301CDS)
+- Secção 2.3: Adicionada proteção USB-C detalhada com circuito completo
+- Secção 2.6: Adicionada proteção inrush current com NTC thermistor e P-MOSFET soft-start
+- Secção 2.7: Adicionada proteção inversão polaridade nos terminais de parafuso
+- Secção 3: Atualizado esquema de blocos com duas estratégias (A: 5V Direto, B: Alta Tensão + Buck)
+- Secção 6.3: Adicionado BOM resumo para USB-C Power (Estratégias A e B)
+- Referências cruzadas com POWER_SUPPLY_v2.md
+
+**Changelog v1.1:**
+- Adicionada secção 1.10 (Level Shifters) e 2.6 (Circuito Level Shifter) baseado em Adafruit MatrixPortal S3
