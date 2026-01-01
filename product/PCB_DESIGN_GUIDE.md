@@ -68,13 +68,34 @@ Este documento descreve o design de uma PCB integrada profissional para o Circad
 |-----|------------|---------------|---------|-----|-------|
 | SW1 | Tactile Switch | 6x6mm, 160gf | Through-hole | 1 | Mode button (GPIO0) |
 
-### 1.8 Conectores
+### 1.8 Buzzer e Audio (NOVO - Startup Sound)
+
+| Ref | Componente | Especificação | Package | Qty | Preço Unit. | Função |
+|-----|------------|---------------|---------|-----|-------------|--------|
+| **BZ1** | **MLT-5030** | Piezo passivo 3V 4kHz 80dB | SMD 5.2x5.7mm | 1 | €0.20 | Startup sound/alarme |
+| **Q2** | **2N2222** | NPN transistor 40V 800mA | SOT-23 | 1 | €0.05 | Driver buzzer |
+| **R11** | **1kΩ** | Resistência 1% 0.1W | 0402 | 1 | €0.01 | Base transistor |
+| **D4** | **1N4148** | Diodo switching 100V 150mA | SOD-123 | 1 | €0.02 | Proteção flyback |
+
+**Código LCSC MLT-5030:** `C95297`
+
+**Alternativas:**
+- PKM13EPYH4000 (Murata) - LCSC C94599 - Melhor para >5kHz
+- CMT-5023S-SMT (CUI) - Mais alto, 90dB
+
+**Funcionalidades:**
+- Startup sound retro estilo NES/GameBoy (pulse waves 8-bit)
+- Configurável via captive portal (enable/disable)
+- Suporta melodias customizáveis e arpeggios
+- Futuro: alarmes e notificações sonoras
+
+### 1.9 Conectores
 
 | Ref | Componente | Especificação | Package | Qty | Função |
 |-----|------------|---------------|---------|-----|--------|
 | J3 | HUB75 Header | 2x8 pins 2.54mm | Through-hole | 1 | Painel LED P10 |
 
-### 1.9 Conectores HUB75 (Painel LED)
+### 1.10 Conectores HUB75 (Painel LED)
 
 | Pin HUB75 | Sinal | GPIO ESP32 |
 |-----------|-------|------------|
@@ -95,7 +116,7 @@ Este documento descreve o design de uma PCB integrada profissional para o Circad
 | 15 | OE | GPIO 15 |
 | 16 | GND | GND |
 
-### 1.10 Level Shifters (NOVO - Baseado em Adafruit MatrixPortal S3)
+### 1.11 Level Shifters (NOVO - Baseado em Adafruit MatrixPortal S3)
 
 > **Referência:** O design do [Adafruit MatrixPortal S3](https://github.com/adafruit/Adafruit-MatrixPortal-S3-PCB)
 > utiliza level shifting integrado para converter sinais 3.3V do ESP32 para 5V do painel HUB75.
@@ -122,7 +143,7 @@ Este documento descreve o design de uma PCB integrada profissional para o Circad
 | TXB0108 | 8 | Bidirecional auto | Mais caro, sensível |
 | SN74LV1T34 | 1 | Pequeno | Precisa 13 ICs! |
 
-### 1.11 USB-UART Bridge e Auto-Reset
+### 1.12 USB-UART Bridge e Auto-Reset
 
 > **Nota:** O ESP32-WROOM-32E **não tem USB nativo**. Precisa de um chip externo
 > para converter USB ↔ UART para programação via Arduino IDE/PlatformIO.
@@ -431,7 +452,103 @@ Quando GPIO = LOW:
 - Protege transistor e GPIO
 ```
 
-### 2.6 Level Shifter 3.3V → 5V para HUB75 (NOVO)
+### 2.6 Circuito Buzzer para Startup Sound (NOVO)
+
+```
+Driver Transistor para Buzzer Piezo Passivo
+═══════════════════════════════════════════════════════════════
+
+                          VCC (+5V)
+                            │
+                            ├────────┐
+                            │        │
+                        ┌───┴───┐   ─┴─ D4 (1N4148)
+                        │  BZ1  │   ─┬─ Flyback diode
+                        │MLT5030│    │
+                        │ Piezo │    │
+                        └───┬───┘    │
+                            │        │
+                            └────────┤
+                                     │ C (Collector)
+    ESP32                          ┌─┴─┐
+    GPIO10 ──────[R11]─────────────┤ B │ Q2 (2N2222)
+                  1kΩ               └─┬─┘ NPN SOT-23
+                                     │ E (Emitter)
+                                     │
+                                    GND
+
+Especificações:
+───────────────
+- GPIO: GPIO 10 (PWM channel 0, suporta ledcWrite)
+- R11: 1kΩ (limita corrente base, Ib ≈ 3mA)
+- Q2: 2N2222 (hFE ≈ 100-300, Ic_max = 800mA, mais que suficiente)
+- D4: 1N4148 (proteção flyback contra picos indutivos)
+- BZ1: MLT-5030 (Vop = 3V, I = 100mA @ ressonância 4kHz)
+
+Funcionamento:
+──────────────
+1. GPIO10 = HIGH (3.3V via PWM):
+   - Corrente base: Ib = (3.3V - 0.7V) / 1kΩ ≈ 2.6mA
+   - Corrente coletor: Ic = Ib × hFE ≈ 2.6mA × 100 = 260mA (suficiente!)
+   - Transistor satura → Buzzer toca
+
+2. GPIO10 = LOW (0V):
+   - Transistor corta → Buzzer silencioso
+   - D4 dissipa energia indutiva residual
+
+3. PWM para melodias:
+   - Frequências: 20Hz - 40kHz (ledcWriteTone)
+   - Duty cycle: 12.5%, 25%, 50% (pulse waves retro)
+   - Ressonância ótima: 4kHz (MLT-5030 spec)
+
+Técnicas de Som Retro:
+──────────────────────
+- **Pulse Wave 25%**: Som clássico NES (duty = 64/256)
+- **Arpeggios**: C-E-G rápido = acorde "falso"
+- **Pitch Bend**: Sweep de frequência (laser, power-up)
+- **Vibrato**: Oscilação ±10Hz @ 20Hz
+
+Exemplo código:
+───────────────
+void setup() {
+  ledcSetup(0, 2000, 8);      // Canal 0, 2kHz, 8-bit
+  ledcAttachPin(10, 0);        // GPIO10
+}
+
+void startupSound() {
+  // Melodia: C5-C5-C5-C6 (GameBoy style)
+  tone(523, 100, 64);   // C5, 100ms, duty 25%
+  delay(120);
+  tone(523, 100, 64);
+  delay(120);
+  tone(523, 150, 64);
+  delay(180);
+  tone(1047, 300, 64);  // C6
+}
+
+void tone(int freq, int dur, int duty) {
+  ledcWriteTone(0, freq);
+  ledcWrite(0, duty);
+  delay(dur);
+  ledcWrite(0, 0);  // Silêncio
+}
+
+Layout Tips PCB:
+────────────────
+1. Q2 próximo do buzzer BZ1 (minimizar trace Collector)
+2. R11 próximo do GPIO10 header
+3. D4 paralelo ao buzzer, o mais próximo possível
+4. Ground return path curto e direto
+5. Buzzer longe da antena WiFi (ruído EMI)
+
+Configuração Captive Portal:
+────────────────────────────
+- Toggle ON/OFF: /api/buzzer/enable
+- Volume (via duty): /api/buzzer/volume (12.5%, 25%, 50%)
+- Melodia select: /api/buzzer/melody (startup, alarm, error)
+```
+
+### 2.7 Level Shifter 3.3V → 5V para HUB75 (NOVO)
 
 > **Baseado no design Adafruit MatrixPortal S3**
 > Fonte: https://github.com/adafruit/Adafruit-MatrixPortal-S3-PCB
@@ -634,8 +751,11 @@ DIR = Direction (LOW = A→B) → GND
 │  │   BUTTONS       │     │  EN: Reset Button       │    │  STATUS LED   │ │
 │  │  SW1: Mode      │────►│                         │───►│     /WiFi/    │ │
 │  │  SW2: Reset     │     │  USB-C: UART + Power    │    └───────────────┘ │
-│  │  SW3: Boot      │     └─────────────────────────┘                       │
-│  └─────────────────┘                                                        │
+│  │  SW3: Boot      │     │                         │    ┌───────────────┐ │
+│  └─────────────────┘     │  GPIO 10: Buzzer (PWM)  ├───►│   BUZZER      │ │
+│                          │                         │    │  MLT-5030     │ │
+│                          └─────────────────────────┘    │  Startup/Alarm│ │
+│                                                         └───────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
