@@ -92,6 +92,15 @@
 |-----|------------|-----------------|-----------|------|------------|
 | SW1,SW2 | TS-1088-AR02016 | `SW_SPST_TS-1088-xR025` | 4.0 x 3.0 mm (SMD) | **C720477** | ✅ |
 
+### RTC (Real-Time Clock)
+
+| Ref | Componente | Footprint KiCad | Dimensões | LCSC | Verificado |
+|-----|------------|-----------------|-----------|------|------------|
+| U2 | DS3231SN | `Package_SO:SOIC-16W_7.5x10.3mm_P1.27mm` | 7.5 x 10.3 mm | **C722469** | ✅ |
+| R7,R8 | 4.7kΩ (I2C pull-up) | `R_0402_1005Metric` | 1.0 x 0.5 mm | **C25900** | ✅ |
+| C9 | 100nF (RTC bypass) | `C_0402_1005Metric` | 1.0 x 0.5 mm | **C307331** | ✅ |
+| BT1 | CR2032 Holder | `Battery:BatteryHolder_Keystone_3034_1x20mm` | Ø20 mm (THT) | **C70377** | ✅ |
+
 ---
 
 ## Referência de Dimensões de Packages
@@ -161,6 +170,12 @@ J2  = C68234    (2x8 Header)
 J3  = C474881   (KF301-5.0-2P)
 BZ1 = C252948   (GPC12075YB-5V)
 SW1,SW2 = C720477 (TS-1088)
+
+# RTC Module
+U2  = C722469   (DS3231SN)
+R7,R8 = C25900  (4.7kΩ I2C pull-up)
+C9  = C307331   (100nF RTC bypass)
+BT1 = C70377    (CR2032 Holder)
 ```
 
 ---

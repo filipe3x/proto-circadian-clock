@@ -36,8 +36,8 @@ CR2032 Holder (SMD)....... C70377
         ┌─────────────────┐
   32KHz │ 1            16 │ SCL ──────► ESP32 GPIO22
     VCC │ 2            15 │ SDA ◄─────► ESP32 GPIO21
-INT/SQW │ 3            14 │ VBAT ◄──── CR2032 (+)
-   ~RST │ 4            13 │ GND
+INT/SQW │ 3 (NC)       14 │ VBAT ◄──── CR2032 (+)
+   ~RST │ 4 (NC)       13 │ GND  ← Pull-up interno 50kΩ
      NC │ 5            12 │ NC
      NC │ 6            11 │ NC
      NC │ 7            10 │ NC
@@ -54,8 +54,8 @@ INT/SQW │ 3            14 │ VBAT ◄──── CR2032 (+)
 | 14 (VBAT) | Bateria backup | CR2032 (+) |
 | 15 (SDA) | I2C Data | ESP32 GPIO21 + 4.7kΩ pull-up |
 | 16 (SCL) | I2C Clock | ESP32 GPIO22 + 4.7kΩ pull-up |
-| 3 (INT/SQW) | Interrupção (opcional) | Não usado / GPIO para alarme |
-| 4 (~RST) | Reset (opcional) | Pull-up a VCC ou não usado |
+| 3 (INT/SQW) | Interrupção (opcional) | NC (não conectado) |
+| 4 (~RST) | Reset | NC (pull-up interno 50kΩ) |
 
 ---
 
@@ -178,4 +178,14 @@ ESP32 GPIO22 ─────── SCL      │   ┌────┴────
 
 ---
 
+## Notas Importantes
+
+1. **~RST (pin 4)**: Tem pull-up **interno** de 50kΩ - **NÃO** precisa de pull-up externo
+2. **INT/SQW (pin 3)**: Só usar se precisar de alarmes - deixar NC para uso normal
+3. **Cristal**: O DS3231SN tem TCXO **integrado** - não adicionar cristal externo
+4. **I2C Pull-ups**: 4.7kΩ são adequados para 400kHz, podem ser partilhados com outros dispositivos I2C
+
+---
+
 *Documento gerado: Janeiro 2026*
+*Atualizado: Janeiro 2026 - Correção pino RST (pull-up interno)*
