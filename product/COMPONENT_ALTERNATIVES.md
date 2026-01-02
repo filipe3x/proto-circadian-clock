@@ -112,12 +112,11 @@ This appears to be a BOM file error - wrong LCSC part number was assigned.
 
 | Part | LCSC | Pitch | Rows | Pins | Stock | Notes |
 |------|------|-------|------|------|-------|-------|
-| **HEADER-M-2.54_2X8** | **C3408481** | 2.54mm | 2 | 16 | Basic | Standard header |
-| PZ254-2-08-F | C376087 | 2.54mm | 2 | 16 | Basic | Ckmtw |
+| **2.54-2*8P** | **C68234** | 2.54mm | 2 | 16 | Available | BOOMELE, gold pins, 3A rated |
 | 2.54-2*8P H8.5mm | C124404 | 2.54mm | 2 | 16 | Available | Gold plated |
 | PM2.54-2X8 | C65114 | 2.54mm | 2 | 16 | Available | Boom Precision |
 
-**Recommendation:** Use **C3408481** or **C376087** - standard basic parts.
+**Recommendation:** Use **C68234** - standard 2x8 pin header from BOOMELE.
 
 **Action Required:** Fix BOM file to replace C124516 with correct pin header part number!
 
@@ -158,7 +157,7 @@ In PCB_DESIGN_GUIDE.md, the AP2112K-3.3 is designated as **U3**, not U6. U6 is t
 | BZ1 | C3151660 | MLT-5030 | **C95297** | Basic |
 | D2 | C19171391 | 17-21SURC/S530-A3/TR8 | **C2286** | Basic |
 | F1 | C369159 | SMD1206P050TF/15 | **C106264** | Available |
-| J2 | C124516 ❌ | 2x8 Header | **C3408481** | Basic |
+| J2 | C124516 ❌ | 2.54-2*8P Header | **C68234** | Available |
 | U6 | C51118 | ME6211C33M5G-N | **C82942** | Basic |
 
 ---
@@ -172,7 +171,7 @@ Update your BOM CSV file with these replacements:
 BZ1,C3151660 → C95297
 D2,C19171391 → C2286
 F1,C369159 → C106264
-J2,C124516 → C3408481  # CRITICAL: Fix wrong part type!
+J2,C124516 → C68234  # CRITICAL: Fix wrong part type!
 U6,C51118 → C82942
 ```
 
