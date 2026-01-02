@@ -10,12 +10,16 @@ Este documento descreve o design de uma PCB integrada profissional para o Circad
 
 ### 1.1 Microcontrolador e Módulos
 
-| Ref | Componente | Especificação | Package | Qty | Preço Unit. | Fornecedor |
-|-----|------------|---------------|---------|-----|-------------|------------|
-| U1 | ESP32-WROOM-32E | 4MB Flash, WiFi+BLE | Module | 1 | €2.50 | LCSC, Mouser |
-| U2 | DS3231SN | RTC I2C, ±2ppm | SOIC-16 | 1 | €1.20 | LCSC |
-| Y1 | Crystal 32.768kHz | Para DS3231 (integrado) | - | 0 | - | - |
-| BT1 | CR2032 Holder | SMD battery holder | SMD | 1 | €0.30 | LCSC |
+| Ref | Componente | Especificação | Package | Qty | Preço Unit. | LCSC |
+|-----|------------|---------------|---------|-----|-------------|------|
+| U1 | ESP32-WROOM-32E | 4MB Flash, WiFi+BLE | Module | 1 | €2.50 | **C701342** |
+| U2 | DS3231SN | RTC I2C, ±2ppm, TCXO integrado | SOIC-16W | 1 | €2.37 | **C722469** |
+| R7,R8 | 4.7kΩ | I2C pull-up resistors | 0402 | 2 | €0.01 | **C25900** |
+| C9 | 100nF | RTC bypass capacitor | 0402 | 1 | €0.01 | **C307331** |
+| BT1 | CR2032 Holder | Backup battery holder | THT | 1 | €0.10 | **C70377** |
+
+> **Nota:** O DS3231SN tem cristal TCXO integrado (32.768kHz) - não precisa de cristal externo.
+> O pino ~RST tem pull-up interno de 50kΩ - não precisa de pull-up externo.
 
 ### 1.2 Alimentação e Regulação (USB-C Power Delivery)
 
@@ -679,7 +683,89 @@ Configuração Captive Portal:
 - Melodia select: /api/buzzer/melody (startup, alarm, error)
 ```
 
-### 2.7 Inrush Current Limiting (Soft-Start)
+### 2.7 Circuito RTC DS3231SN (NOVO)
+
+```
+Módulo RTC com Bateria de Backup
+═══════════════════════════════════════════════════════════════
+
+                        +3.3V
+                          │
+          ┌───────────────┼───────────────┐
+          │               │               │
+         ─┴─             ─┴─             ─┴─
+     C9  ─┬─ 100nF   R7  │ │ 4.7k   R8  │ │ 4.7k
+          │              └┬┘             └┬┘
+          │               │               │
+          │               │               │
+          │        ┌──────┴───────────────┴──────┐
+          │        │     SDA (pin 15)            │
+          │        │     SCL (pin 16)            │
+          │        │                             │
+          ├────────┤ VCC (pin 2)                 │
+          │        │                             │
+          │        │        DS3231SN             │
+          │        │                             │
+          │        │ ~RST (pin 4) ── NC          │◄── Pull-up interno 50kΩ
+          │        │ INT/SQW (pin 3) ── NC       │
+          │        │                             │
+          │        │ VBAT (pin 14)───────────────┼──── CR2032 (+)
+          │        │                             │
+          │        │ GND (pin 13)                │
+          │        └──────────────┬──────────────┘
+          │                       │
+          └───────────────────────┴──────────────────── GND ── CR2032 (-)
+
+
+Pinout DS3231SN (SOIC-16W):
+───────────────────────────
+        ┌─────────────────┐
+  32KHz │ 1            16 │ SCL ──────► ESP32 GPIO22
+    VCC │ 2            15 │ SDA ◄─────► ESP32 GPIO21
+INT/SQW │ 3 (NC)       14 │ VBAT ◄──── CR2032 (+)
+   ~RST │ 4 (NC)       13 │ GND
+     NC │ 5            12 │ NC
+     NC │ 6            11 │ NC
+     NC │ 7            10 │ NC
+     NC │ 8             9 │ NC
+        └─────────────────┘
+
+Ligações por Placa:
+───────────────────
+ESP32 Dev Module:
+  - SDA → GPIO 21
+  - SCL → GPIO 22
+
+Matrix Portal S3:
+  - SDA → GPIO 16
+  - SCL → GPIO 17
+
+Especificações DS3231SN:
+────────────────────────
+- Tensão VCC: 2.3V - 5.5V (usar 3.3V)
+- Corrente VCC: ~200µA (típica)
+- Corrente VBAT: ~0.84µA (backup mode)
+- Precisão: ±2ppm (0°C a +40°C)
+- Interface: I2C @ 400kHz max
+- Endereço I2C: 0x68 (fixo)
+- Cristal: TCXO integrado (32.768kHz)
+
+Notas Importantes:
+──────────────────
+1. ~RST (pin 4): TEM pull-up interno 50kΩ → deixar NC (não conectado)
+2. INT/SQW (pin 3): Só usar se precisar de alarmes → deixar NC
+3. Cristal: INTEGRADO no DS3231SN → não adicionar cristal externo
+4. Pull-ups I2C: 4.7kΩ para 400kHz, podem ser partilhados com outros I2C
+
+Códigos LCSC:
+─────────────
+U2 (DS3231SN)............. C722469
+R7, R8 (4.7kΩ 0402)....... C25900
+C9 (100nF 0402)........... C307331
+BT1 (CR2032 Holder)....... C70377
+```
+
+### 2.8 Inrush Current Limiting (Soft-Start)
 
 > **Referência:** [POWER_SUPPLY_v2.md](./POWER_SUPPLY_v2.md) secção 4.3
 
@@ -735,7 +821,7 @@ Proteção contra Inrush Current:
 ═══════════════════════════════════════════════════════════════
 ```
 
-### 2.8 Proteção nos Terminais de Parafuso (Inversão de Polaridade)
+### 2.9 Proteção nos Terminais de Parafuso (Inversão de Polaridade)
 
 > **Referência:** [POWER_SUPPLY_v2.md](./POWER_SUPPLY_v2.md) secção 5.2
 
@@ -778,7 +864,7 @@ Proteção contra Ligação Inversa nos Terminais:
 ═══════════════════════════════════════════════════════════════
 ```
 
-### 2.9 Level Shifter 3.3V → 5V para HUB75
+### 2.10 Level Shifter 3.3V → 5V para HUB75
 
 > **Baseado no design Adafruit MatrixPortal S3**
 > Fonte: https://github.com/adafruit/Adafruit-MatrixPortal-S3-PCB
@@ -1272,7 +1358,18 @@ Para Assembly (SMT):
 
 *Documento criado: Dezembro 2025*
 *Última atualização: Janeiro 2026*
-*Versão: 2.1*
+*Versão: 2.2*
+
+**Changelog v2.2 (Jan 2026):**
+- **Secção 1.1: Atualizada** com códigos LCSC para RTC module completo
+  - DS3231SN (C722469), 4.7kΩ pull-ups (C25900), 100nF bypass (C307331), CR2032 holder (C70377)
+  - Nota sobre TCXO integrado e pull-up interno do ~RST
+- **Secção 2.7: Adicionada** Circuito RTC DS3231SN completo
+  - Esquema de ligações com pull-ups I2C
+  - Pinout SOIC-16W detalhado
+  - Ligações por placa (ESP32 Dev vs Matrix Portal S3)
+  - Especificações e notas importantes (~RST não precisa pull-up externo)
+- Renumeração de secções: 2.7→2.8 (Inrush), 2.8→2.9→2.10 (Terminais), 2.9→2.10→2.11 (Level Shifter)
 
 **Changelog v2.1 (Jan 2026):**
 - **Secção 1.8: Adicionada** Buzzer e Audio para startup sound retro estilo NES/GameBoy
