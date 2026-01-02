@@ -28,14 +28,18 @@
 
 | Part | LCSC | Type | Size | SPL | Stock | Notes |
 |------|------|------|------|-----|-------|-------|
-| **MLT-5030** | **C95297** | Passive | 5.2x5.7mm | 80dB | Basic | **Design guide spec** |
-| HYG9605C | C438342 | Passive | 9.6x5mm | 85dB | Basic | Louder option |
-| TMB12A05 | C96093 | Active | 12x9.5mm | 85dB | Basic | Active, simpler drive |
+| ~~MLT-5030~~ | ~~C95297~~ | Passive | 5.2x5.7mm | 80dB | ❌ OOS | Design guide spec - OUT OF STOCK |
+| **HYG9605C** | **C438342** | Passive | 9.6x5mm | 85dB | Check | Louder, good alternative |
+| **KLJ-1102** | **C201047** | Passive | 9x11mm | 70dB | Check | KELIKING |
+| **GPC12075YB-5V** | **C252948** | Passive | 12mm | 80dB | Check | INGHAi, 4kHz resonance |
+| FUET-1230 | C391037 | Passive | 12x12mm | 75dB | Check | 4kHz |
 | PKM13EPYH4000 | C94599 | Passive | 13mm | 70dB | Extended | Murata, better high freq |
 
-**Recommendation:** Use **MLT-5030 (C95297)** - matches design guide, smaller footprint, well-stocked.
+⚠️ **Do NOT use TMB12A05 (C96093)** - it's an ACTIVE buzzer (won't work with transistor+PWM driver)
 
-**Footprint Change:** 7.5x7.5mm → 5.2x5.7mm (requires layout update)
+**Recommendation:** Try **HYG9605C (C438342)** or **GPC12075YB-5V (C252948)** - passive buzzers, verify stock before ordering.
+
+**Footprint Change:** Will vary - check datasheet for chosen part
 
 ---
 
@@ -154,7 +158,7 @@ In PCB_DESIGN_GUIDE.md, the AP2112K-3.3 is designated as **U3**, not U6. U6 is t
 
 | Ref | Original LCSC | Replace With | New LCSC | Part Type |
 |-----|--------------|--------------|----------|-----------|
-| BZ1 | C3151660 | MLT-5030 | **C95297** | Basic |
+| BZ1 | C3151660 | HYG9605C (passive) | **C438342** | Check stock |
 | D2 | C19171391 | 17-21SURC/S530-A3/TR8 | **C2286** | Basic |
 | F1 | C369159 | SMD1206P050TF/15 | **C106264** | Available |
 | J2 | C124516 ❌ | 2.54-2*8P Header | **C68234** | Available |
@@ -168,7 +172,7 @@ Update your BOM CSV file with these replacements:
 
 ```csv
 # Original → Replacement
-BZ1,C3151660 → C95297
+BZ1,C3151660 → C438342  # HYG9605C passive buzzer (verify stock!)
 D2,C19171391 → C2286
 F1,C369159 → C106264
 J2,C124516 → C68234  # CRITICAL: Fix wrong part type!
