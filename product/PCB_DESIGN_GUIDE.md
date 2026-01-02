@@ -1210,7 +1210,7 @@ Para Assembly (SMT):
 | D2 | TVS D3V3XA4B10LP | 4-ch ESD (D+/D-/CC) | UDFN2510 | 1 | €0.25 | C2827654 |
 | C_BULK | Capacitor | 470µF 16V electrolítico | Φ10mm | 1 | €0.15 | C134768 |
 | U3 | AP2112K-3.3 | LDO 3.3V 600mA | SOT-23-5 | 1 | €0.15 | C51118 |
-| J2 | Screw Terminal | 2-pin 5.0mm 10A | THT | 1 | €0.10 | C430646 |
+| J2 | Screw Terminal | 2-pin 5.0mm 10A | THT | 1 | €0.10 | C474881 |
 | LED1, LED2 | LED Verde | 0805 ~2V 20mA | 0805 | 2 | €0.04 | C2297 |
 | R_LED1, R_LED2 | Resistor | 1kΩ 1% | 0402 | 2 | €0.02 | C11702 |
 
@@ -1228,7 +1228,7 @@ Para Assembly (SMT):
 | C_BUCK_IN | Capacitor | 100µF 35V electrolítico | Φ8mm | 1 | €0.15 | C249490 |
 | C_BULK | Capacitor | 470µF 10V electrolítico | Φ10mm | 1 | €0.15 | C134768 |
 | U3 | AP2112K-3.3 | LDO 3.3V 600mA | SOT-23-5 | 1 | €0.15 | C51118 |
-| J2 | Screw Terminal | 2-pin 5.0mm 10A | THT | 1 | €0.10 | C430646 |
+| J2 | Screw Terminal | 2-pin 5.0mm 10A | THT | 1 | €0.10 | C474881 |
 | Q_REV | Si2301CDS | P-MOSFET inversão | SOT-23 | 1 | €0.10 | C10487 |
 | LED1, LED2 | LED Verde | 0805 ~2V 20mA | 0805 | 2 | €0.04 | C2297 |
 | R_LED1, R_LED2 | Resistor | 1kΩ 1% | 0402 | 2 | €0.02 | C11702 |
