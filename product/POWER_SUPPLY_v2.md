@@ -860,7 +860,7 @@ Layout dos Terminais:
   ┌─────────────────────────────────────────────────────────────┐
   │ Componente          │ Specs          │ Preço    │ LCSC     │
   ├─────────────────────────────────────────────────────────────┤
-  │ KF301-5.0-2P        │ 5mm 2-pin 10A  │ €0.10    │ C430646  │
+  │ KF301-5.0-2P        │ 5mm 2-pin 10A  │ €0.10    │ C474881  │
   │ Phoenix 1935161     │ 5.08mm 2-pin   │ €0.50    │ Premium  │
   │ Wago 236-402        │ Cage clamp     │ €0.60    │ Premium  │
   └─────────────────────────────────────────────────────────────┘
@@ -1044,7 +1044,7 @@ Tabela Comparativa:
 | C1 | Capacitor | 470µF 16V electrolítico | Φ10mm | 1 | €0.15 | C134768 |
 | C2 | Capacitor | 100µF 10V cerâmico | 1206 | 1 | €0.30 | C408880 |
 | C3 | Capacitor | 100nF 16V X7R | 0402 | 1 | €0.01 | C307331 |
-| J2 | Screw Terminal | 2-pin 5.0mm 10A | THT | 1 | €0.10 | C430646 |
+| J2 | Screw Terminal | 2-pin 5.0mm 10A | THT | 1 | €0.10 | C474881 |
 | **Total** | | | | | **€1.57** | |
 
 ### 7.2 Estratégia B: Alta Tensão + Buck
@@ -1065,7 +1065,7 @@ Tabela Comparativa:
 | C2 | Capacitor | 470µF 10V electrolítico | Φ10mm | 1 | €0.15 | C134768 |
 | C3 | Capacitor | 100µF 10V cerâmico | 1206 | 1 | €0.30 | C408880 |
 | C4 | Capacitor | 22µF 35V (entrada buck) | 1206 | 2 | €0.10 | C159770 |
-| J2 | Screw Terminal | 2-pin 5.0mm 10A | THT | 1 | €0.10 | C430646 |
+| J2 | Screw Terminal | 2-pin 5.0mm 10A | THT | 1 | €0.10 | C474881 |
 | **Total (módulo)** | | | | | **€3.20** | |
 | **Total (IC)** | | | | | **€3.25** | |
 

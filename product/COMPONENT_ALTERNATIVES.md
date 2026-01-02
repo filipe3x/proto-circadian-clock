@@ -126,6 +126,31 @@ This appears to be a BOM file error - wrong LCSC part number was assigned.
 
 ---
 
+## 4b. J2 (Alt) - Screw Terminal for Panel Power (BOM ERROR!)
+
+### Problem
+The design guide references **C430646** for a 2-pin screw terminal, but this is actually a **DORABO DB2ERC-7.62-5P-GN** (5-pin terminal, wrong pitch)!
+
+### Required Part
+- **Type:** 2-pin screw terminal block
+- **Pitch:** 5.0mm or 5.08mm
+- **Current:** 10A minimum (for LED panel power)
+- **Mounting:** Through-hole
+
+### Correct Alternatives
+
+| Part | LCSC | Pitch | Pins | Current | Stock | Notes |
+|------|------|-------|------|---------|-------|-------|
+| **KF301-5.0-2P** | **C474881** | 5.0mm | 2 | 10A | Available | Cixi Kefa, standard |
+| WJ301-5.0-2P | C8465 | 5.0mm | 2 | 10A | Check | Wanjie |
+| MG301-5.0-2P | C8269 | 5.0mm | 2 | 10A | Check | DIBO |
+
+**Recommendation:** Use **KF301-5.0-2P (C474881)** - standard 2-pin 5.0mm screw terminal.
+
+**Action Required:** Fix PCB_DESIGN_GUIDE.md and POWER_SUPPLY_v2.md to replace C430646 with C474881!
+
+---
+
 ## 5. U6 - AP2112K-3.3 LDO Regulator
 
 ### Original
@@ -162,6 +187,7 @@ In PCB_DESIGN_GUIDE.md, the AP2112K-3.3 is designated as **U3**, not U6. U6 is t
 | D2 | C19171391 | 17-21SURC/S530-A3/TR8 | **C2286** | Basic |
 | F1 | C369159 | SMD1206P050TF/15 | **C106264** | Available |
 | J2 | C124516 ❌ | 2.54-2*8P Header | **C68234** | Available |
+| J2 | C430646 ❌ | KF301-5.0-2P Screw Term | **C474881** | Available |
 | U6 | C51118 | ME6211C33M5G-N | **C82942** | Basic |
 
 ---
@@ -175,7 +201,8 @@ Update your BOM CSV file with these replacements:
 BZ1,C3151660 → C438342  # HYG9605C passive buzzer (verify stock!)
 D2,C19171391 → C2286
 F1,C369159 → C106264
-J2,C124516 → C68234  # CRITICAL: Fix wrong part type!
+J2,C124516 → C68234  # CRITICAL: Wrong part (was MOSFET, need header)
+J2,C430646 → C474881  # CRITICAL: Wrong part (was 5-pin, need 2-pin screw terminal)
 U6,C51118 → C82942
 ```
 
