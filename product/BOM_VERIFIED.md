@@ -101,6 +101,12 @@
 | C9 | 100nF (RTC bypass) | `C_0402_1005Metric` | 1.0 x 0.5 mm | **C307331** | ✅ |
 | BT1 | CR2032 Holder | `Battery:BatteryHolder_Keystone_3034_1x20mm` | Ø20 mm (THT) | **C70377** | ✅ |
 
+**Notas RTC:**
+- **~RST (pin 4)**: Pull-up interno 50kΩ → deixar NC
+- **INT/SQW (pin 3)**: Deixar NC (só usar para alarmes)
+- **Cristal**: TCXO integrado (32.768kHz) → não adicionar externo
+- **I2C**: GPIO21 (SDA), GPIO22 (SCL) no ESP32 Dev Module
+
 ---
 
 ## Referência de Dimensões de Packages
