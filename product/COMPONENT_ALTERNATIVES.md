@@ -9,11 +9,41 @@
 
 | Ref | Original Part | LCSC | Status | Issue |
 |-----|--------------|------|--------|-------|
+| U1 | ESP32-WROOM-32E | C701342 | **Wrong variant** | N8 (8MB) not N4 (4MB) |
 | BZ1 | CMT-7525-80-SMT-TR | C3151660 | Extended | 6 shortfall |
 | D2 | YLED0805R | C19171391 | Extended | 20 shortfall |
 | F1 | JK-NSMD050-13.2V | C369159 | Extended | 20 shortfall |
 | J2 | AP2305GN-HF | C124516 | **BOM ERROR** | Wrong part type! |
 | U6 | AP2112K-3.3TRG1 | C51118 | Extended | 7 shortfall |
+
+---
+
+## ⚠️ JLCPCB Assembly Type Note
+
+**Standard PCBA Required** (not Economic) for ESP32-WROOM-32E module:
+- Extra setup fee: **+$25 per side**
+- Minimum board size: **70mm x 70mm** (edge rails added automatically)
+- Reason: Package size constraints (0201 components, temperature requirements)
+
+---
+
+## 0. U1 - ESP32-WROOM-32E Module
+
+### Original Issue
+- **Part:** ESP32-WROOM-32E-N8 (8MB)
+- **LCSC:** C701342
+- **Problem:** Wrong variant (N8 = 8MB, need N4 = 4MB), 3D model misaligned
+
+### Correct Part
+
+| Part | LCSC | Flash | Stock | Notes |
+|------|------|-------|-------|-------|
+| **ESP32-WROOM-32E-N4** | **C701341** | 4MB | Available | ✅ Correct version |
+| ESP32-WROOM-32E-N4(4MB) | C7463334 | 4MB | Check | Alternative listing |
+
+**Recommendation:** Use **C701341** - ESP32-WROOM-32E-N4 (4MB)
+
+⚠️ **Requires Standard PCBA** - see note above
 
 ---
 
@@ -183,6 +213,7 @@ In PCB_DESIGN_GUIDE.md, the AP2112K-3.3 is designated as **U3**, not U6. U6 is t
 
 | Ref | Original LCSC | Replace With | New LCSC | Part Type |
 |-----|--------------|--------------|----------|-----------|
+| U1 | C701342 ❌ | ESP32-WROOM-32E-N4 | **C701341** | Standard PCBA |
 | BZ1 | C3151660 | HYG9605C (passive) | **C438342** | Check stock |
 | D2 | C19171391 | 17-21SURC/S530-A3/TR8 | **C2286** | Basic |
 | F1 | C369159 | SMD1206P050TF/15 | **C106264** | Available |
@@ -198,6 +229,7 @@ Update your BOM CSV file with these replacements:
 
 ```csv
 # Original → Replacement
+U1,C701342 → C701341  # ESP32: N8 (8MB) → N4 (4MB) - requires Standard PCBA!
 BZ1,C3151660 → C438342  # HYG9605C passive buzzer (verify stock!)
 D2,C19171391 → C2286
 F1,C369159 → C106264
