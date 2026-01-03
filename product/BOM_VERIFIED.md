@@ -15,6 +15,7 @@ Na produção PCBA via JLCPCB, os componentes dividem-se em duas categorias fund
 | Tipo | Taxa de Carregamento | Descrição |
 |------|---------------------|-----------|
 | **Basic** | **$0** | Componentes comuns já montados nas máquinas P&P |
+| **Preferred Extended** | **$0** | Extended mas isentos de taxa no Economic PCBA |
 | **Extended** | **$3 por tipo único** | Requerem carregamento manual de feeders |
 
 ### Impacto Financeiro
@@ -47,8 +48,9 @@ Alguns componentes não têm alternativa Basic viável:
 
 ### Componentes Extended Substituíveis
 
-| Atual (Extended) | Alternativa (Basic) | Economia | Nota |
-|------------------|---------------------|----------|------|
+| Atual (Extended) | Alternativa | Economia | Nota |
+|------------------|-------------|----------|------|
+| DS3231SN (Extended) | **PCF8563T (Preferred)** | **$3** | Sem taxa! Mesmo pinout SOIC-8 |
 | ME6211C33M5G-N (SOT-23-5) | AMS1117-3.3 (SOT-223) | $3 | Requer mudança de footprint |
 | TMB12A05 (THT) | - | - | Sem alternativa Basic THT |
 
@@ -57,9 +59,9 @@ Alguns componentes não têm alternativa Basic viável:
 ## Análise de Classificação por Componente
 
 ### Legenda
-- Basic = Sem taxa adicional
-- Extended = +$3 taxa de carregamento
-- Preferred = Extended mas sem taxa no Economic PCBA
+- **Basic** = Sem taxa adicional (já nas máquinas P&P)
+- **Preferred** = Extended mas **sem taxa** no Economic PCBA (ex-Basic, agora carregado manualmente)
+- **Extended** = +$3 taxa de carregamento por tipo único
 
 ---
 
@@ -176,14 +178,24 @@ Alguns componentes não têm alternativa Basic viável:
 
 | Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
 |-----|------------|------|------|-------------------|------|
-| U2 | DS3231SN | **C722469** | Extended | PCF8563T (C7563) | Menor precisão, mais barato |
+| U2 | DS3231SN | **C722469** | Extended | **PCF8563T (C7563) - Preferred!** | Sem taxa, menor precisão, muito mais barato |
 | R7,R8 | 4.7kΩ 0402 | **C25900** | Basic | - | Já é Basic |
 | C9 | 100nF 0402 | **C307331** | Basic | - | Já é Basic |
 | BT1 | CR2032 Holder | **C70377** | Extended | - | Sem alternativa |
 
 **Custo Extended:** +$6
 
-**Nota RTC:** O DS3231SN (~$2.37) tem TCXO integrado com precisão ±2ppm. O PCF8563 (~$0.30) tem precisão de ±20ppm mas é muito mais barato. Para um relógio circadiano, a diferença de ~1 minuto/ano vs ~10 minutos/ano pode ser aceitável.
+**Recomendação RTC:** O **PCF8563T (C7563)** é **Preferred Extended** - sem taxa de carregamento no Economic PCBA!
+
+| Característica | DS3231SN | PCF8563T |
+|----------------|----------|----------|
+| Preço | ~$2.37 | ~$0.30 |
+| Precisão | ±2ppm (~1 min/ano) | ±20ppm (~10 min/ano) |
+| TCXO integrado | Sim | Não |
+| Taxa JLCPCB | $3 (Extended) | **$0 (Preferred)** |
+| Package | SOIC-16W | **SOIC-8** (diferente!) |
+
+**ATENÇÃO:** O PCF8563T usa package SOIC-8, diferente do DS3231SN (SOIC-16W). Requer mudança de footprint no KiCad se substituir.
 
 ---
 
@@ -205,14 +217,14 @@ Alguns componentes não têm alternativa Basic viável:
 
 Se substituirmos componentes Extended por Basic onde viável:
 
-| Substituição | Poupança | Viabilidade |
-|--------------|----------|-------------|
-| ME6211 → AMS1117 | $3 | Média (mudar footprint) |
-| UMH3N → discreto | $3 | Baixa (complexifica) |
-| DS3231 → PCF8563 | $3 | Alta (menos preciso) |
-| TVS → Basic | $3 | Média |
+| Substituição | Poupança | Viabilidade | Nota |
+|--------------|----------|-------------|------|
+| **DS3231 → PCF8563** | **$3 + $2** | **Alta** | Preferred Extended + componente mais barato! |
+| ME6211 → AMS1117 | $3 | Média | Mudar footprint SOT-23-5 → SOT-223 |
+| UMH3N → discreto | $3 | Baixa | Complexifica o design |
+| TVS → Basic | $3 | Média | Verificar specs de proteção |
 
-**Poupança máxima realista:** ~$6-9 por lote
+**Poupança máxima realista:** ~$8-11 por lote (DS3231→PCF8563 é a melhor opção!)
 
 ---
 
@@ -318,18 +330,30 @@ BT1 = C70377    (CR2032 Holder)          [Extended]
 
 Para a **segunda fase de desenvolvimento**, recomendo:
 
-1. **Manter o BOM atual** - Os $33 de taxas Extended são aceitáveis para protótipos
-2. **Para produção em escala**, considerar:
-   - Substituir DS3231 por PCF8563 (se precisão não for crítica)
-   - Avaliar mudança de LDO para AMS1117 (se espaço permitir SOT-223)
-3. **Componentes Extended inevitáveis**: ESP32, CH340C, USB-C (são o core do projeto)
+### Ação Imediata Recomendada
+
+**Substituir DS3231SN por PCF8563T:**
+- Poupança: **$3** (taxa) + **~$2** (componente) = **$5/lote**
+- PCF8563T é **Preferred Extended** = sem taxa de carregamento!
+- Precisão de ±20ppm é suficiente para relógio circadiano (~10 min/ano)
+- **NOTA:** Requer mudança de footprint (SOIC-16W → SOIC-8)
+
+### Componentes Extended Inevitáveis
+ESP32, CH340C, USB-C - são o core do projeto, manter.
+
+### Resumo de Custos
+
+| Cenário | Taxa Extended | Nota |
+|---------|---------------|------|
+| BOM atual (com DS3231) | $33 | 11 Extended |
+| Com PCF8563 (Preferred) | **$30** | 10 Extended |
 
 **Custo total estimado por lote de 5 PCBs:**
-- Componentes: ~$15-20
+- Componentes: ~$13-18 (com PCF8563)
 - PCB: ~$5-10
 - Assembly: ~$15-20
-- Taxa Extended: ~$33
-- **Total: ~$70-85** (ou ~$14-17 por placa)
+- Taxa Extended: ~$30
+- **Total: ~$65-80** (ou ~$13-16 por placa)
 
 ---
 
