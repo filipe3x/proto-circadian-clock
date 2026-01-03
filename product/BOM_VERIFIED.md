@@ -50,7 +50,7 @@ Alguns componentes não têm alternativa Basic viável:
 
 | Atual (Extended) | Alternativa | Economia | Nota |
 |------------------|-------------|----------|------|
-| DS3231SN (Extended) | **PCF8563T (Preferred) + Cristal** | **~$2** | PCF8563 sem taxa, mas cristal é Extended |
+| DS3231SN (Extended) | **PCF8563T (Preferred) + Cristal (Basic)** | **~$5** | Ambos sem taxa! |
 | ME6211C33M5G-N (SOT-23-5) | AMS1117-3.3 (SOT-223) | $3 | Requer mudança de footprint |
 | TMB12A05 (THT) | - | - | Sem alternativa Basic THT |
 
@@ -185,21 +185,21 @@ Alguns componentes não têm alternativa Basic viável:
 
 **Custo Extended:** +$6
 
-**Análise RTC:** O **PCF8563T (C7563)** é **Preferred Extended** - sem taxa de carregamento!
+**Análise RTC:** O **PCF8563T (C7563)** é **Preferred Extended** + Cristal **C32346 é Basic** = SEM TAXAS!
 
 | Característica | DS3231SN | PCF8563T + Cristal |
 |----------------|----------|-------------------|
 | Componente | ~$2.37 | ~$0.30 + $0.15 = **$0.45** |
-| Cristal externo | Não precisa (TCXO) | **C32346** ($0.15, Extended) |
+| Cristal externo | Não precisa (TCXO) | **C32346** ($0.15, **Basic!**) |
 | Precisão | ±2ppm (~1 min/ano) | ±20ppm (~10 min/ano) |
-| Taxa JLCPCB | $3 (Extended) | $0 + **$3** (cristal) = $3 |
-| **Total/lote** | **$5.37** | **$3.45** |
-| Poupança | - | **~$2/lote** |
+| Taxa JLCPCB | $3 (Extended) | **$0** (Preferred + Basic) |
+| **Total/lote** | **$5.37** | **$0.45** |
+| **Poupança** | - | **~$5/lote** |
 
-**ATENÇÃO:**
-- PCF8563T usa package **SOIC-8** (diferente do SOIC-16W do DS3231)
-- Precisa de cristal externo 32.768kHz (C32346) - que é **Extended** (+$3)
-- Poupança real: ~$2/lote (não $5 como inicialmente estimado)
+**RECOMENDAÇÃO FORTE:**
+- PCF8563T (Preferred) + Cristal C32346 (Basic) = **$0 de taxas!**
+- Poupança: ~$5/lote = **$250 em 50 lotes**
+- Único contra: footprint diferente (SOIC-8 vs SOIC-16W)
 
 ---
 
@@ -223,14 +223,14 @@ Se substituirmos componentes Extended por Basic onde viável:
 
 | Substituição | Poupança | Viabilidade | Nota |
 |--------------|----------|-------------|------|
-| DS3231 → PCF8563 + Cristal | **~$2** | Média | Cristal externo também é Extended! |
+| **DS3231 → PCF8563 + Cristal** | **~$5** | **Alta** | PCF8563 Preferred + Cristal Basic = $0 taxas! |
 | ME6211 → AMS1117 | $3 | Média | Mudar footprint SOT-23-5 → SOT-223 |
 | UMH3N → discreto | $3 | Baixa | Complexifica o design |
 | TVS → Basic | $3 | Média | Verificar specs de proteção |
 
-**Poupança máxima realista:** ~$5-8 por lote
+**Poupança máxima realista:** ~$8-11 por lote
 
-**Nota importante:** O cristal 32.768kHz (C32346) necessário para o PCF8563T é **Extended** (+$3), o que reduz a poupança. A vantagem principal é o custo do componente (~$2 mais barato), não a taxa.
+**Melhor oportunidade:** O cristal 32.768kHz (**C32346**) é **Basic** e o PCF8563T é **Preferred Extended** - ambos sem taxa de carregamento! Poupança de ~$5/lote.
 
 ---
 
@@ -338,34 +338,34 @@ Para a **segunda fase de desenvolvimento**, recomendo:
 
 ### Análise: DS3231 vs PCF8563
 
-| Opção | Custo Componente | Taxa Extended | Total | Complexidade |
-|-------|------------------|---------------|-------|--------------|
+| Opção | Custo Componente | Taxa Extended | Total/lote | Complexidade |
+|-------|------------------|---------------|------------|--------------|
 | **DS3231SN** | $2.37 | $3 | **$5.37** | Simples (TCXO integrado) |
-| **PCF8563T + Cristal** | $0.45 | $3 | **$3.45** | +1 componente, footprint diferente |
+| **PCF8563T + Cristal** | $0.45 | **$0** | **$0.45** | +1 componente, footprint SOIC-8 |
 
-**Recomendação:** Para a fase de protótipos, **manter DS3231SN**:
-- Poupança de apenas ~$2/lote não justifica mudança de footprint
-- DS3231 é mais simples (sem cristal externo)
-- Precisão superior (±2ppm vs ±20ppm)
+**RECOMENDAÇÃO:** Substituir por **PCF8563T + Cristal C32346**:
+- Poupança: **~$5/lote** ($2 componente + $3 taxa)
+- Cristal C32346 é **Basic** (sem taxa!)
+- PCF8563T é **Preferred Extended** (sem taxa!)
+- Para 50 lotes: **$250 de poupança!**
+- Único trabalho: mudar footprint SOIC-16W → SOIC-8
 
-Para **produção em escala** (>50 unidades), PCF8563T pode fazer sentido pelo custo do componente.
-
-### Componentes Extended Inevitáveis
-ESP32, CH340C, USB-C, DS3231/Cristal - são o core do projeto.
+### Componentes Extended (após otimização)
+ESP32, CH340C, USB-C, ESD, LDO, UMH3N, TVS, Terminal, Buzzer, Botões, Battery Holder
 
 ### Resumo de Custos
 
 | Cenário | Taxa Extended | Nota |
 |---------|---------------|------|
 | BOM atual (DS3231) | $33 | 11 Extended |
-| Com PCF8563 + Cristal | $33 | 11 Extended (cristal substitui DS3231) |
+| **Com PCF8563 + Cristal** | **$30** | **10 Extended** (-1 RTC) |
 
 **Custo total estimado por lote de 5 PCBs:**
-- Componentes: ~$15-20
+- Componentes: ~$13-17 (com PCF8563)
 - PCB: ~$5-10
 - Assembly: ~$15-20
-- Taxa Extended: ~$33
-- **Total: ~$70-85** (ou ~$14-17 por placa)
+- Taxa Extended: ~$30
+- **Total: ~$65-75** (ou ~$13-15 por placa)
 
 ---
 
