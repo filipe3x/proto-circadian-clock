@@ -27,20 +27,24 @@ Este documento descreve o design de uma PCB integrada profissional para o Circad
 |-----|------------|---------------|---------|-----|-------------|------|
 | U2 | **PCF8563T** | RTC I2C, ±20ppm | **SOIC-8** | 1 | **€0.30** | **C7563** |
 
-> **Recomendação de Custo:** O PCF8563T é **Preferred Extended** na JLCPCB - sem taxa de carregamento ($0)!
+> **Análise de Custo:** O PCF8563T é **Preferred Extended** (sem taxa), mas precisa de cristal externo!
 >
-> | Característica | DS3231SN | PCF8563T |
-> |----------------|----------|----------|
-> | Preço | ~€2.37 | **~€0.30** |
+> | Característica | DS3231SN | PCF8563T + Cristal |
+> |----------------|----------|-------------------|
+> | Componente | ~€2.37 | ~€0.30 + €0.15 = **€0.45** |
+> | Cristal externo | Não precisa (TCXO) | **C32346** (€0.15, Extended) |
+> | Taxa JLCPCB | $3 (Extended) | $0 + **$3** (cristal) = $3 |
+> | **Total/lote** | **~€5.50** | **~€3.50** |
 > | Precisão | ±2ppm (~1 min/ano) | ±20ppm (~10 min/ano) |
-> | TCXO integrado | Sim | Não (cristal externo opcional) |
-> | Taxa JLCPCB | $3 (Extended) | **$0 (Preferred)** |
 > | Package | SOIC-16W | **SOIC-8** |
-> | Poupança total | - | **~€2 + $3 = ~€5/lote** |
+> | Poupança real | - | **~€2/lote** |
 >
-> **ATENÇÃO:** O PCF8563T usa package **SOIC-8**, diferente do DS3231SN (SOIC-16W).
-> Requer mudança de footprint no KiCad se substituir. Para um relógio circadiano,
-> a precisão de ±20ppm (~10 min/ano) é perfeitamente aceitável.
+> **Recomendação:** Para protótipos, **manter DS3231SN** - poupança de ~€2 não justifica:
+> - Mudança de footprint (SOIC-16W → SOIC-8)
+> - Componente adicional (cristal externo)
+> - Menor precisão (±20ppm vs ±2ppm)
+>
+> Para **produção em escala** (>50 unidades), PCF8563T pode fazer sentido.
 
 ### 1.2 Alimentação e Regulação (USB-C Power Delivery)
 
@@ -850,12 +854,16 @@ Comparação DS3231SN vs PCF8563T:
 │ Backup current  │ 0.84µA         │ 0.25µA         │
 └─────────────────┴────────────────┴────────────────┘
 
-Poupança Total: ~€2.07 (componente) + $3 (taxa) = ~€5/lote
+Poupança Real: ~€2/lote (cristal externo é Extended, anula poupança da taxa)
 
 Quando usar cada um:
 ────────────────────
-• DS3231SN: Quando precisão é crítica (instrumentação, logging)
-• PCF8563T: Para relógios, displays, onde ±10 min/ano é OK
+• DS3231SN: Protótipos, quando precisão é crítica, design simples
+• PCF8563T: Produção em escala (>50 unidades), onde custo é prioritário
+
+IMPORTANTE: O cristal externo (C32346) é Extended (+$3), anulando
+a vantagem da taxa $0 do PCF8563T. Poupança real é apenas no
+custo do componente (~€2).
 
 Códigos LCSC (alternativa):
 ───────────────────────────
