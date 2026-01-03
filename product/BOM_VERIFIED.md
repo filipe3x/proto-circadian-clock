@@ -13,7 +13,8 @@
 | **C3** | Footprint 0805, componente é 1206 | Mudar footprint para `C_1206_3216Metric` |
 | **D2** | Footprint 0402, componente é 0603 | Mudar footprint para `LED_0603_1608Metric` |
 | **J1** | LCSC errado (Hanxia genérico) | Mudar para **C3020560** (GCT USB4105-GF-A) |
-| **BZ1** | Verificar se footprint THT está correto | Confirmar Plugin vs SMD |
+
+> ✅ **BZ1 Resolvido:** Substituído GPC12075YB-5V (C252948, fora de stock) por TMB12A05 (C96093) - mesmo footprint Ø12mm, pitch 7.6mm
 
 ---
 
@@ -84,7 +85,7 @@
 
 | Ref | Componente | Footprint KiCad | Dimensões | LCSC | Verificado |
 |-----|------------|-----------------|-----------|------|------------|
-| BZ1 | GPC12075YB-5V | `Buzzer_12x9.5RM7.6` | Ø12 x 6.5 mm (THT) | **C252948** | ⚠️ Confirmar THT |
+| BZ1 | TMB12A05 | `Buzzer_12x9.5RM7.6` | Ø12 x 9.5 mm (THT, pitch 7.6mm) | **C96093** | ✅ |
 
 ### Botões
 
@@ -174,7 +175,7 @@ F1  = C106264   (PTC 500mA 1206)
 J1  = C3020560  (USB4105-GF-A) ← CORRIGIDO!
 J2  = C68234    (2x8 Header)
 J3  = C474881   (KF301-5.0-2P)
-BZ1 = C252948   (GPC12075YB-5V)
+BZ1 = C96093    (TMB12A05)
 SW1,SW2 = C720477 (TS-1088)
 
 # RTC Module
