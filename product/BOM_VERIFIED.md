@@ -6,7 +6,66 @@
 
 ---
 
-## ⚠️ Problemas Críticos Detetados
+## Otimização de Custos: Basic vs Extended
+
+### Porque Importa?
+
+Na produção PCBA via JLCPCB, os componentes dividem-se em duas categorias fundamentais:
+
+| Tipo | Taxa de Carregamento | Descrição |
+|------|---------------------|-----------|
+| **Basic** | **$0** | Componentes comuns já montados nas máquinas P&P |
+| **Preferred Extended** | **$0** | Extended mas isentos de taxa no Economic PCBA |
+| **Extended** | **$3 por tipo único** | Requerem carregamento manual de feeders |
+
+### Impacto Financeiro
+
+Considerando que temos **~10 componentes Extended** no BOM atual:
+
+```
+Custo adicional Extended = 10 × $3 = $30 por encomenda
+```
+
+Este custo é **fixo por lote**, independentemente da quantidade de PCBs. Numa encomenda de 5 protótipos, são **$6 extra por placa** só em taxas de carregamento!
+
+### Estratégia de Otimização
+
+1. **Substituir Extended por Basic** sempre que possível
+2. **Aceitar Extended inevitáveis** (ESP32, RTC, USB-C) - são críticos
+3. **Avaliar alternativas** com mesmo footprint quando viável
+4. **Usar Preferred Extended** - isentos de taxa no Economic PCBA
+
+### Componentes Extended Inevitáveis
+
+Alguns componentes não têm alternativa Basic viável:
+
+| Componente | Razão |
+|------------|-------|
+| **ESP32-WROOM-32E** | MCU principal, sem alternativa |
+| **CH340C** | USB-Serial, AMS1117 é Basic mas CH340C é necessário |
+| **DS3231SN** | RTC de precisão com TCXO integrado |
+| **USB4105-GF-A** | Conector USB-C específico para o footprint |
+
+### Componentes Extended Substituíveis
+
+| Atual (Extended) | Alternativa | Economia | Nota |
+|------------------|-------------|----------|------|
+| DS3231SN (Extended) | **PCF8563T (Preferred) + Cristal (Basic)** | **~$5** | Ambos sem taxa! |
+| ME6211C33M5G-N (SOT-23-5) | AMS1117-3.3 (SOT-223) | $3 | Requer mudança de footprint |
+| TMB12A05 (THT) | - | - | Sem alternativa Basic THT |
+
+---
+
+## Análise de Classificação por Componente
+
+### Legenda
+- **Basic** = Sem taxa adicional (já nas máquinas P&P)
+- **Preferred** = Extended mas **sem taxa** no Economic PCBA (ex-Basic, agora carregado manualmente)
+- **Extended** = +$3 taxa de carregamento por tipo único
+
+---
+
+## Problemas Críticos Detetados
 
 | Ref | Problema | Ação Necessária |
 |-----|----------|-----------------|
@@ -14,7 +73,7 @@
 | **D2** | Footprint 0402, componente é 0603 | Mudar footprint para `LED_0603_1608Metric` |
 | **J1** | LCSC errado (Hanxia genérico) | Mudar para **C3020560** (GCT USB4105-GF-A) |
 
-> ✅ **BZ1 Resolvido:** Substituído GPC12075YB-5V (C252948, fora de stock) por TMB12A05 (C96093) - mesmo footprint Ø12mm, pitch 7.6mm
+> BZ1 Resolvido: Substituído GPC12075YB-5V (C252948, fora de stock) por TMB12A05 (C96093) - mesmo footprint Ø12mm, pitch 7.6mm
 
 ---
 
@@ -22,87 +81,160 @@
 
 ### Microcontrolador
 
-| Ref | Componente | Footprint KiCad | Dimensões | LCSC | Verificado |
-|-----|------------|-----------------|-----------|------|------------|
-| U3 | ESP32-WROOM-32E-N8 | `ESP32-WROOM-32E` | 25.5 x 18.0 mm | **C701342** | ✅ |
+| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
+|-----|------------|------|------|-------------------|------|
+| U3 | ESP32-WROOM-32E-N8 | **C701342** | Extended | - | MCU principal, sem alternativa |
+
+**Custo Extended:** +$3
 
 ### ICs
 
-| Ref | Componente | Footprint KiCad | Dimensões | LCSC | Verificado |
-|-----|------------|-----------------|-----------|------|------------|
-| U4 | CH340C | `SOIC-16_3.9x9.9mm_P1.27mm` | 3.9 x 9.9 mm | **C84681** | ✅ |
-| U5 | D3V3XA4B10LP-7 | `Diodes_UDFN-10_1.0x2.5mm_P0.5mm` | 1.0 x 2.5 mm | **C1980462** | ✅ |
-| U6 | ME6211C33M5G-N | `SOT23-5` | 2.9 x 1.6 mm | **C82942** | ✅ |
+| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
+|-----|------------|------|------|-------------------|------|
+| U4 | CH340C | **C84681** | Extended | - | USB-Serial necessário |
+| U5 | D3V3XA4B10LP-7 (ESD) | **C1980462** | Extended | USBLC6-2SC6 (C7519) | Mesmo footprint UDFN |
+| U6 | ME6211C33M5G-N (LDO) | **C82942** | Extended | AMS1117-3.3 (C6186) | Requer mudar para SOT-223 |
+
+**Custo Extended:** +$9 (ou +$6 se substituir LDO)
+
+**Recomendação U6:** O ME6211 tem dropout muito baixo (120mV) e quiescent current de 60µA, ideal para bateria. O AMS1117 tem dropout de 1.1V e 5mA quiescent - **manter ME6211** se eficiência for importante.
 
 ### Transistores
 
-| Ref | Componente | Footprint KiCad | Dimensões | LCSC | Verificado |
-|-----|------------|-----------------|-----------|------|------------|
-| Q1 | UMH3N | `SOT-363_SC-70-6` | 2.0 x 1.25 mm | **C62892** | ✅ |
-| Q2 | MMBT2222A | `SOT23-3` | 2.9 x 1.3 mm | **C916372** | ✅ |
+| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
+|-----|------------|------|------|-------------------|------|
+| Q1 | UMH3N | **C62892** | Extended | 2N7002 + resistências discretas | Complexifica o design |
+| Q2 | MMBT2222A | **C916372** | Basic | - | Já é Basic! |
+
+**Custo Extended:** +$3
 
 ### Díodos e LEDs
 
-| Ref | Componente | Footprint KiCad | Dimensões | LCSC | Verificado |
-|-----|------------|-----------------|-----------|------|------------|
-| D1 | 1N4148TR | `D_DO-35_SOD27_P7.62mm_Horizontal` | Ø1.85 x 4.25 mm (THT) | **C84410** | ✅ THT |
-| D2 | KT-0603R | ~~`LED_0402_1005Metric_Red`~~ | 1.6 x 0.8 mm | **C2286** | ❌ MUDAR para `LED_0603_1608Metric` |
-| D3 | SMF9.0CA (TVS) | `D_SMB` | 5.3 x 3.6 mm | **C123799** | ✅ |
+| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
+|-----|------------|------|------|-------------------|------|
+| D1 | 1N4148TR | **C84410** | Basic | - | Já é Basic |
+| D2 | KT-0603R (LED) | **C2286** | Basic | - | Já é Basic |
+| D3 | SMF9.0CA (TVS) | **C123799** | Extended | SMBJ5.0A (C35597) | Verificar specs |
+
+**Custo Extended:** +$3
 
 ### Condensadores
 
-| Ref | Componente | Footprint KiCad | Dimensões | LCSC | Verificado |
-|-----|------------|-----------------|-----------|------|------------|
-| C3 | CL31A226KAHNNNE (22µF) | ~~`C_0805_2012Metric`~~ | 3.2 x 1.6 mm | **C12891** | ❌ MUDAR para `C_1206_3216Metric` |
-| C4,C6,C8 | CL05B104KB54PNC (100nF) | `C_0402_1005Metric` | 1.0 x 0.5 mm | **C307331** | ✅ |
-| C5 | CL10A106KP8NNNC (10µF) | `C_0603_1608Metric` | 1.6 x 0.8 mm | **C19702** | ✅ |
+| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
+|-----|------------|------|------|-------------------|------|
+| C3 | CL31A226KAHNNNE (22µF 1206) | **C12891** | Basic | - | Já é Basic |
+| C4,C6,C8 | CL05B104KB54PNC (100nF 0402) | **C307331** | Basic | - | Já é Basic |
+| C5 | CL10A106KP8NNNC (10µF 0603) | **C19702** | Basic | - | Já é Basic |
+
+**Custo Extended:** $0 - Todos Basic!
 
 ### Resistências
 
-| Ref | Componente | Footprint KiCad | Dimensões | LCSC | Verificado |
-|-----|------------|-----------------|-----------|------|------------|
-| R1 | 330Ω | `R_0402_1005Metric` | 1.0 x 0.5 mm | **C25104** | ✅ |
-| R2 | 100Ω | `R_0402_1005Metric` | 1.0 x 0.5 mm | **C106232** | ✅ |
-| R3,R4 | 5.1kΩ | `R_0402_1005Metric` | 1.0 x 0.5 mm | **C25905** | ✅ |
-| R5 | 10kΩ | `R_0402_1005Metric` | 1.0 x 0.5 mm | **C25744** | ✅ |
-| R6 | 1kΩ | `R_0402_1005Metric` | 1.0 x 0.5 mm | **C106235** | ✅ |
+| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
+|-----|------------|------|------|-------------------|------|
+| R1 | 330Ω 0402 | **C25104** | Basic | - | Já é Basic |
+| R2 | 100Ω 0402 | **C106232** | Basic | - | Já é Basic |
+| R3,R4 | 5.1kΩ 0402 | **C25905** | Basic | - | Já é Basic |
+| R5 | 10kΩ 0402 | **C25744** | Basic | - | Já é Basic |
+| R6 | 1kΩ 0402 | **C106235** | Basic | - | Já é Basic |
+
+**Custo Extended:** $0 - Todos Basic!
 
 ### Fusível
 
-| Ref | Componente | Footprint KiCad | Dimensões | LCSC | Verificado |
-|-----|------------|-----------------|-----------|------|------------|
-| F1 | SMD1206P050TF/15 (500mA) | `Fuse_1206_3216Metric` | 3.2 x 1.6 mm | **C106264** | ✅ |
+| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
+|-----|------------|------|------|-------------------|------|
+| F1 | SMD1206P050TF/15 (500mA) | **C106264** | Basic | - | Já é Basic |
+
+**Custo Extended:** $0
 
 ### Conectores
 
-| Ref | Componente | Footprint KiCad | Dimensões | LCSC | Verificado |
-|-----|------------|-----------------|-----------|------|------------|
-| J1 | ~~HX-TYPE-C~~ → **USB4105-GF-A** | `USB_C_Receptacle_GCT_USB4105-xx-A_16P_TopMnt_Horizontal` | 8.94 x 7.30 mm | ~~C49261569~~ → **C3020560** | ❌ MUDAR LCSC |
-| J2 | 2.54-2*8P | `PinHeader_2x08_P2.54mm_Vertical` | 20.3 x 5.08 mm (THT) | **C68234** | ✅ |
-| J3 | KF301-5.0-2P | `TerminalBlock_Phoenix_MKDS-3-2-5.08_1x02_P5.08mm_Horizontal` | 10.16 x 7.5 mm (THT) | **C474881** | ✅ |
+| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
+|-----|------------|------|------|-------------------|------|
+| J1 | USB4105-GF-A | **C3020560** | Extended | TYPE-C-31-M-12 (C165948) | Verificar pinout |
+| J2 | 2.54-2*8P Header | **C68234** | Basic | - | Já é Basic |
+| J3 | KF301-5.0-2P | **C474881** | Extended | - | Terminal block THT |
+
+**Custo Extended:** +$6
 
 ### Buzzer
 
-| Ref | Componente | Footprint KiCad | Dimensões | LCSC | Verificado |
-|-----|------------|-----------------|-----------|------|------------|
-| BZ1 | TMB12A05 | `Buzzer_12x9.5RM7.6` | Ø12 x 9.5 mm (THT, pitch 7.6mm) | **C96093** | ✅ |
+| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
+|-----|------------|------|------|-------------------|------|
+| BZ1 | TMB12A05 | **C96093** | Extended | - | Sem alternativa Basic THT |
+
+**Custo Extended:** +$3
 
 ### Botões
 
-| Ref | Componente | Footprint KiCad | Dimensões | LCSC | Verificado |
-|-----|------------|-----------------|-----------|------|------------|
-| SW1,SW2 | TS-1088-AR02016 | `SW_SPST_TS-1088-xR025` | 4.0 x 3.0 mm (SMD) | **C720477** | ✅ |
+| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
+|-----|------------|------|------|-------------------|------|
+| SW1,SW2 | TS-1088-AR02016 | **C720477** | Extended | TS-1187A-B-A-B (C318884) | Verificar footprint |
+
+**Custo Extended:** +$3
 
 ### RTC (Real-Time Clock)
 
-| Ref | Componente | Footprint KiCad | Dimensões | LCSC | Verificado |
-|-----|------------|-----------------|-----------|------|------------|
-| U2 | DS3231SN | `Package_SO:SOIC-16W_7.5x10.3mm_P1.27mm` | 7.5 x 10.3 mm | **C722469** | ✅ |
-| R7,R8 | 4.7kΩ (I2C pull-up) | `R_0402_1005Metric` | 1.0 x 0.5 mm | **C25900** | ✅ |
-| C9 | 100nF (RTC bypass) | `C_0402_1005Metric` | 1.0 x 0.5 mm | **C307331** | ✅ |
-| BT1 | CR2032 Holder | `Battery:BatteryHolder_Keystone_3034_1x20mm` | Ø20 mm (THT) | **C70377** | ✅ |
+| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
+|-----|------------|------|------|-------------------|------|
+| U2 | DS3231SN | **C722469** | Extended | **PCF8563T (C7563) - Preferred!** | Sem taxa, menor precisão, muito mais barato |
+| R7,R8 | 4.7kΩ 0402 | **C25900** | Basic | - | Já é Basic |
+| C9 | 100nF 0402 | **C307331** | Basic | - | Já é Basic |
+| BT1 | CR2032 Holder | **C70377** | Extended | - | Sem alternativa |
 
-**Notas RTC:**
+**Custo Extended:** +$6
+
+**Análise RTC:** O **PCF8563T (C7563)** é **Preferred Extended** + Cristal **C32346 é Basic** = SEM TAXAS!
+
+| Característica | DS3231SN | PCF8563T + Cristal |
+|----------------|----------|-------------------|
+| Componente | ~$2.37 | ~$0.30 + $0.15 = **$0.45** |
+| Cristal externo | Não precisa (TCXO) | **C32346** ($0.15, **Basic!**) |
+| Precisão | ±2ppm (~1 min/ano) | ±20ppm (~10 min/ano) |
+| Taxa JLCPCB | $3 (Extended) | **$0** (Preferred + Basic) |
+| **Total/lote** | **$5.37** | **$0.45** |
+| **Poupança** | - | **~$5/lote** |
+
+**RECOMENDAÇÃO FORTE:**
+- PCF8563T (Preferred) + Cristal C32346 (Basic) = **$0 de taxas!**
+- Poupança: ~$5/lote = **$250 em 50 lotes**
+- Único contra: footprint diferente (SOIC-8 vs SOIC-16W)
+
+---
+
+## Resumo de Custos Extended
+
+| Categoria | Componentes Extended | Custo |
+|-----------|---------------------|-------|
+| Microcontrolador | ESP32 | $3 |
+| ICs | CH340C, ESD, LDO | $9 |
+| Transistores | UMH3N | $3 |
+| Díodos | TVS | $3 |
+| Conectores | USB-C, Terminal | $6 |
+| Buzzer | TMB12A05 | $3 |
+| Botões | TS-1088 | $3 |
+| RTC | DS3231, Battery Holder | $6 |
+| **TOTAL** | **11 tipos Extended** | **$33** |
+
+### Potencial de Poupança
+
+Se substituirmos componentes Extended por Basic onde viável:
+
+| Substituição | Poupança | Viabilidade | Nota |
+|--------------|----------|-------------|------|
+| **DS3231 → PCF8563 + Cristal** | **~$5** | **Alta** | PCF8563 Preferred + Cristal Basic = $0 taxas! |
+| ME6211 → AMS1117 | $3 | Média | Mudar footprint SOT-23-5 → SOT-223 |
+| UMH3N → discreto | $3 | Baixa | Complexifica o design |
+| TVS → Basic | $3 | Média | Verificar specs de proteção |
+
+**Poupança máxima realista:** ~$8-11 por lote
+
+**Melhor oportunidade:** O cristal 32.768kHz (**C32346**) é **Basic** e o PCF8563T é **Preferred Extended** - ambos sem taxa de carregamento! Poupança de ~$5/lote.
+
+---
+
+## Notas RTC
 - **~RST (pin 4)**: Pull-up interno 50kΩ → deixar NC
 - **INT/SQW (pin 3)**: Deixar NC (só usar para alarmes)
 - **Cristal**: TCXO integrado (32.768kHz) → não adicionar externo
@@ -154,37 +286,88 @@ LCSC correto: C3020560 (GCT USB4105-GF-A)
 ## Resumo de Códigos LCSC
 
 ```
-U3  = C701342   (ESP32-WROOM-32E-N8)
-U4  = C84681    (CH340C)
-U5  = C1980462  (D3V3XA4B10LP-7)
-U6  = C82942    (ME6211C33M5G-N)
-Q1  = C62892    (UMH3N)
-Q2  = C916372   (MMBT2222A)
-D1  = C84410    (1N4148TR)
-D2  = C2286     (KT-0603R) ← Footprint 0603!
-D3  = C123799   (SMF9.0CA)
-C3  = C12891    (22µF 1206) ← Footprint 1206!
-C4,C6,C8 = C307331 (100nF 0402)
-C5  = C19702    (10µF 0603)
-R1  = C25104    (330Ω)
-R2  = C106232   (100Ω)
-R3,R4 = C25905  (5.1kΩ)
-R5  = C25744    (10kΩ)
-R6  = C106235   (1kΩ)
-F1  = C106264   (PTC 500mA 1206)
-J1  = C3020560  (USB4105-GF-A) ← CORRIGIDO!
-J2  = C68234    (2x8 Header)
-J3  = C474881   (KF301-5.0-2P)
-BZ1 = C96093    (TMB12A05)
-SW1,SW2 = C720477 (TS-1088)
+# Microcontrolador
+U3  = C701342   (ESP32-WROOM-32E-N8)     [Extended]
+
+# ICs
+U4  = C84681    (CH340C)                  [Extended]
+U5  = C1980462  (D3V3XA4B10LP-7)         [Extended]
+U6  = C82942    (ME6211C33M5G-N)         [Extended]
+
+# Transistores
+Q1  = C62892    (UMH3N)                   [Extended]
+Q2  = C916372   (MMBT2222A)              [Basic]
+
+# Díodos
+D1  = C84410    (1N4148TR)               [Basic]
+D2  = C2286     (KT-0603R)               [Basic] ← Footprint 0603!
+D3  = C123799   (SMF9.0CA)               [Extended]
+
+# Condensadores - TODOS BASIC!
+C3  = C12891    (22µF 1206)              [Basic] ← Footprint 1206!
+C4,C6,C8 = C307331 (100nF 0402)          [Basic]
+C5  = C19702    (10µF 0603)              [Basic]
+
+# Resistências - TODAS BASIC!
+R1  = C25104    (330Ω)                   [Basic]
+R2  = C106232   (100Ω)                   [Basic]
+R3,R4 = C25905  (5.1kΩ)                  [Basic]
+R5  = C25744    (10kΩ)                   [Basic]
+R6  = C106235   (1kΩ)                    [Basic]
+
+# Outros
+F1  = C106264   (PTC 500mA 1206)         [Basic]
+J1  = C3020560  (USB4105-GF-A)           [Extended] ← CORRIGIDO!
+J2  = C68234    (2x8 Header)             [Basic]
+J3  = C474881   (KF301-5.0-2P)           [Extended]
+BZ1 = C96093    (TMB12A05)               [Extended]
+SW1,SW2 = C720477 (TS-1088)              [Extended]
 
 # RTC Module
-U2  = C722469   (DS3231SN)
-R7,R8 = C25900  (4.7kΩ I2C pull-up)
-C9  = C307331   (100nF RTC bypass)
-BT1 = C70377    (CR2032 Holder)
+U2  = C722469   (DS3231SN)               [Extended]
+R7,R8 = C25900  (4.7kΩ I2C pull-up)      [Basic]
+C9  = C307331   (100nF RTC bypass)       [Basic]
+BT1 = C70377    (CR2032 Holder)          [Extended]
 ```
 
 ---
 
-*Documento gerado: Janeiro 2026*
+## Conclusão: Estratégia de Custos
+
+Para a **segunda fase de desenvolvimento**, recomendo:
+
+### Análise: DS3231 vs PCF8563
+
+| Opção | Custo Componente | Taxa Extended | Total/lote | Complexidade |
+|-------|------------------|---------------|------------|--------------|
+| **DS3231SN** | $2.37 | $3 | **$5.37** | Simples (TCXO integrado) |
+| **PCF8563T + Cristal** | $0.45 | **$0** | **$0.45** | +1 componente, footprint SOIC-8 |
+
+**RECOMENDAÇÃO:** Substituir por **PCF8563T + Cristal C32346**:
+- Poupança: **~$5/lote** ($2 componente + $3 taxa)
+- Cristal C32346 é **Basic** (sem taxa!)
+- PCF8563T é **Preferred Extended** (sem taxa!)
+- Para 50 lotes: **$250 de poupança!**
+- Único trabalho: mudar footprint SOIC-16W → SOIC-8
+
+### Componentes Extended (após otimização)
+ESP32, CH340C, USB-C, ESD, LDO, UMH3N, TVS, Terminal, Buzzer, Botões, Battery Holder
+
+### Resumo de Custos
+
+| Cenário | Taxa Extended | Nota |
+|---------|---------------|------|
+| BOM atual (DS3231) | $33 | 11 Extended |
+| **Com PCF8563 + Cristal** | **$30** | **10 Extended** (-1 RTC) |
+
+**Custo total estimado por lote de 5 PCBs:**
+- Componentes: ~$13-17 (com PCF8563)
+- PCB: ~$5-10
+- Assembly: ~$15-20
+- Taxa Extended: ~$30
+- **Total: ~$65-75** (ou ~$13-15 por placa)
+
+---
+
+*Documento atualizado: Janeiro 2026*
+*Análise de custos Basic/Extended incluída*

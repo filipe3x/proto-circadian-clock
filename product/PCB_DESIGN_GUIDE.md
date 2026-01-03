@@ -21,6 +21,30 @@ Este documento descreve o design de uma PCB integrada profissional para o Circad
 > **Nota:** O DS3231SN tem cristal TCXO integrado (32.768kHz) - não precisa de cristal externo.
 > O pino ~RST tem pull-up interno de 50kΩ - não precisa de pull-up externo.
 
+#### Alternativa RTC: PCF8563T (Preferred Extended - SEM TAXA!)
+
+| Ref | Componente | Especificação | Package | Qty | Preço Unit. | LCSC |
+|-----|------------|---------------|---------|-----|-------------|------|
+| U2 | **PCF8563T** | RTC I2C, ±20ppm | **SOIC-8** | 1 | **€0.30** | **C7563** |
+
+> **Análise de Custo:** PCF8563T é **Preferred** + Cristal C32346 é **Basic** = **SEM TAXAS!**
+>
+> | Característica | DS3231SN | PCF8563T + Cristal |
+> |----------------|----------|-------------------|
+> | Componente | ~€2.37 | ~€0.30 + €0.15 = **€0.45** |
+> | Cristal externo | Não precisa (TCXO) | **C32346** (€0.15, **Basic!**) |
+> | Taxa JLCPCB | $3 (Extended) | **$0** (Preferred + Basic) |
+> | **Total/lote** | **~€5.50** | **~€0.45** |
+> | Precisão | ±2ppm (~1 min/ano) | ±20ppm (~10 min/ano) |
+> | Package | SOIC-16W | **SOIC-8** |
+> | **Poupança** | - | **~€5/lote** |
+>
+> **RECOMENDAÇÃO:** Substituir por **PCF8563T + Cristal C32346**:
+> - Poupança: **~€5/lote** (€2 componente + $3 taxa)
+> - Para 50 lotes: **€250 de poupança!**
+> - Único trabalho: mudar footprint SOIC-16W → SOIC-8
+> - Precisão de ±20ppm é suficiente para relógio circadiano
+
 ### 1.2 Alimentação e Regulação (USB-C Power Delivery)
 
 > **Referência:** Arquitetura baseada em [POWER_SUPPLY_v2.md](./POWER_SUPPLY_v2.md) - USB-C Power Delivery
@@ -765,6 +789,93 @@ C9 (100nF 0402)........... C307331
 BT1 (CR2032 Holder)....... C70377
 ```
 
+#### Alternativa: PCF8563T (Preferred Extended - SEM TAXA JLCPCB!)
+
+```
+Módulo RTC PCF8563T - Alternativa Económica
+═══════════════════════════════════════════════════════════════
+
+                        +3.3V
+                          │
+          ┌───────────────┼───────────────┐
+          │               │               │
+         ─┴─             ─┴─             ─┴─
+     C9  ─┬─ 100nF   R7  │ │ 4.7k   R8  │ │ 4.7k
+          │              └┬┘             └┬┘
+          │               │               │
+          │        ┌──────┴───────────────┴──────┐
+          │        │     SDA (pin 5)             │
+          │        │     SCL (pin 6)             │
+          │        │                             │
+          ├────────┤ VDD (pin 8)                 │
+          │        │                             │
+          │        │        PCF8563T             │
+          │        │        SOIC-8               │
+          │        │                             │
+          │        │ ~INT (pin 7) ── NC          │◄── Open-drain, pull-up se usar
+          │        │ CLKOUT (pin 1) ── NC        │◄── Opcional: 32.768kHz output
+          │        │ OSCI (pin 2) ── XTAL        │
+          │        │ OSCO (pin 3) ── XTAL        │
+          │        │                             │
+          │        │ VSS (pin 4)                 │
+          │        └──────────────┬──────────────┘
+          │                       │
+          └───────────────────────┴──────────────────── GND
+
+
+Pinout PCF8563T (SOIC-8):
+─────────────────────────
+        ┌─────────────────┐
+ CLKOUT │ 1             8 │ VDD ──────► 3.3V
+   OSCI │ 2     X1      7 │ ~INT ─────► NC (ou GPIO para alarmes)
+   OSCO │ 3     X1      6 │ SCL ──────► ESP32 GPIO22
+    VSS │ 4             5 │ SDA ◄────► ESP32 GPIO21
+        └─────────────────┘
+              │
+        Cristal 32.768kHz
+        (externo ou oscilador)
+
+
+Comparação DS3231SN vs PCF8563T:
+────────────────────────────────
+┌─────────────────┬────────────────┬────────────────┐
+│ Característica  │ DS3231SN       │ PCF8563T       │
+├─────────────────┼────────────────┼────────────────┤
+│ Preço LCSC      │ ~€2.37         │ ~€0.30         │
+│ Taxa JLCPCB     │ $3 (Extended)  │ $0 (Preferred) │
+│ Package         │ SOIC-16W       │ SOIC-8         │
+│ Precisão        │ ±2ppm          │ ±20ppm         │
+│ Desvio/ano      │ ~1 minuto      │ ~10 minutos    │
+│ TCXO integrado  │ SIM            │ NÃO            │
+│ Cristal externo │ Não precisa    │ Precisa        │
+│ Endereço I2C    │ 0x68           │ 0x51           │
+│ Corrente típica │ 200µA          │ 250nA (!!)     │
+│ Backup current  │ 0.84µA         │ 0.25µA         │
+└─────────────────┴────────────────┴────────────────┘
+
+Poupança Real: ~€5/lote (PCF8563 Preferred + Cristal Basic = $0 taxas!)
+
+Quando usar cada um:
+────────────────────
+• DS3231SN: Quando precisão ±2ppm é crítica (instrumentação, logging)
+• PCF8563T: RECOMENDADO - Poupança de €5/lote, precisão ±20ppm OK para relógios
+
+IMPORTANTE: O cristal externo (C32346) é **BASIC** - sem taxa!
+Combinado com PCF8563T (Preferred) = $0 de taxas Extended.
+Poupança total: ~€2 (componente) + $3 (taxa) = ~€5/lote
+
+Códigos LCSC (alternativa):
+───────────────────────────
+U2 (PCF8563T)............. C7563
+R7, R8 (4.7kΩ 0402)....... C25900 (mesmo)
+C9 (100nF 0402)........... C307331 (mesmo)
+X1 (32.768kHz crystal).... C32346 (se não usar oscilador)
+BT1 (CR2032 Holder)....... C70377 (mesmo)
+
+Nota: O PCF8563T também funciona com bateria backup CR2032.
+A corrente de backup é ainda menor (0.25µA vs 0.84µA do DS3231).
+```
+
 ### 2.8 Inrush Current Limiting (Soft-Start)
 
 > **Referência:** [POWER_SUPPLY_v2.md](./POWER_SUPPLY_v2.md) secção 4.3
@@ -1358,7 +1469,19 @@ Para Assembly (SMT):
 
 *Documento criado: Dezembro 2025*
 *Última atualização: Janeiro 2026*
-*Versão: 2.2*
+*Versão: 2.3*
+
+**Changelog v2.3 (Jan 2026):**
+- **Secção 1.1: Adicionada** Alternativa RTC PCF8563T (Preferred Extended)
+  - PCF8563T (C7563) é **Preferred Extended** = sem taxa de carregamento JLCPCB!
+  - Tabela comparativa DS3231SN vs PCF8563T (preço, precisão, package, taxa)
+  - Poupança total: ~€2 (componente) + $3 (taxa) = ~€5/lote
+  - Nota sobre diferença de package (SOIC-16W vs SOIC-8)
+- **Secção 2.7: Adicionada** Circuito alternativo PCF8563T
+  - Esquema completo com pinout SOIC-8
+  - Comparação detalhada de especificações
+  - Códigos LCSC para alternativa (inclui cristal externo C32346)
+  - Nota: corrente backup ainda menor (0.25µA vs 0.84µA)
 
 **Changelog v2.2 (Jan 2026):**
 - **Secção 1.1: Atualizada** com códigos LCSC para RTC module completo
