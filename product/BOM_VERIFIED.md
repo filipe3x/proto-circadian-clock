@@ -83,16 +83,21 @@ Alguns componentes não têm alternativa Basic viável:
 
 **Nota:** MMBD4148SE é a versão SMD oficial da família 1N4148. Equivalência elétrica confirmada.
 
-### D3: TVS SMF9.0CA → C20615788 ⚠️ VERIFICAR
+### D3: TVS para USB VBUS ✅ APROVADO
 
-| Parâmetro | SMF9.0CA (Original) | C20615788 (Novo) | Status |
-|-----------|---------------------|------------------|--------|
-| **LCSC** | C123799 | C20615788 | ⚠️ Part não encontrado |
-| **Package** | SMB | SOD-123 / DFN1006? | Conflito |
+| Parâmetro | C20615788 (H7VN10B) | Status |
+|-----------|---------------------|--------|
+| **LCSC** | C20615788 | ✅ |
+| **Fabricante** | hongjiacheng | ✅ |
+| **Package** | DFN1006-2L | ✅ Compacto |
+| **Vbr** | 9V | ✅ |
+| **Vc (clamp)** | 9.6V | ✅ |
+| **Ipp** | 6A @ 8/20µs | ✅ |
+| **Ppk** | 80W | ✅ |
+| **ESD** | IEC 61000-4-2 | ✅ |
+| **Tipo** | Extended | - |
 
-**AVISO:** O código LCSC C20615788 não foi encontrado na base de dados. Alternativas recomendadas:
-- **C123799** - SMF9.0CA MDD (SOD-123FL) - Extended
-- **C266723** - SMF9.0CA FMS (SOD-123FL) - Verificar tipo
+**Nota:** Proteção TVS bidireccional para USB VBUS. U5 (D3V3XA4B10LP) protege linhas de dados D+/D-.
 
 ### R6: 1kΩ 0402 → 1kΩ 1206 ✅ APROVADO
 
@@ -150,6 +155,19 @@ O componente real a encomendar é o **SN74AHCT245PWR (C10910)** - 100% pin-compa
 | **Tipo** | Extended | **Basic** | ✅ |
 
 **Nota:** AMS1117 é o LDO standard dos ESP32 DevKit. Dropout maior mas aceitável com USB 5V input.
+
+### D4: Battery Backup Diode ✅ NOVO
+
+| Parâmetro | Valor | Status |
+|-----------|-------|--------|
+| **Componente** | MMBD4148SE | ✅ |
+| **LCSC** | C17179590 | ✅ (mesmo que D1) |
+| **Package** | SOT-23 | ✅ |
+| **Função** | OR díodo para backup RTC | ✅ |
+| **Tipo** | Basic | ✅ |
+
+**Circuito:** VDD (3.3V) e BT1+ ligam ao VDD do PCF8563T, com D4 no caminho da bateria.
+Quando USB desliga, bateria alimenta RTC através de D4 (~2.3V após drop).
 
 ---
 
@@ -331,11 +349,42 @@ Se substituirmos componentes Extended por Basic onde viável:
 
 ---
 
-## Notas RTC
-- **~RST (pin 4)**: Pull-up interno 50kΩ → deixar NC
-- **INT/SQW (pin 3)**: Deixar NC (só usar para alarmes)
-- **Cristal**: TCXO integrado (32.768kHz) → não adicionar externo
-- **I2C**: GPIO21 (SDA), GPIO22 (SCL) no ESP32 Dev Module
+## Notas RTC (PCF8563T)
+
+### Pinout SOIC-8
+```
+        ┌────────────┐
+ OSCI  1│●           │8  VDD (3.3V)
+ OSCO  2│  PCF8563T  │7  CLKOUT (NC)
+  INT  3│            │6  SCL
+  VSS  4│            │5  SDA
+        └────────────┘
+```
+
+### Ligações
+- **Pin 1 (OSCI)** ↔ **Pin 2 (OSCO)**: Cristal Y1 (C32346) - sem caps externos
+- **Pin 3 (INT)**: Deixar NC (só usar para alarmes)
+- **Pin 7 (CLKOUT)**: Deixar NC
+- **Pin 5 (SDA)**: GPIO21 ESP32 + pull-up 4.7kΩ
+- **Pin 6 (SCL)**: GPIO22 ESP32 + pull-up 4.7kΩ
+- **Pin 8 (VDD)**: 3.3V + bypass 100nF + D4 para backup bateria
+
+### Circuito Backup Bateria
+```
+VDD (3.3V) ─────────────────┬─── Pin 8 (VDD) PCF8563T
+                            │
+BT1+ (CR2032) ───►|─────────┘
+                  D4
+             (MMBD4148SE)
+
+BT1- ─────────────────────────── Pin 4 (VSS/GND)
+```
+
+### Funcionamento D4
+| Estado | Resultado |
+|--------|-----------|
+| USB ON (VDD=3.3V) | D4 reverse bias → bateria não gasta |
+| USB OFF (VDD=0V) | D4 forward → RTC recebe ~2.3V da bateria |
 
 ---
 
@@ -401,7 +450,8 @@ Q2  = C916372   (MMBT2222A)              [Basic]
 # Díodos
 D1  = C17179590 (MMBD4148SE) SOT-23      [Basic] ← ALTERADO v3.0
 D2  = C2286     (KT-0603R)               [Basic]
-D3  = C123799   (SMF9.0CA) SOD-123FL     [Extended] ← VERIFICAR C20615788
+D3  = C20615788 (H7VN10B TVS) DFN1006-2L [Extended] ← USB VBUS protection
+D4  = C17179590 (MMBD4148SE) SOT-23      [Basic] ← NOVO v3.0 (RTC battery backup)
 
 # Condensadores - TODOS BASIC!
 C3  = C12891    (22µF 1206)              [Extended] ← CORRIGIDO!
