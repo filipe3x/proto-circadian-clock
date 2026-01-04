@@ -1,8 +1,19 @@
 # BOM Verificado - Circadian Clock PCB
 
 **Data:** Janeiro 2026
-**Fonte:** JLCPCB BOM Detection
+**Versão:** 3.0 - Componentes Otimizados
+**Fonte:** JLCPCB BOM Detection + Verificação Manual
 **Total:** 24 componentes
+
+---
+
+## Histórico de Alterações
+
+| Versão | Data | Alterações |
+|--------|------|------------|
+| 3.0 | Jan 2026 | Substituição de Extended por Basic: D1→MMBD4148SE, R6→1206, U1→PCF8563T, U6→AMS1117, U2/U7→SN74AHCT245PWR |
+| 2.0 | Jan 2026 | Análise completa Basic vs Extended |
+| 1.0 | Jan 2026 | BOM inicial |
 
 ---
 
@@ -53,6 +64,92 @@ Alguns componentes não têm alternativa Basic viável:
 | DS3231SN (Extended) | **PCF8563T (Preferred) + Cristal (Basic)** | **~$5** | Ambos sem taxa! |
 | ME6211C33M5G-N (SOT-23-5) | AMS1117-3.3 (SOT-223) | $3 | Requer mudança de footprint |
 | TMB12A05 (THT) | - | - | Sem alternativa Basic THT |
+
+---
+
+## Verificação de Substituições v3.0
+
+### D1: 1N4148 → MMBD4148SE ✅ APROVADO
+
+| Parâmetro | 1N4148 (Original) | MMBD4148SE (Novo) | Compatível? |
+|-----------|-------------------|-------------------|-------------|
+| **LCSC** | C84410 | **C17179590** | - |
+| **Package** | DO-35 (THT) | **SOT-23 (SMD)** | Novo footprint |
+| **Vrrm** | 100V | 100V | ✅ |
+| **If(av)** | 300mA | 200mA | ✅ (suficiente) |
+| **Vf** | ~0.65V | 1V max @ 10mA | ✅ |
+| **trr** | 4ns | 4ns | ✅ |
+| **Tipo** | Basic | Basic | ✅ |
+
+**Nota:** MMBD4148SE é a versão SMD oficial da família 1N4148. Equivalência elétrica confirmada.
+
+### D3: TVS SMF9.0CA → C20615788 ⚠️ VERIFICAR
+
+| Parâmetro | SMF9.0CA (Original) | C20615788 (Novo) | Status |
+|-----------|---------------------|------------------|--------|
+| **LCSC** | C123799 | C20615788 | ⚠️ Part não encontrado |
+| **Package** | SMB | SOD-123 / DFN1006? | Conflito |
+
+**AVISO:** O código LCSC C20615788 não foi encontrado na base de dados. Alternativas recomendadas:
+- **C123799** - SMF9.0CA MDD (SOD-123FL) - Extended
+- **C266723** - SMF9.0CA FMS (SOD-123FL) - Verificar tipo
+
+### R6: 1kΩ 0402 → 1kΩ 1206 ✅ APROVADO
+
+| Parâmetro | Original | Novo | Status |
+|-----------|----------|------|--------|
+| **LCSC** | C106235 | **C4410** | ✅ |
+| **Package** | 0402 | **1206** | Novo footprint |
+| **Potência** | 63mW | 250mW | ✅ Melhor |
+| **Tolerância** | ±1% | ±1% | ✅ |
+| **Tipo** | Basic | **Basic** | ✅ |
+
+### U1: DS3231SN → PCF8563T ✅ APROVADO
+
+| Parâmetro | DS3231SN (Original) | PCF8563T (Novo) | Status |
+|-----------|---------------------|-----------------|--------|
+| **LCSC** | C722469 | **C7440** | ✅ |
+| **Package** | SOIC-16W | **SOIC-8** | Novo footprint |
+| **Interface** | I2C | I2C | ✅ |
+| **Cristal** | Integrado (TCXO) | **Externo C32346** | +1 componente |
+| **Precisão** | ±2ppm | ±20ppm | Aceitável |
+| **Preço** | ~$2.37 | ~$0.30 + $0.15 | ✅ Muito melhor |
+| **Tipo** | Extended ($3) | **Preferred ($0)** | ✅ |
+
+**Cristal necessário:** 32.768kHz (C32346) - **Basic** ($0 taxa)
+
+### U2, U7: Level Shifter ✅ APROVADO
+
+| Parâmetro | KiCad (Footprint) | BOM Real | Status |
+|-----------|-------------------|----------|--------|
+| **Componente** | SN74LVC245APW | **SN74AHCT245PWR** | ✅ Pin-compatible |
+| **LCSC** | - | **C10910** | ✅ |
+| **Família** | LVC | **AHCT** | ✅ AHCT é o pretendido |
+| **Package** | TSSOP-20 | TSSOP-20 | ✅ Mesmo footprint |
+| **Pinout** | Standard 74x245 | Standard 74x245 | ✅ Idêntico |
+
+**Nota:** No KiCad usa-se SN74LVC245APW apenas por conveniência (footprint disponível).
+O componente real a encomendar é o **SN74AHCT245PWR (C10910)** - 100% pin-compatible.
+
+**Porquê AHCT?**
+- Ideal para **level shifting ESP32 (3.3V) → LED Matrix (5V)**
+- Inputs TTL-compatible reconhecem 3.3V como HIGH
+- Mesmo chip usado no **Adafruit MatrixPortal S3**
+- Opera a 5V no lado da matriz LED
+
+### U6: ME6211 → AMS1117-3.3 ✅ APROVADO
+
+| Parâmetro | ME6211 (Original) | AMS1117-3.3 (Novo) | Status |
+|-----------|-------------------|-------------------|--------|
+| **LCSC** | C82942 | **C6186** | ✅ |
+| **Package** | SOT-23-5 | **SOT-223** | Novo footprint |
+| **Vout** | 3.3V | 3.3V | ✅ |
+| **Iout** | 600mA | 1A | ✅ Melhor |
+| **Dropout** | 120mV | 1.1V | ⚠️ Maior |
+| **Iq** | 60µA | 5mA | ⚠️ Maior |
+| **Tipo** | Extended | **Basic** | ✅ |
+
+**Nota:** AMS1117 é o LDO standard dos ESP32 DevKit. Dropout maior mas aceitável com USB 5V input.
 
 ---
 
@@ -283,7 +380,7 @@ LCSC correto: C3020560 (GCT USB4105-GF-A)
 
 ---
 
-## Resumo de Códigos LCSC
+## Resumo de Códigos LCSC - v3.0 OTIMIZADO
 
 ```
 # Microcontrolador
@@ -292,19 +389,22 @@ U3  = C701342   (ESP32-WROOM-32E-N8)     [Extended]
 # ICs
 U4  = C84681    (CH340C)                  [Extended]
 U5  = C1980462  (D3V3XA4B10LP-7)         [Extended]
-U6  = C82942    (ME6211C33M5G-N)         [Extended]
+U6  = C6186     (AMS1117-3.3) SOT-223    [Basic] ← ALTERADO v3.0
+
+# Level Shifters (KiCad: SN74LVC245APW - mesmo footprint)
+U2,U7 = C10910  (SN74AHCT245PWR)         [Extended] ← NOVO v3.0
 
 # Transistores
 Q1  = C62892    (UMH3N)                   [Extended]
 Q2  = C916372   (MMBT2222A)              [Basic]
 
 # Díodos
-D1  = C84410    (1N4148TR)               [Basic]
-D2  = C2286     (KT-0603R)               [Basic] ← Footprint 0603!
-D3  = C123799   (SMF9.0CA)               [Extended]
+D1  = C17179590 (MMBD4148SE) SOT-23      [Basic] ← ALTERADO v3.0
+D2  = C2286     (KT-0603R)               [Basic]
+D3  = C123799   (SMF9.0CA) SOD-123FL     [Extended] ← VERIFICAR C20615788
 
 # Condensadores - TODOS BASIC!
-C3  = C12891    (22µF 1206)              [Basic] ← Footprint 1206!
+C3  = C12891    (22µF 1206)              [Extended] ← CORRIGIDO!
 C4,C6,C8 = C307331 (100nF 0402)          [Basic]
 C5  = C19702    (10µF 0603)              [Basic]
 
@@ -313,18 +413,19 @@ R1  = C25104    (330Ω)                   [Basic]
 R2  = C106232   (100Ω)                   [Basic]
 R3,R4 = C25905  (5.1kΩ)                  [Basic]
 R5  = C25744    (10kΩ)                   [Basic]
-R6  = C106235   (1kΩ)                    [Basic]
+R6  = C4410     (1kΩ 1206)               [Basic] ← ALTERADO v3.0
 
 # Outros
 F1  = C106264   (PTC 500mA 1206)         [Basic]
-J1  = C3020560  (USB4105-GF-A)           [Extended] ← CORRIGIDO!
+J1  = C3020560  (USB4105-GF-A)           [Extended]
 J2  = C68234    (2x8 Header)             [Basic]
 J3  = C474881   (KF301-5.0-2P)           [Extended]
 BZ1 = C96093    (TMB12A05)               [Extended]
 SW1,SW2 = C720477 (TS-1088)              [Extended]
 
-# RTC Module
-U2  = C722469   (DS3231SN)               [Extended]
+# RTC Module - OTIMIZADO v3.0
+U1  = C7440     (PCF8563T) SOIC-8        [Preferred] ← ALTERADO v3.0
+Y1  = C32346    (32.768kHz Crystal)      [Basic] ← NOVO v3.0
 R7,R8 = C25900  (4.7kΩ I2C pull-up)      [Basic]
 C9  = C307331   (100nF RTC bypass)       [Basic]
 BT1 = C70377    (CR2032 Holder)          [Extended]
