@@ -118,19 +118,24 @@ Alguns componentes não têm alternativa Basic viável:
 
 **Cristal necessário:** 32.768kHz (C32346) - **Basic** ($0 taxa)
 
-### U2, U7: Level Shifter ⚠️ ATENÇÃO
+### U2, U7: Level Shifter ✅ APROVADO
 
-| Parâmetro | Especificado | C10910 Real | Status |
-|-----------|--------------|-------------|--------|
-| **Componente** | SN74LVC245APW | **SN74AHCT245PWR** | ⚠️ Diferente! |
-| **Família** | LVC (1.65-3.6V) | **AHCT (4.5-5.5V)** | Verificar |
-| **Package** | TSSOP-20 | TSSOP-20 | ✅ |
+| Parâmetro | KiCad (Footprint) | BOM Real | Status |
+|-----------|-------------------|----------|--------|
+| **Componente** | SN74LVC245APW | **SN74AHCT245PWR** | ✅ Pin-compatible |
+| **LCSC** | - | **C10910** | ✅ |
+| **Família** | LVC | **AHCT** | ✅ AHCT é o pretendido |
+| **Package** | TSSOP-20 | TSSOP-20 | ✅ Mesmo footprint |
+| **Pinout** | Standard 74x245 | Standard 74x245 | ✅ Idêntico |
 
-**AVISO:** C10910 = SN74**AHCT**245PWR (família AHCT), NÃO SN74**LVC**245APW (família LVC).
-- **LVC**: Opera 1.65V-3.6V, ideal para 3.3V
-- **AHCT**: Opera 4.5V-5.5V com inputs TTL-compatíveis
+**Nota:** No KiCad usa-se SN74LVC245APW apenas por conveniência (footprint disponível).
+O componente real a encomendar é o **SN74AHCT245PWR (C10910)** - 100% pin-compatible.
 
-Para ESP32 (3.3V) → 5V level shifting, ambos funcionam, mas verificar requisitos de tensão.
+**Porquê AHCT?**
+- Ideal para **level shifting ESP32 (3.3V) → LED Matrix (5V)**
+- Inputs TTL-compatible reconhecem 3.3V como HIGH
+- Mesmo chip usado no **Adafruit MatrixPortal S3**
+- Opera a 5V no lado da matriz LED
 
 ### U6: ME6211 → AMS1117-3.3 ✅ APROVADO
 
@@ -386,8 +391,8 @@ U4  = C84681    (CH340C)                  [Extended]
 U5  = C1980462  (D3V3XA4B10LP-7)         [Extended]
 U6  = C6186     (AMS1117-3.3) SOT-223    [Basic] ← ALTERADO v3.0
 
-# Level Shifters
-U2,U7 = C10910  (SN74AHCT245PWR)         [Verificar] ← NOVO v3.0
+# Level Shifters (KiCad: SN74LVC245APW - mesmo footprint)
+U2,U7 = C10910  (SN74AHCT245PWR)         [Extended] ← NOVO v3.0
 
 # Transistores
 Q1  = C62892    (UMH3N)                   [Extended]
