@@ -81,16 +81,23 @@ Posições aproximadas (coordenadas X, Y em mm):
 | R_CC1 | `Device:R` | ~(115, 145) | 5.1kΩ | `Resistor_SMD:R_0402_1005Metric` | C25905 |
 | R_CC2 | `Device:R` | ~(115, 155) | 5.1kΩ | `Resistor_SMD:R_0402_1005Metric` | C25905 |
 
-### 3.5 J_BYPASS (Jumper)
+### 3.5 J_MODE (Jumper Seletor de Modo)
 
 1. Pressiona **A**
-2. Procura: `Connector_Generic:Conn_01x02`
-3. Coloca em **~(135, 95)**
+2. Procura: `Connector_Generic:Conn_01x03`
+3. Coloca entre Q1 e Buck
 4. Pressiona **E** e define:
-   - **Reference**: `J_BYPASS`
-   - **Value**: `Bypass 5V`
-   - **Footprint**: `Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical`
-   - **LCSC**: `C36717`
+   - **Reference**: `J_MODE`
+   - **Value**: `Mode Select`
+   - **Footprint**: `Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical`
+   - **LCSC**: `C2337`
+
+**Ligações J_MODE:**
+| Pino | Liga a |
+|------|--------|
+| 1 | F1 saída (VBUS após fuse) |
+| 2 | Q1:Source + Buck VIN |
+| 3 | Buck VOUT / 5V cargas |
 
 ---
 
@@ -102,7 +109,8 @@ Posições aproximadas (coordenadas X, Y em mm):
 J1:VBUS (A4,A9,B4,B9) → F1:1
 F1:2 → C_IN → GND
 F1:2 → U1:VBUS (pin 16)
-F1:2 → Q1:D (Drain) → J_BYPASS:1
+F1:2 → Q1:D (Drain)
+F1:2 → J_MODE:1
 ```
 
 ### 4.2 Ligações IP2721
@@ -124,19 +132,21 @@ J1:CC1 → R_CC1 → GND
 J1:CC2 → R_CC2 → GND
 ```
 
-### 4.4 Saída 20V
+### 4.4 Saída via J_MODE
 
 ```
-Q1:S (Source) → C2 → GND
-Q1:S (Source) → J_BYPASS:2
-Q1:S (Source) → Label "20V_OUT" (para próximo bloco)
+F1:2 (saída fuse) → J_MODE:1
+Q1:S (Source) → J_MODE:2 + C1 → GND
+J_MODE:2 → Buck VIN
+J_MODE:3 → Buck VOUT → C2 → GND
+J_MODE:3 → 5V cargas
 ```
 
-### 4.5 Bypass
+### 4.5 Modos J_MODE
 
 ```
-J_BYPASS:1 → F1:2 (antes do MOSFET)
-J_BYPASS:2 → Q1:S (depois do MOSFET)
+Modo Normal (jumper 2-3):  Q1:S → Buck → 5V cargas
+Modo Bypass (jumper 1-2):  F1 → Buck → ~4.5V cargas
 ```
 
 ---
@@ -155,48 +165,54 @@ Adiciona Global Labels para clareza:
 ## Diagrama de Referência
 
 ```
-                          J_BYPASS
-                     ┌───[○ ○]───┐
-                     │           │
-USB-C VBUS ──[F1]────┼───► Q1:D  │
-              │      │      │    │
-              │      │      G    │
-              │      │      │    │
-             ═╧═    IP2721:VBUSG │
-            C_IN         │       │
-              │          │       │
-             GND    ─────┴───────┴──► Q1:S ──► 20V_OUT
-                              │            │
-                         IP2721:VIN       ═╧═ C1+C2
-                              │            │
-                         [R_SEL]          GND
-                              │
-                             GND
+                                    J_MODE
+                               ┌──[○ ○ ○]──┐
+                               │   1 2 3   │
+                               │   │ │ │   │
+USB-C VBUS ──[F1]──┬───────────┴───┘ │ │   │
+              │    │                 │ │   │
+              │    └──► Q1:D         │ │   │
+              │           │          │ │   │
+             ═╧═       Q1:Gate       │ │   │
+            C_IN          │          │ │   │
+              │    IP2721:VBUSG      │ │   │
+             GND          │          │ │   │
+                          │          │ │   │
+                       Q1:S ─────────┘ │   │
+                          │            │   │
+                    IP2721:VIN    Buck VIN │
+                          │            │   │
+                         ═╧═ C1   Buck VOUT┘──► 5V cargas
+                          │            │
+                         GND          ═╧═ C2
+                                       │
+                [R_SEL]               GND
+            SEL ──┴── VIN
 
-USB-C CC1 ──┬──► IP2721:CC1
-            │
-           [R_CC1] 5.1kΩ
-            │
-           GND
-
-USB-C CC2 ──┬──► IP2721:CC2
-            │
-           [R_CC2] 5.1kΩ
-            │
-           GND
+USB-C CC1 ──┬──► IP2721:CC1      USB-C CC2 ──┬──► IP2721:CC2
+            │                                 │
+           [R_CC1] 5.1kΩ                    [R_CC2] 5.1kΩ
+            │                                 │
+           GND                               GND
 ```
+
+**Modos de operação:**
+- Jumper **2-3**: Normal (PD → Q1 → Buck → 5V regulado)
+- Jumper **1-2**: Bypass (5V USB → Buck → ~4.5V)
 
 ---
 
 ## Verificação Final
 
-- [ ] F1 com LCSC C2982291, footprint 2920
+- [ ] F1 com LCSC `C2982291`, footprint `Fuse_2920_7451Metric`
 - [ ] IP2721 com todos os GND ligados (pins 5,6,14,15)
-- [ ] AO3400A com Gate, Source, Drain corretos
-- [ ] C_IN antes do MOSFET, C1+C2 depois
-- [ ] R_SEL ligada entre SEL e VIN
-- [ ] R_CC1 e R_CC2 ligadas a GND
-- [ ] J_BYPASS permite curto-circuitar D-S do MOSFET
+- [ ] AO3400A: G←IP2721:VBUSG, D←F1, S→J_MODE:2+IP2721:VIN
+- [ ] C_IN entre F1 saída e GND
+- [ ] C1 entre J_MODE:2 e GND
+- [ ] C2 entre J_MODE:3 e GND
+- [ ] R_SEL entre IP2721:SEL e IP2721:VIN
+- [ ] R_CC1 e R_CC2 entre CC e GND
+- [ ] J_MODE: pino 1←F1, pino 2←Q1:S, pino 3→cargas
 - [ ] Todos os LCSC codes definidos
 
 ---

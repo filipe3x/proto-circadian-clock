@@ -16,15 +16,44 @@ PSU USB-C PD de 20V com:
 ### 1.2 Arquitectura
 
 ```
-USB-C VBUS ──► F1 (PTC) ──► IP2721 + AO3400A ──► Buck ──► 5V
-                              (PD Trigger)      (futuro)
+USB-C VBUS ──► F1 (PTC) ──► IP2721 + AO3400A ──► J_MODE ──► Buck ──► 5V
+                              (PD Trigger)       (1×3)     (SY8368)
 ```
 
-### 1.3 Fallback 5V
+### 1.3 Modos de Operação (J_MODE)
 
-Jumper J_BYPASS permite bypass do IP2721 para operação básica a 5V:
-- **Aberto**: Modo normal, IP2721 negocia 20V/15V/9V
-- **Fechado**: Bypass, 5V direto via resistências 5.1kΩ nos CC
+Jumper J_MODE (1×3 pinos) permite selecionar entre modo normal e bypass completo:
+
+```
+         J_MODE [○ ○ ○]
+                 1 2 3
+                 │ │ │
+Q1:Source ───────┘ │ │
+                   │ │
+Buck VIN ──────────┘ │
+                     │
+Buck VOUT / 5V ──────┘
+```
+
+| Posição | Jumper | Modo | Caminho | Saída |
+|---------|--------|------|---------|-------|
+| **2-3** | `[○ ■ ■]` | Normal PD | Q1 → Buck | 5V regulado |
+| **1-2** | `[■ ■ ○]` | Bypass MOSFET | F1 → Buck | ~4.5V (dropout) |
+
+**Notas**:
+- Em modo **Normal (2-3)**: IP2721 negocia PD, abre Q1, tensão alta vai ao Buck, saída 5V regulado
+- Em modo **Bypass (1-2)**: Salta o Q1, 5V do USB vai direto ao Buck, mas Buck com VIN≈VOUT tem dropout
+- Para bypass **completo** (5V limpos), ver secção 4.6 - Alternativa A com dois jumpers
+
+### 1.4 Comportamento com Diferentes Fontes
+
+| Fonte | J_MODE | IP2721 | Q1 | Buck | Resultado |
+|-------|--------|--------|----|----- |-----------|
+| PD 20V | 2-3 | Negocia 20V | Abre | 20V→5V | ✓ 5V regulado |
+| PD 15V | 2-3 | Fallback 15V | Abre | 15V→5V | ✓ 5V regulado |
+| PD 9V | 2-3 | Fallback 9V | Abre | 9V→5V | ✓ 5V regulado |
+| USB 5V básico | 2-3 | Timeout | **Fechado** | — | ❌ Sem saída |
+| USB 5V básico | **1-2** | Ignorado | Bypassed | 5V→~4.5V | ⚠️ ~4.5V (dropout) |
 
 ---
 
@@ -33,20 +62,27 @@ Jumper J_BYPASS permite bypass do IP2721 para operação básica a 5V:
 ### 2.1 Esquema
 
 ```
-                                         J_BYPASS
-                                   ┌───────○───────┐
-                                   │               │
-USB-C VBUS ───┬────────────────────┴──► AO3400A D  │
-              │                              │     │
-              │                              S ────┴──┬──► Saída 20V
-              │                              │        │
-              ├──► IP2721 VBUS (pin 16)      G        │
-              │                              │        │
-             ═╧═ C_IN 10µF 50V               │       ═╧═ C1 1µF 50V
-              │                              │        │
-             GND               IP2721 VBUSG (pin 4)  ═╧═ C2 10µF 50V
-                                                      │
-                                                     GND
+                                              J_MODE
+                                          ┌──[○ ○ ○]──┐
+                                          │   1 2 3   │
+                                          │   │ │ │   │
+USB-C VBUS ───┬──[F1]─────────► AO3400A D │   │ │ │   │
+              │                     │     │   │ │ │   │
+              │                     S ────┴───┘ │ │   │
+              │                     │           │ │   │
+              │                     G      Buck VIN   │
+              ├──► IP2721 VBUS      │           │     │
+              │    (pin 16)         │           │     │
+              │                     │      Buck VOUT──┴──► 5V Cargas
+             ═╧═ C_IN              ═╧═ C1       │
+             10µF 50V              1µF 50V    ═╧═ C2
+              │                     │         10µF 50V
+             GND                    │           │
+                                    │          GND
+                          IP2721 VBUSG (pin 4)
+                                    │
+                          IP2721 VIN (pin 1)
+
 
 USB-C CC1 ────┬──► IP2721 pin 12 (CC1)
               │
@@ -81,10 +117,22 @@ IP2721 pin 7 (SEL) ──[100kΩ]──► VIN (para selecionar 20V max)
 | Pino | Nome | Liga a |
 |------|------|--------|
 | 1 | G (Gate) | IP2721 VBUSG (pin 4) |
-| 2 | S (Source) | Saída 20V + IP2721 VIN + C1 + C2 |
-| 3 | D (Drain) | USB-C VBUS + J_BYPASS |
+| 2 | S (Source) | IP2721 VIN (pin 1) + C1 + **J_MODE pino 1** |
+| 3 | D (Drain) | F1 saída + IP2721 VBUS (pin 16) + C_IN |
 
-### 2.4 Posição dos Condensadores
+### 2.4 Ligações J_MODE (1×3)
+
+| Pino J_MODE | Liga a | Função |
+|-------------|--------|--------|
+| 1 | Q1:Source (AO3400A) | Saída do MOSFET (9V/15V/20V) |
+| 2 | Buck VIN (SY8368) | Entrada do conversor |
+| 3 | Buck VOUT / 5V cargas | Saída final |
+
+**Posições do jumper:**
+- **Pinos 1-2 ligados**: Modo normal - energia passa pelo Buck
+- **Pinos 2-3 ligados**: Modo bypass - 5V direto às cargas (salta Q1 + Buck)
+
+### 2.5 Posição dos Condensadores
 
 | Ref | Valor | Posição | Função |
 |-----|-------|---------|--------|
@@ -125,7 +173,7 @@ IP2721 pin 7 (SEL) ──[100kΩ]──► VIN (para selecionar 20V max)
 | Ref | Descrição | Valor | LCSC | Stock | Footprint KiCad |
 |-----|-----------|-------|------|-------|-----------------|
 | J1 | USB-C Receptacle | 16-pin | (existente) | - | (existente no projeto) |
-| J_BYPASS | Pin Header | 1×2P 2.54mm | C36717 | **Basic** | `Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical` |
+| J_MODE | Pin Header | 1×3P 2.54mm | C2337 | **Basic** | `Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical` |
 
 ---
 
@@ -154,14 +202,24 @@ IP2721 pin 7 (SEL) ──[100kΩ]──► VIN (para selecionar 20V max)
 
 **Razão**: Maior margem de segurança sem custo adicional significativo.
 
-### 4.3 Fallback 5V
+### 4.3 Fallback 5V com J_MODE
 
-**Decisão**: Jumper + Resistências 5.1kΩ sempre montadas
+**Decisão**: Jumper 1×3 (J_MODE) + Resistências 5.1kΩ sempre montadas
 
-**Razão**:
-- IP2721 é componente crítico, probabilidade de erro na primeira vez
-- Fallback permite testar a PCB mesmo com IP2721 mal soldado
-- Resistências 5.1kΩ não interferem com operação normal do IP2721
+**Razão para jumper 3 pinos em vez de 2**:
+- Com 5V de entrada, o Buck SY8368 **não funciona** (VIN ≈ VOUT, sem headroom)
+- Jumper 2 pinos só bypassava o MOSFET, não o Buck
+- Jumper 3 pinos permite bypass **completo** (MOSFET + Buck)
+
+**Sequência com carregador 5V básico (sem PD)**:
+1. IP2721 tenta negociar PD → timeout (carregador não responde)
+2. IP2721 **não abre** o MOSFET Q1 → saída = 0V
+3. Com J_MODE em 2-3: 5V passa direto às cargas, ignorando Q1 e Buck
+
+**Resistências 5.1kΩ**:
+- Sempre montadas nos CC1/CC2
+- Sinalizam ao carregador USB básico: "sou sink, dá-me 5V"
+- Não interferem com operação normal do IP2721
 
 ### 4.4 Posição C1 vs C2
 
@@ -173,6 +231,86 @@ IP2721 pin 7 (SEL) ──[100kΩ]──► VIN (para selecionar 20V max)
 | C2 (10µF) | Perto Buck | Reserva energia, picos |
 
 **Razão**: Condensadores pequenos respondem mais rápido, grandes armazenam mais. Juntos cobrem todas as situações.
+
+### 4.5 Mecânica Detalhada do J_MODE
+
+**Esquema de ligações do J_MODE:**
+
+```
+                              J_MODE
+                          ┌──[○ ○ ○]──┐
+                          │   1 2 3   │
+                          │   │ │ │   │
+F1 saída ─────────────────┴───┘ │ │   │  ← Pino 1: VBUS após fuse
+                                │ │   │
+Q1:Source ──────────────────────┤ │   │  ← Também liga ao pino 2
+                                │ │   │
+                           Buck VIN   │  ← Pino 2: Entrada Buck
+                                │     │
+                           Buck VOUT──┴──► 5V cargas  ← Pino 3: Saída
+```
+
+**Modo Normal (Jumper 2-3): PD com Buck**
+
+```
+[○ ■ ■]  Pinos 2-3 ligados
+ 1 2-3
+
+USB-C PD ──► F1 ──► Q1:D ──► Q1:S ──► Buck VIN ──► Buck VOUT ──► 5V
+  20V              (abre)            (via pino 2)   (via pino 3)
+```
+
+- IP2721 negocia tensão → abre Q1
+- 20V/15V/9V passa pelo Q1 → entra no Buck
+- Buck converte para 5V regulado
+
+**Modo Bypass (Jumper 1-2): 5V Direto**
+
+```
+[■ ■ ○]  Pinos 1-2 ligados
+ 1-2 3
+
+USB-C 5V ──► F1 ──► J_MODE:1 ──► J_MODE:2 ──► Buck VIN
+                                                  │
+                                            (Buck não regula,
+                                             passa ~5V direto)
+                                                  │
+                                             Buck VOUT ──► 5V cargas
+```
+
+- Q1 fica fechado (IP2721 não abre sem PD)
+- 5V entra direto pelo pino 1 → pino 2 → Buck
+- Buck com VIN≈VOUT opera em ~100% duty cycle, passa 5V (com pequena queda)
+
+### 4.6 Limitação e Alternativa
+
+**Limitação do jumper 1×3**: Em modo bypass (1-2), os 5V ainda passam pelo Buck. Com VIN≈VOUT, o Buck opera no limite e a saída cai para ~4.5-4.7V (dropout).
+
+**Se precisares de 5V "limpos" em bypass**, há duas alternativas:
+
+**Alternativa A: Dois jumpers de 2 pinos**
+
+```
+J_MOSFET (1×2)           J_BUCK (1×2)
+    [○ ○]                    [○ ○]
+     1 2                      1 2
+     │ │                      │ │
+F1 ──┴─┤                      │ │
+       │                      │ │
+Q1:S ──┘──► Buck VIN ─────────┴─┤
+                                │
+                     Buck VOUT──┘──► 5V cargas
+```
+
+| J_MOSFET | J_BUCK | Modo |
+|----------|--------|------|
+| Aberto | Aberto | Normal PD (via Q1 e Buck) |
+| Fechado | Aberto | Bypass MOSFET (Buck ainda ativo) |
+| Fechado | Fechado | Bypass completo (5V direto) |
+
+**Alternativa B: Manter 1×3 e aceitar ~4.5V em bypass**
+
+Para a maioria dos casos (LEDs, ESP32), 4.5-4.7V é suficiente para funcionar em modo de teste/debug.
 
 ---
 
