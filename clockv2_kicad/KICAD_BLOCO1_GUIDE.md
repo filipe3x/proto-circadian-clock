@@ -112,7 +112,7 @@ Posições aproximadas (coordenadas X, Y em mm):
    - **Reference**: `D1`
    - **Value**: `SMBJ5.0A`
    - **Footprint**: `Diode_SMD:D_SMB`
-   - **LCSC**: `C113620`
+   - **LCSC**: `C19077558`
 
 **Função**: Protege as cargas se alguém usar bypass (1-2) com fonte PD (20V). O TVS limita a tensão e F1 dispara.
 
