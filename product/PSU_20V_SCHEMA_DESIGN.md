@@ -145,9 +145,205 @@ IP2721 pin 7 (SEL) ──[100kΩ]──► VIN (para selecionar 20V max)
 
 ---
 
-## 3. Bill of Materials (BOM) - Bloco 1
+## 2B. Bloco 2: Buck Converter SY8368AQQC
 
-### 3.1 Componentes Principais
+### 2B.1 Especificações SY8368AQQC
+
+| Parâmetro | Valor | Notas |
+|-----------|-------|-------|
+| VIN | 4V - 28V | ✓ Suporta 20V PD |
+| VOUT | 0.6V - VIN | Ajustável via feedback |
+| IOUT | 8A contínuo | 16A pico |
+| VFB | 0.6V | Tensão referência feedback |
+| Frequência | 800kHz | Pseudo-constante em CCM |
+| RDS(ON) | 20mΩ / 10mΩ | High-side / Low-side |
+| Package | QFN-20 3×3mm | Thermal pad central |
+| LCSC | C207642 | **Basic** |
+
+### 2B.2 Esquema de Aplicação
+
+```
+                            VIN (9-20V do Q1:Source)
+                                    │
+                    ┌───────────────┼───────────────┐
+                    │               │               │
+                   ═╧═             ═╧═              │
+               C_VIN1          C_VIN2              │
+              22µF 25V        22µF 25V             │
+                │               │                  │
+                └───────┬───────┘                  │
+                        │                          │
+                        │    ┌─────────────────────┤
+                        │    │                     │
+                        │    │  ┌─────────────────────────────────┐
+                        │    │  │         SY8368AQQC (U2)         │
+                        │    │  │              QFN-20              │
+                        │    │  │                                  │
+                        ├────┼──┤ VIN (19,20)          SW (2,3,4) ├──┐
+                        │    │  │                                  │  │
+                        │    ├──┤ EN (18)                          │  │
+                        │    │  │                                  │  │
+                        │    │  │ SS (17) ────[C_SS]──── GND      │  │
+                        │    │  │            10nF                  │  │
+                        │    │  │                                  │  │
+                        │    │  │ MODE (11) ────────── GND (CCM)  │  │
+                        │    │  │                                  │  │
+                        │    │  │ BOOT (1) ────[C_BOOT]───┐       │  │
+                        │    │  │             100nF       │       │  │
+                        │    │  │                         │       │  │
+                        │    │  │ FB (14) ◄───┬───────────│───────│──│──┐
+                        │    │  │             │           │       │  │  │
+                        │    │  │ COMP (15) ──┤           │       │  │  │
+                        │    │  │             │           │       │  │  │
+                        │    │  │ PGND (5-9) ─┴─ GND     │       │  │  │
+                        │    │  │                         │       │  │  │
+                        │    │  │ SGND (12,13) ── GND    │       │  │  │
+                        │    │  │                         │       │  │  │
+                        │    │  └─────────────────────────│───────┘  │  │
+                        │    │                            │          │  │
+                        │    └────────────────────────────┘          │  │
+                        │                                            │  │
+                       GND                      ┌─────────────────────┘  │
+                                                │                        │
+                                                │  L1 (2.2µH)            │
+                                               ═╪═ ~~~~~ ═╪═             │
+                                                │         │              │
+                                                │         ├──────────────┤
+                                                │         │              │
+                                                │    ┌────┴────┐         │
+                                                │    │         │         │
+                                               ═╧═  ═╧═       ═╧═       [R_FB1]
+                                            C_OUT1 C_OUT2   C_OUT3      22kΩ
+                                           22µF×4  (1206)              │
+                                                │         │              │
+                                                │         │         VOUT (5V)
+                                                │         │              │
+                                               GND       GND        [R_FB2]
+                                                                       3kΩ
+                                                                         │
+                                                                        GND
+```
+
+### 2B.3 Cálculo Resistências Feedback
+
+**Fórmula**: `VOUT = VFB × (1 + R_FB1/R_FB2)`
+
+Para VOUT = 5V com VFB = 0.6V:
+```
+5V = 0.6V × (1 + R_FB1/R_FB2)
+5/0.6 = 1 + R_FB1/R_FB2
+8.33 = 1 + R_FB1/R_FB2
+R_FB1/R_FB2 = 7.33
+```
+
+**Valores escolhidos**:
+- R_FB1 = 22kΩ (C25765, Basic)
+- R_FB2 = 3kΩ (C25890, Basic)
+
+**Verificação**: `0.6 × (1 + 22/3) = 0.6 × 8.33 = 5.0V ✓`
+
+### 2B.4 Seleção do Indutor
+
+**Requisitos**:
+- Indutância: 2.2µH (recomendado datasheet)
+- Corrente saturação: >10A (para 8A + margem)
+- DCR: <15mΩ (para eficiência)
+
+**Opções**:
+| Ref | Modelo | Isat | DCR | LCSC | Stock |
+|-----|--------|------|-----|------|-------|
+| L1 | SRP1265A-2R2M | 13A | 8mΩ | C132462 | **Basic** |
+| L1 (alt) | CKST0603-2.2uH | 10A | 12mΩ | C3002634 | Extended |
+
+**Escolha**: SRP1265A-2R2M (C132462) - Basic stock, boa margem de corrente.
+
+### 2B.5 Condensadores
+
+**Entrada (VIN)**:
+| Ref | Valor | Qty | Tensão | LCSC | Stock | Footprint |
+|-----|-------|-----|--------|------|-------|-----------|
+| C_VIN | 22µF | 2 | 25V | C52306 | **Basic** | 1210 |
+
+**Saída (VOUT)**:
+| Ref | Valor | Qty | Tensão | LCSC | Stock | Footprint |
+|-----|-------|-----|--------|------|-------|-----------|
+| C_OUT | 22µF | 4 | 10V | C12891 | **Basic** | 1206 |
+
+**Auxiliares**:
+| Ref | Valor | Função | LCSC | Stock | Footprint |
+|-----|-------|--------|------|-------|-----------|
+| C_BOOT | 100nF 25V | Bootstrap | C307331 | **Basic** | 0402 |
+| C_SS | 10nF 25V | Soft-start | C15195 | **Basic** | 0402 |
+
+### 2B.6 Pinout SY8368AQQC (QFN-20)
+
+```
+              ┌──────────────────────┐
+              │   SY8368AQQC (top)   │
+              │                      │
+       BOOT ─┤1                  20├─ VIN
+         SW ─┤2                  19├─ VIN
+         SW ─┤3                  18├─ EN
+         SW ─┤4                  17├─ SS
+       PGND ─┤5                  16├─ PGOOD
+       PGND ─┤6                  15├─ COMP
+       PGND ─┤7                  14├─ FB
+       PGND ─┤8                  13├─ SGND
+       PGND ─┤9                  12├─ SGND
+         NC ─┤10                 11├─ MODE
+              │                      │
+              │    [THERMAL PAD]     │
+              │        GND           │
+              └──────────────────────┘
+```
+
+### 2B.7 Ligações SY8368AQQC
+
+| Pino | Nome | Liga a | Notas |
+|------|------|--------|-------|
+| 1 | BOOT | C_BOOT → SW | Bootstrap para high-side driver |
+| 2,3,4 | SW | L1 + C_BOOT | Nó de comutação |
+| 5-9 | PGND | GND (power) | Ground de potência, múltiplas vias |
+| 10 | NC | Não ligar | Não conectado |
+| 11 | MODE | GND | CCM forçado (melhor para cargas constantes) |
+| 12,13 | SGND | GND (signal) | Ground de sinal |
+| 14 | FB | Divisor R_FB1/R_FB2 | Feedback para regulação |
+| 15 | COMP | Rede compensação | Ou NC se estável |
+| 16 | PGOOD | NC ou LED | Indicador power-good (opcional) |
+| 17 | SS | C_SS → GND | Soft-start (10nF ≈ 6ms) |
+| 18 | EN | VIN | Always-on (ou controlo externo) |
+| 19,20 | VIN | Q1:Source + C_VIN | Entrada 9-20V |
+| PAD | GND | GND via múltiplas vias | Dissipação térmica |
+
+### 2B.8 Layout Crítico
+
+```
+Regras de layout para SY8368:
+
+1. LOOP DE ALTA CORRENTE (minimizar):
+   VIN ─► C_VIN ─► U2(VIN/SW) ─► L1 ─► C_OUT ─► GND
+
+2. PLACEMENT:
+   C_VIN: Imediatamente junto aos pinos VIN (19,20)
+   L1: Adjacente aos pinos SW (2,3,4)
+   C_OUT: Distribuídos após L1
+   C_BOOT: Entre pinos BOOT(1) e SW(2)
+
+3. GROUND:
+   - Plano contínuo na layer inferior
+   - Mínimo 9 vias (3×3) no thermal pad
+   - PGND e SGND ligados no mesmo ponto
+
+4. THERMAL:
+   - Copper pour na top layer sob U2
+   - Vias térmicas 0.3mm no thermal pad
+```
+
+---
+
+## 3. Bill of Materials (BOM)
+
+### 3.1 Bloco 1 - Componentes Principais
 
 | Ref | Descrição | Valor | LCSC | Stock | Footprint KiCad |
 |-----|-----------|-------|------|-------|-----------------|
@@ -178,6 +374,25 @@ IP2721 pin 7 (SEL) ──[100kΩ]──► VIN (para selecionar 20V max)
 |-----|-----------|-------|------|-------|-----------------|
 | J1 | USB-C Receptacle | 16-pin | (existente) | - | (existente no projeto) |
 | J_MODE | Pin Header | 1×3P 2.54mm | C2337 | **Basic** | `Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical` |
+
+### 3.5 Bloco 2 - Buck Converter
+
+| Ref | Descrição | Valor | LCSC | Stock | Footprint KiCad |
+|-----|-----------|-------|------|-------|-----------------|
+| U2 | Buck Converter | SY8368AQQC | C207642 | **Basic** | `Package_DFN_QFN:QFN-20-1EP_3x3mm_P0.4mm_EP1.65x1.65mm` |
+| L1 | Indutor | 2.2µH 13A | C132462 | **Basic** | `Inductor_SMD:L_Bourns_SRP1265A` |
+| R_FB1 | Feedback Upper | 22kΩ 1% | C25765 | **Basic** | `Resistor_SMD:R_0402_1005Metric` |
+| R_FB2 | Feedback Lower | 3kΩ 1% | C25890 | **Basic** | `Resistor_SMD:R_0402_1005Metric` |
+
+### 3.6 Bloco 2 - Condensadores
+
+| Ref | Descrição | Valor | LCSC | Stock | Footprint KiCad |
+|-----|-----------|-------|------|-------|-----------------|
+| C_VIN1 | Input Cap | 22µF 25V | C52306 | **Basic** | `Capacitor_SMD:C_1210_3225Metric` |
+| C_VIN2 | Input Cap | 22µF 25V | C52306 | **Basic** | `Capacitor_SMD:C_1210_3225Metric` |
+| C_OUT1-4 | Output Cap | 22µF 10V ×4 | C12891 | **Basic** | `Capacitor_SMD:C_1206_3216Metric` |
+| C_BOOT | Bootstrap | 100nF 25V | C307331 | **Basic** | `Capacitor_SMD:C_0402_1005Metric` |
+| C_SS | Soft-start | 10nF 25V | C15195 | **Basic** | `Capacitor_SMD:C_0402_1005Metric` |
 
 ---
 
@@ -325,7 +540,9 @@ Com bypass 20V: TVS limita a ~9V enquanto F1 (3A) dispara, protegendo as cargas.
 
 ---
 
-## 5. Resumo de Custos (Bloco 1)
+## 5. Resumo de Custos
+
+### 5.1 Bloco 1 (Entrada USB-C PD)
 
 | Tipo | Qty | Preço unit. | Total |
 |------|-----|-------------|-------|
@@ -339,24 +556,48 @@ Com bypass 20V: TVS limita a ~9V enquanto F1 (3A) dispara, protegendo as cargas.
 | Pin Header | 1 | ~€0.02 | €0.02 |
 | **Total Bloco 1** | | | **~€0.65** |
 
+### 5.2 Bloco 2 (Buck Converter)
+
+| Tipo | Qty | Preço unit. | Total |
+|------|-----|-------------|-------|
+| SY8368AQQC | 1 | ~€0.55 | €0.55 |
+| Indutor 2.2µH | 1 | ~€0.25 | €0.25 |
+| MLCC 22µF 25V (C_VIN) | 2 | ~€0.08 | €0.16 |
+| MLCC 22µF 10V (C_OUT) | 4 | ~€0.03 | €0.12 |
+| MLCC 100nF (C_BOOT) | 1 | ~€0.01 | €0.01 |
+| MLCC 10nF (C_SS) | 1 | ~€0.01 | €0.01 |
+| Resistências FB (×2) | 2 | ~€0.01 | €0.02 |
+| **Total Bloco 2** | | | **~€1.12** |
+
+### 5.3 Total PSU
+
+| Bloco | Custo |
+|-------|-------|
+| Bloco 1 (USB-C PD) | €0.65 |
+| Bloco 2 (Buck) | €1.12 |
+| **Total PSU** | **~€1.77** |
+
 ---
 
 ## 6. Próximos Passos
 
-- [ ] Bloco 2: Buck Converter SY8368AQQC (20V → 5V)
-- [ ] Bloco 3: Condensadores entrada/saída do Buck
-- [ ] Bloco 4: Resistências feedback (divisor para 5V)
-- [x] ~~Bloco 5: Proteção adicional~~ → TVS D1 implementado (secção 4.6)
+- [x] ~~Bloco 2: Buck Converter SY8368AQQC~~ → Secção 2B
+- [x] ~~Bloco 3: Condensadores entrada/saída do Buck~~ → Secção 2B.5
+- [x] ~~Bloco 4: Resistências feedback (divisor para 5V)~~ → Secção 2B.3
+- [x] ~~Bloco 5: Proteção adicional~~ → TVS D1 (secção 4.6)
+- [ ] Atualizar guia KiCad com Bloco 2
+- [ ] Criar símbolo SY8368AQQC no KiCad
 
 ---
 
 ## 7. Referências
 
 - [IP2721 Datasheet](https://datasheet.lcsc.com/lcsc/2006111335_INJOINIC-IP2721_C603176.pdf)
+- [SY8368AQQC Datasheet](https://www.lcsc.com/datasheet/lcsc_datasheet_2302161530_Silergy-Corp-SY8368AQQC_C207642.pdf)
 - [POWER_SUPPLY_v3.md](./POWER_SUPPLY_v3.md) - Documentação anterior
 - [Hackaday TS100 USB-C Project](https://cdn.hackaday.io/files/1721877366848608/V1_2%20Schematic_TS100%20-%20USB%20C%20IP2721.pdf)
 
 ---
 
 *Documento criado: Janeiro 2025*
-*Versão: 1.0 - Bloco 1 (Entrada USB-C PD)*
+*Versão: 2.0 - Bloco 1 + Bloco 2 (Buck Converter)*
