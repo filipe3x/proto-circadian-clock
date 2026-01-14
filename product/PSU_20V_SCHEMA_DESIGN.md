@@ -154,7 +154,7 @@ IP2721 pin 7 (SEL) ──[100kΩ]──► VIN (para selecionar 20V max)
 | U1 | PD Trigger | IP2721 | C603176 | Extended | `Package_SO:TSSOP-16_4.4x5mm_P0.65mm` |
 | Q1 | N-MOSFET | AO3400A 30V | C20917 | **Basic** | `Package_TO_SOT_SMD:SOT-23` |
 | F1 | PTC Fuse | 3A 30V | C2982291 | Extended | `Fuse:Fuse_2920_7451Metric` |
-| D1 | TVS Diode | SMBJ5.0A | C19077558 | Extended | `Diode_SMD:D_SMB` |
+| D1 | TVS Diode | SMBJ5.0A | C19077558 | Extended (Promo) | `Diode_SMD:D_SMB` |
 
 ### 3.2 Condensadores
 
