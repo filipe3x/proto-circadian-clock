@@ -149,7 +149,7 @@ Estratégia de Negociação PD:
 Fluxo de Energia (15V @ 2A = 30W entrada):
 ═══════════════════════════════════════════════════════════════
 
-  USB-C         CH224K          SY8368A          Cargas
+  USB-C         IP2721          SY8368A          Cargas
   Fonte         PD Trigger      Buck Sync
   ─────         ──────────      ─────────        ──────
     │                │               │               │
@@ -198,14 +198,14 @@ IP2721 - USB-C PD Sink Controller:
   • Fallback automático para tensão máxima suportada
   • Controlo de MOSFET externo via VBUSG
   • Protecção integrada (OCP, OVP, short)
-  • Package: SOP-16
+  • Package: TSSOP-16 (4.4x5mm, pitch 0.65mm)
   • LCSC: C603176 (Extended)
 
   Pinout IP2721:
   ──────────────
 
         ┌──────────────────────────────────┐
-        │          IP2721 (SOP-16)         │
+        │          IP2721 (TSSOP-16)        │
         │                                  │
    VIN ─┤1   VIN               VBUS   16├── VBUS (entrada USB-C)
   VOUT ─┤2   VOUT              GND    15├── GND
@@ -281,7 +281,8 @@ AO3400A - N-Channel MOSFET (Power Path):
          │                                         │
    VBUS ─┤ VBUS(16)                   CC1(12) ├───► CC1
          │                                         │
-   VBUS ─┤ VIN(1)                     CC2(13) ├───► CC2
+   VIN* ─┤ VIN(1)                     CC2(13) ├───► CC2
+         │  * VIN liga ao Source do MOSFET (após switch)
          │                                         │
          │ VBUSG(4) ──────────────────────┐        │
          │                                │        │
@@ -778,7 +779,7 @@ Medição de Tensão de Entrada (para detecção de perfil):
   O ESP32 mede a tensão de entrada para detectar o perfil PD
   negociado e ajustar o brilho máximo automaticamente.
 
-  VOUT do CH224K (5V-20V)
+  VIN após MOSFET (5V-20V)
           │
           │
          [R3]  100kΩ (1%)
@@ -1093,7 +1094,7 @@ void loop() {
 
 | Ref | Componente | Especificação | Package | Qty | Preço | LCSC | Stock |
 |-----|------------|---------------|---------|-----|-------|------|-------|
-| U1 | IP2721 | USB-C PD Trigger | SOP-16 | 1 | €0.40 | C603176 | Extended |
+| U1 | IP2721 | USB-C PD Trigger | TSSOP-16 | 1 | €0.40 | C603176 | Extended |
 | Q1 | AO3400A | N-MOSFET 30V 5.7A | SOT-23 | 1 | €0.03 | C20917 | Basic |
 | U2 | SY8368AQQC | Buck Sync 8A | QFN-20 3x3 | 1 | €0.55 | C207642 | Basic |
 | L1 | CKST0603-2.2uH/M | Indutor 2.2µH 10A | 6.6x6.6x3mm | 1 | €0.25 | C3002634 | Extended |
@@ -1126,7 +1127,7 @@ void loop() {
 | Ref | Componente | Especificação | Package | Qty | Preço | LCSC | Stock |
 |-----|------------|---------------|---------|-----|-------|------|-------|
 | J1 | USB-C Receptacle | 16-pin USB 2.0 | SMD | 1 | €0.40 | C165948 | Basic |
-| F1 | PTC Fuse | 3A hold, 6A trip | 1812 | 1 | €0.15 | C369159 | Basic |
+| F1 | PTC Fuse | 3A hold, 6A trip, 30V | 2920 | 1 | €0.05 | C2982291 | Extended |
 | D1 | SMAJ24A-13-F | TVS 24V (VBUS) | SMA | 1 | €0.08 | C134973 | Basic |
 | D2 | SRV05-4 | 4-ch ESD (CC/D+/D-) | SOT-23-6 | 1 | €0.10 | C558418 | Basic |
 | **Total Proteções** | | | | | **€0.73** | | |
@@ -1201,7 +1202,7 @@ Layout Buck Converter - Boas Práticas:
      │   [USB-C]                                               │
      │      │                                                  │
      │      ▼                                                  │
-     │   [CH224K]  ◄── Perto do conector USB-C                │
+     │   [IP2721]  ◄── Perto do conector USB-C                │
      │      │                                                  │
      │      │  VOUT (15V)                                      │
      │      ▼                                                  │
@@ -1296,7 +1297,7 @@ Testes de Validação PSU v3:
     └─ Todos os componentes no lugar
 
   □ POWER-ON (com fonte PD 15V)
-    ├─ CH224K negocia 15V (medir VOUT)
+    ├─ IP2721 negocia 15V (medir VOUT)
     ├─ SY8368 arranca (LED PWR acende)
     ├─ VOUT = 5.0V ±2% (medir com multímetro)
     └─ Sem oscilação audível (coil whine)
@@ -1321,13 +1322,13 @@ Testes de Validação PSU v3:
 
   □ FALLBACK 9V
     ├─ Usar fonte PD que só tem 9V
-    ├─ CH224K negocia 9V
+    ├─ IP2721 negocia 9V
     ├─ SY8368 produz 5V
     └─ Firmware detecta e capa brilho a 80%
 
   □ FALLBACK 5V
     ├─ Usar carregador básico 5V/3A
-    ├─ CH224K fica em 5V (sem negociação)
+    ├─ IP2721 fica em 5V (via resistências 5.1kΩ)
     ├─ Buck em bypass (ou tensão mínima de saída)
     └─ Firmware detecta e capa brilho a 40%
 
@@ -1361,8 +1362,8 @@ Evolução da PSU:
   ┌────────────────────────┬─────────────────┬─────────────────┐
   │ Característica         │ v2              │ v3              │
   ├────────────────────────┼─────────────────┼─────────────────┤
-  │ PD Controller          │ IP2721 / CYPD   │ CH224K          │
-  │ Configuração           │ Complexa        │ Simples (strap) │
+  │ PD Controller          │ IP2721 / CYPD   │ IP2721+AO3400A  │
+  │ Configuração           │ Complexa        │ Simples (1 res) │
   │                        │                 │                 │
   │ Buck Converter         │ MP1584 (3A)     │ SY8368 (8A)     │
   │                        │ TPS54531 (5A)   │                 │
@@ -1390,16 +1391,16 @@ Evolução da PSU:
 ## 10. Referências
 
 ### Datasheets
-- [CH224K Datasheet](https://www.wch-ic.com/products/CH224.html) - WCH
+- [IP2721 Datasheet](https://datasheet.lcsc.com/lcsc/2006111335_INJOINIC-IP2721_C603176.pdf) - INJOINIC
 - [SY8368AQQC Datasheet](https://www.silergy.com/product/detail/SY8368) - Silergy
 - [Indutor CKST Series](https://www.coilcraft.com) - Coilcraft
 
 ### Application Notes
-- [USB PD Sink Design with CH224K](https://www.wch-ic.com/downloads/CH224DS1_PDF.html)
+- [IP2721 USB-C PD Application](https://aichiplink.com/blog/IP2721-Datasheet-Specifications-Schematic-Features-Alternative_389)
 - [High Current Buck Design](https://www.ti.com/lit/an/slva477b/slva477b.pdf) - TI
 
-### Fóruns
-- [CH224K Discussion - EEVblog](https://www.eevblog.com/forum/projects/ch224k-usb-pd-trigger/)
+### Projectos de Referência
+- [Hackaday TS100 USB-C](https://cdn.hackaday.io/files/1721877366848608/V1_2%20Schematic_TS100%20-%20USB%20C%20IP2721.pdf)
 - [SY8368 Layout Tips](https://www.silergy.com/technical-documents)
 
 ---
