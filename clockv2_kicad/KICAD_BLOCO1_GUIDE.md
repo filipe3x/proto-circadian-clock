@@ -103,6 +103,19 @@ Posições aproximadas (coordenadas X, Y em mm):
 - `[○ ■ ■]` Pinos 2-3: Normal (Buck → cargas)
 - `[■ ■ ○]` Pinos 1-2: Bypass (F1 → cargas, 5V limpos)
 
+### 3.6 D1 - TVS (Proteção Overvoltage)
+
+1. Pressiona **A**
+2. Procura: `Device:D_TVS`
+3. Coloca perto de J_MODE:2 (saída) **~(180, 115)**
+4. Pressiona **E** e define:
+   - **Reference**: `D1`
+   - **Value**: `SMBJ5.0A`
+   - **Footprint**: `Diode_SMD:D_SMB`
+   - **LCSC**: `C113620`
+
+**Função**: Protege as cargas se alguém usar bypass (1-2) com fonte PD (20V). O TVS limita a tensão e F1 dispara.
+
 ---
 
 ## Passo 4: Fazer Ligações
@@ -149,7 +162,20 @@ Q1:S (Source) → C1 → GND
 F1:2 (saída fuse) → J_MODE:1
 J_MODE:2 → 5V cargas
 J_MODE:2 → C2 → GND
+J_MODE:2 → D1 (catodo) → GND (anodo)
 Buck VOUT → J_MODE:3
+```
+
+### 4.5.1 Proteção TVS
+
+```
+J_MODE:2 (saída) ──┬──► C2 ──► GND
+                   │
+                   ├──► 5V cargas
+                   │
+                   └──► D1 (catodo)
+                              │
+                             GND (anodo)
 ```
 
 ### 4.6 Modos J_MODE
@@ -227,6 +253,7 @@ USB-C CC1 ──┬──► IP2721:CC1      USB-C CC2 ──┬──► IP2721
 - [ ] R_SEL entre IP2721:SEL e IP2721:VIN
 - [ ] R_CC1 e R_CC2 entre CC e GND
 - [ ] J_MODE: pino 1←F1, pino 2→cargas, pino 3←Buck VOUT
+- [ ] D1 (TVS) entre J_MODE:2 (catodo) e GND (anodo)
 - [ ] Todos os LCSC codes definidos
 
 ---

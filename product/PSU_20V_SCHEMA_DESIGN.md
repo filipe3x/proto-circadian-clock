@@ -154,6 +154,7 @@ IP2721 pin 7 (SEL) ──[100kΩ]──► VIN (para selecionar 20V max)
 | U1 | PD Trigger | IP2721 | C603176 | Extended | `Package_SO:TSSOP-16_4.4x5mm_P0.65mm` |
 | Q1 | N-MOSFET | AO3400A 30V | C20917 | **Basic** | `Package_TO_SOT_SMD:SOT-23` |
 | F1 | PTC Fuse | 3A 30V | C2982291 | Extended | `Fuse:Fuse_2920_7451Metric` |
+| D1 | TVS Diode | SMBJ5.0A | C113620 | **Basic** | `Diode_SMD:D_SMB` |
 
 ### 3.2 Condensadores
 
@@ -287,14 +288,40 @@ USB-C 5V ──► F1 ──► J_MODE:1 ──► J_MODE:2 ──► 5V cargas 
 
 **Vantagem desta configuração**: 5V limpos em bypass, sem dropout do Buck!
 
-### 4.6 Aviso de Segurança
+### 4.6 Proteção contra Uso Incorreto do Jumper
 
-**⚠️ IMPORTANTE**: Em modo bypass (1-2), a tensão do F1 vai **direto** às cargas.
+**⚠️ Risco**: Em modo bypass (1-2) com fonte PD (20V), as cargas receberiam 20V!
 
-- Se o utilizador ligar uma fonte PD (20V) com jumper em 1-2: **cargas recebem 20V!**
-- O bypass só deve ser usado com **carregadores USB 5V básicos** (sem PD)
+**Solução**: TVS de 5.1V na saída (D1)
 
-**Proteção opcional**: Adicionar TVS de 5.1V na saída para proteger contra uso incorreto do jumper.
+```
+J_MODE:2 (saída) ──┬──► C2 ──► GND
+                   │
+                   ├──► 5V cargas
+                   │
+                  ─┴─ D1 (TVS SMBJ5.0A)
+                   │
+                  GND
+```
+
+**Comportamento do TVS:**
+| Situação | Tensão Saída | TVS | Resultado |
+|----------|--------------|-----|-----------|
+| Normal (5V) | 5V | Não conduz | OK |
+| Bypass 5V | 5V | Não conduz | OK |
+| Bypass 20V (erro!) | >5.5V | **Conduz** | Limita tensão, F1 dispara |
+
+**Componente:**
+| Ref | Valor | LCSC | Footprint |
+|-----|-------|------|-----------|
+| D1 | SMBJ5.0A | C113620 | `Diode_SMD:D_SMB` |
+
+**Specs SMBJ5.0A:**
+- Vbr (breakdown): 6.4V
+- Vc (clamping @ 1A): 9.2V
+- Ppk: 600W (pulso)
+
+Com bypass 20V: TVS limita a ~9V enquanto F1 (3A) dispara, protegendo as cargas.
 
 ---
 
@@ -305,11 +332,12 @@ USB-C 5V ──► F1 ──► J_MODE:1 ──► J_MODE:2 ──► 5V cargas 
 | IP2721 | 1 | ~€0.40 | €0.40 |
 | AO3400A | 1 | ~€0.03 | €0.03 |
 | PTC Fuse | 1 | ~€0.05 | €0.05 |
+| TVS SMBJ5.0A | 1 | ~€0.05 | €0.05 |
 | MLCC 10µF (×2) | 2 | ~€0.03 | €0.06 |
 | MLCC 1µF | 1 | ~€0.01 | €0.01 |
 | Resistências (×3) | 3 | ~€0.01 | €0.03 |
 | Pin Header | 1 | ~€0.02 | €0.02 |
-| **Total Bloco 1** | | | **~€0.60** |
+| **Total Bloco 1** | | | **~€0.65** |
 
 ---
 
@@ -318,7 +346,7 @@ USB-C 5V ──► F1 ──► J_MODE:1 ──► J_MODE:2 ──► 5V cargas 
 - [ ] Bloco 2: Buck Converter SY8368AQQC (20V → 5V)
 - [ ] Bloco 3: Condensadores entrada/saída do Buck
 - [ ] Bloco 4: Resistências feedback (divisor para 5V)
-- [ ] Bloco 5: Proteção adicional (TVS opcional)
+- [x] ~~Bloco 5: Proteção adicional~~ → TVS D1 implementado (secção 4.6)
 
 ---
 
