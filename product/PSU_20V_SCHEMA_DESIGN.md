@@ -315,7 +315,7 @@ R_FB1/R_FB2 = 7.33
 | 19,20 | VIN | Q1:Source + C_VIN | Entrada 9-20V |
 | PAD | GND | GND via múltiplas vias | Dissipação térmica |
 
-### 2B.8 Layout Crítico
+### 2B.8 Layout e Térmico
 
 ```
 Regras de layout para SY8368:
@@ -331,13 +331,32 @@ Regras de layout para SY8368:
 
 3. GROUND:
    - Plano contínuo na layer inferior
-   - Mínimo 9 vias (3×3) no thermal pad
+   - Mínimo 16 vias (4×4) no thermal pad
    - PGND e SGND ligados no mesmo ponto
 
-4. THERMAL:
-   - Copper pour na top layer sob U2
+4. THERMAL (crítico para 6A):
+   - Copper pour 30×30mm mínimo na top layer
    - Vias térmicas 0.3mm no thermal pad
+   - Heatsink adesivo 10×10mm recomendado
 ```
+
+### 2B.9 Análise Térmica (6A)
+
+**Dissipação @ 6A**:
+```
+P_OUT = 5V × 6A = 30W
+η ≈ 91%
+P_DISS = 30W / 0.91 - 30W = 3W
+```
+
+**Temperaturas estimadas**:
+| Configuração | θJA | ΔT | Tj (25°C amb) |
+|--------------|-----|-----|---------------|
+| Layout básico | 45°C/W | 135°C | 160°C ❌ |
+| Layout otimizado (16 vias) | 35°C/W | 105°C | 130°C ⚠️ |
+| **Com heatsink 10×10mm** | **25°C/W** | **75°C** | **100°C ✓** |
+
+**Recomendação**: Para 6A contínuo, usar heatsink adesivo.
 
 ---
 
@@ -393,6 +412,12 @@ Regras de layout para SY8368:
 | C_OUT1-4 | Output Cap | 22µF 10V ×4 | C12891 | **Basic** | `Capacitor_SMD:C_1206_3216Metric` |
 | C_BOOT | Bootstrap | 100nF 25V | C307331 | **Basic** | `Capacitor_SMD:C_0402_1005Metric` |
 | C_SS | Soft-start | 10nF 25V | C15195 | **Basic** | `Capacitor_SMD:C_0402_1005Metric` |
+
+### 3.7 Bloco 2 - Térmico
+
+| Ref | Descrição | Valor | LCSC | Stock | Notas |
+|-----|-----------|-------|------|-------|-------|
+| HS1 | Heatsink adesivo | 10×10×5mm | C5184686 | **Basic** | Recomendado para 6A |
 
 ---
 
@@ -567,15 +592,16 @@ Com bypass 20V: TVS limita a ~9V enquanto F1 (3A) dispara, protegendo as cargas.
 | MLCC 100nF (C_BOOT) | 1 | ~€0.01 | €0.01 |
 | MLCC 10nF (C_SS) | 1 | ~€0.01 | €0.01 |
 | Resistências FB (×2) | 2 | ~€0.01 | €0.02 |
-| **Total Bloco 2** | | | **~€1.12** |
+| Heatsink 10×10mm | 1 | ~€0.08 | €0.08 |
+| **Total Bloco 2** | | | **~€1.20** |
 
 ### 5.3 Total PSU
 
 | Bloco | Custo |
 |-------|-------|
 | Bloco 1 (USB-C PD) | €0.65 |
-| Bloco 2 (Buck) | €1.12 |
-| **Total PSU** | **~€1.77** |
+| Bloco 2 (Buck + Heatsink) | €1.20 |
+| **Total PSU** | **~€1.85** |
 
 ---
 
