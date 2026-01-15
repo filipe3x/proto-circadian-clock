@@ -515,8 +515,9 @@ VOUT ──► R_FB1 ──┬──► U2:FB (pino 14)
 ```
 
 **⚠️ VERIFICAÇÃO**:
-- R_FB1 = 22kΩ (C25765)
-- R_FB2 = 3kΩ (C25890)
+- R_FB1 = 22kΩ 0603 (**C31850** Basic)
+- R_FB2 = 3kΩ 0603 (**C4211** Basic)
+- Footprint: `Resistor_SMD:R_0603_1608Metric`
 - Resultado: 0.6V × (1 + 22/3) = **5.0V** ✓
 
 ---
@@ -655,7 +656,7 @@ Buck VOUT ──[Label: 5V_OUT]──► J_MODE:3
 - [ ] U2:PAD → GND
 - [ ] U2:SW (2,3,4) → L1 → VOUT
 - [ ] VOUT → C_OUT1-4 → GND
-- [ ] VOUT → R_FB1 (22kΩ) → FB → R_FB2 (3kΩ) → GND
+- [ ] VOUT → R_FB1 (22kΩ C31850) → FB → R_FB2 (3kΩ C4211) → GND
 - [ ] U2:FB (14) → junção R_FB1/R_FB2
 - [ ] VOUT → Label `5V_OUT` → J_MODE:3
 - [ ] Todos os LCSC codes definidos

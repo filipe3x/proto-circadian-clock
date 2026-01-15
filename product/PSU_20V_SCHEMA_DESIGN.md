@@ -398,10 +398,12 @@ P_DISS = 30W / 0.91 - 30W = 3W
 
 | Ref | Descrição | Valor | LCSC | Stock | Footprint KiCad |
 |-----|-----------|-------|------|-------|-----------------|
-| U2 | Buck Converter | SY8368AQQC | C207642 | **Basic** | `Package_DFN_QFN:QFN-20-1EP_3x3mm_P0.4mm_EP1.65x1.65mm` |
+| U2 | Buck Converter | SY8368AQQC | C207642 | **Basic** | (easyeda2kicad - 12 pinos) |
 | L1 | Indutor Bourns | 2.2µH 22A | C2831487 | Extended | (easyeda2kicad) |
-| R_FB1 | Feedback Upper | 22kΩ 1% | C25765 | **Basic** | `Resistor_SMD:R_0402_1005Metric` |
-| R_FB2 | Feedback Lower | 3kΩ 1% | C25890 | **Basic** | `Resistor_SMD:R_0402_1005Metric` |
+| R_FB1 | Feedback Upper | 22kΩ 1% | **C31850** | **Basic** | `Resistor_SMD:R_0603_1608Metric` |
+| R_FB2 | Feedback Lower | 3kΩ 1% | **C4211** | **Basic** | `Resistor_SMD:R_0603_1608Metric` |
+
+**Cálculo Feedback**: VOUT = 0.6V × (1 + 22kΩ/3kΩ) = **5.00V** ✓
 
 ### 3.6 Bloco 2 - Condensadores
 
@@ -411,9 +413,23 @@ P_DISS = 30W / 0.91 - 30W = 3W
 | C_VIN2 | Input Cap | 22µF 25V | C52306 | **Basic** | `Capacitor_SMD:C_1210_3225Metric` |
 | C_OUT1-4 | Output Cap | 22µF 10V ×4 | C12891 | **Basic** | `Capacitor_SMD:C_1206_3216Metric` |
 | C_BOOT | Bootstrap | 100nF 25V | C307331 | **Basic** | `Capacitor_SMD:C_0402_1005Metric` |
-| C_SS | Soft-start | 10nF 25V | C15195 | **Basic** | `Capacitor_SMD:C_0402_1005Metric` |
+| C_VCC | LDO Bypass | 1µF 10V | C15849 | **Basic** | `Capacitor_SMD:C_0603_1608Metric` |
 
-### 3.7 Bloco 2 - Térmico
+### 3.7 Bloco 2 - Pinout IC (12-pin variant)
+
+| Pino | Nome | Liga a | Notas |
+|------|------|--------|-------|
+| 1,3 | GND | GND | Ground |
+| 2 | LX | L1 + C_BOOT | Switch node |
+| 4,5,6 | IN | C_VIN + 20V_OUT | Entrada VIN |
+| 7 | BS | C_BOOT → LX | Bootstrap |
+| 8 | VCC | C_VCC → GND | LDO interno 3.3V |
+| 9 | FB | Divisor R_FB | Feedback |
+| 10 | ILMT | NC (flutuante) | 12A current limit |
+| 11 | PG | NC | Power Good (opcional) |
+| 12 | EN | VIN | Enable (always-on) |
+
+### 3.8 Bloco 2 - Térmico
 
 | Ref | Descrição | Valor | LCSC | Stock | Notas |
 |-----|-----------|-------|------|-------|-------|
