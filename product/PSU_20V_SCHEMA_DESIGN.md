@@ -252,10 +252,10 @@ R_FB1/R_FB2 = 7.33
 **Opções**:
 | Ref | Modelo | Isat | DCR | LCSC | Stock |
 |-----|--------|------|-----|------|-------|
-| L1 | SRP1265A-2R2M | 13A | 8mΩ | C132462 | **Basic** |
+| L1 | CXP0630-2R2M-AG | 10A | ~10mΩ | C7187315 | Extended |
 | L1 (alt) | CKST0603-2.2uH | 10A | 12mΩ | C3002634 | Extended |
 
-**Escolha**: SRP1265A-2R2M (C132462) - Basic stock, boa margem de corrente.
+**Escolha**: CXP0630-2R2M-AG (C7187315) - 10A, suficiente para 6A com margem.
 
 ### 2B.5 Condensadores
 
@@ -399,7 +399,7 @@ P_DISS = 30W / 0.91 - 30W = 3W
 | Ref | Descrição | Valor | LCSC | Stock | Footprint KiCad |
 |-----|-----------|-------|------|-------|-----------------|
 | U2 | Buck Converter | SY8368AQQC | C207642 | **Basic** | `Package_DFN_QFN:QFN-20-1EP_3x3mm_P0.4mm_EP1.65x1.65mm` |
-| L1 | Indutor | 2.2µH 13A | C132462 | **Basic** | `Inductor_SMD:L_Bourns_SRP1265A` |
+| L1 | Indutor | 2.2µH 10A | C7187315 | Extended | (easyeda2kicad) |
 | R_FB1 | Feedback Upper | 22kΩ 1% | C25765 | **Basic** | `Resistor_SMD:R_0402_1005Metric` |
 | R_FB2 | Feedback Lower | 3kΩ 1% | C25890 | **Basic** | `Resistor_SMD:R_0402_1005Metric` |
 
