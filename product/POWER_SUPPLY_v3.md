@@ -4,6 +4,15 @@ Este documento descreve a arquitetura de alimentação v3 baseada em USB-C Power
 
 ---
 
+## Changelog
+
+| Data | Versão | Alterações |
+|------|--------|------------|
+| Jan 2026 | 3.1 | **Corrigido valores feedback**: R_FB1=22kΩ/R_FB2=3kΩ (era 16.2kΩ/3.01kΩ - erro de cálculo). Atualizado L1 LCSC para C2831487. Nota sobre AO3400A/AO3404A compatíveis. |
+| Jan 2025 | 3.0 | Versão inicial com IP2721 + SY8368AQQC |
+
+---
+
 ## 1. Visão Geral
 
 ### 1.1 Filosofia de Design
@@ -460,15 +469,15 @@ SY8368AQQC - Buck Converter 8A:
                           VOUT = 5V
                               │
                               │
-                             [R1]  16.2kΩ (1%)
+                             [R1]  22kΩ (1%)
                               │
                               ├────────────► FB (pino 14)
                               │
-                             [R2]  3.01kΩ (1%)
+                             [R2]  3kΩ (1%)
                               │
                              GND
 
-  Cálculo: VOUT = 0.6V × (1 + R1/R2) = 0.6 × (1 + 16.2/3.01) = 5.03V ✓
+  Cálculo: VOUT = 0.6V × (1 + R1/R2) = 0.6 × (1 + 22/3) = 5.0V ✓
 
 
   Rede de Compensação:
@@ -517,13 +526,15 @@ Indutor para Buck Converter:
   Alternativas (Basic Stock):
   ───────────────────────────
 
-  ┌──────────────────┬────────┬───────┬───────┬─────────────────┐
-  │ Part Number      │ Value  │ Isat  │ DCR   │ LCSC            │
-  ├──────────────────┼────────┼───────┼───────┼─────────────────┤
-  │ SRP1265A-2R2M    │ 2.2µH  │ 13A   │ 8.4mΩ │ C132462         │
-  │ SWPA6045S2R2MT   │ 2.2µH  │ 8.5A  │ 16mΩ  │ C408335         │
-  │ WPN5040S2R2MT    │ 2.2µH  │ 10A   │ 12mΩ  │ C495537         │
-  └──────────────────┴────────┴───────┴───────┴─────────────────┘
+  ┌──────────────────────┬────────┬───────┬───────┬─────────────────┐
+  │ Part Number          │ Value  │ Isat  │ DCR   │ LCSC            │
+  ├──────────────────────┼────────┼───────┼───────┼─────────────────┤
+  │ **SRP1265A-2R2M** ★  │ 2.2µH  │ 22A   │ 4.2mΩ │ **C2831487**    │
+  │ SWPA6045S2R2MT       │ 2.2µH  │ 8.5A  │ 16mΩ  │ C408335         │
+  │ WPN5040S2R2MT        │ 2.2µH  │ 10A   │ 12mΩ  │ C495537         │
+  └──────────────────────┴────────┴───────┴───────┴─────────────────┘
+
+  ★ Usado no KiCad v3 - Bourns SRP1265A-2R2M (Extended, LCSC C2831487)
 
   Dimensionamento:
   ────────────────
@@ -747,7 +758,7 @@ Condensadores de Entrada e Saída:
 │         │       │    │       │                                              │
 │         │      ═╧═  ═╧═     ═╧═                                             │
 │         │   R1      R2    C_OUT (x4-8)                                      │
-│         │  16.2k   3.01k   22µF/10V                                         │
+│         │  22k     3k      22µF/10V                                         │
 │         │       │    │       │                                              │
 │         │       └────┤       │                                              │
 │         │            │       │                                              │
@@ -1095,17 +1106,17 @@ void loop() {
 | Ref | Componente | Especificação | Package | Qty | Preço | LCSC | Stock |
 |-----|------------|---------------|---------|-----|-------|------|-------|
 | U1 | IP2721 | USB-C PD Trigger | TSSOP-16 | 1 | €0.40 | C603176 | Extended |
-| Q1 | AO3400A | N-MOSFET 30V 5.7A | SOT-23 | 1 | €0.03 | C20917 | Basic |
+| Q1 | AO3400A / AO3404A | N-MOSFET 30V ~5A | SOT-23 | 1 | €0.03 | C20917 | Basic |
 | U2 | SY8368AQQC | Buck Sync 8A | QFN-20 3x3 | 1 | €0.55 | C207642 | Basic |
-| L1 | CKST0603-2.2uH/M | Indutor 2.2µH 10A | 6.6x6.6x3mm | 1 | €0.25 | C3002634 | Extended |
-| | *Alt: SRP1265A-2R2M* | *2.2µH 13A* | *12.5x12.5mm* | 1 | €0.30 | C132462 | Basic |
+| L1 | **Bourns SRP1265A-2R2M** | Indutor 2.2µH 22A | 12.5x12.5x6.5mm | 1 | €0.30 | **C2831487** | Extended |
+| | *Alt: CKST0603-2.2uH/M* | *2.2µH 10A* | *6.6x6.6x3mm* | 1 | €0.25 | C3002634 | Extended |
 | C_BOOT | 100nF 25V | MLCC X7R | 0402 | 1 | €0.01 | C307331 | Basic |
 | C_IN | CL32A226KAJNNNE | MLCC 22µF 25V | 1210 | 4 | €0.08 | C52306 | Basic |
 | C_OUT | CL31A226KAHL | MLCC 22µF 10V | 1206 | 6 | €0.03 | C12891 | Basic |
 | C_BULK | 470µF 16V | Electrolítico | Φ8x10mm | 1 | €0.08 | C3339 | Basic |
 | C_SS | 10nF 25V | MLCC X7R | 0402 | 1 | €0.01 | C15195 | Basic |
-| R_FB1 | 16.2kΩ 1% | Resistor | 0402 | 1 | €0.01 | C25762 | Basic |
-| R_FB2 | 3.01kΩ 1% | Resistor | 0402 | 1 | €0.01 | C25754 | Basic |
+| R_FB1 | 22kΩ 1% | Resistor (FB upper) | 0603 | 1 | €0.01 | C31850 | Basic |
+| R_FB2 | 3kΩ 1% | Resistor (FB lower) | 0603 | 1 | €0.01 | C4211 | Basic |
 | R_EN | 10kΩ 1% | Resistor | 0402 | 1 | €0.01 | C25744 | Basic |
 | R_SEL | 100kΩ 1% | SEL→VIN (20V) | 0402 | 1 | €0.01 | C25741 | Basic |
 | R_C | 10kΩ | Compensação | 0402 | 1 | €0.01 | C25744 | Basic |
