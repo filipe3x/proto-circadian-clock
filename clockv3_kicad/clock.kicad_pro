@@ -631,6 +631,90 @@
           "group_by": true,
           "label": "BASIC",
           "name": "BASIC",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "LCSC Part",
+          "name": "LCSC Part",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Package",
+          "name": "Package",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Price",
+          "name": "Price",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Purchase-URL",
+          "name": "Purchase-URL",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "STANDARD",
+          "name": "STANDARD",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "MF",
+          "name": "MF",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "MP",
+          "name": "MP",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "SnapEDA_Link",
+          "name": "SnapEDA_Link",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Description_1",
+          "name": "Description_1",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "MAXIMUM_PACKAGE_HEIGHT",
+          "name": "MAXIMUM_PACKAGE_HEIGHT",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "PARTREV",
+          "name": "PARTREV",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Availability",
+          "name": "Availability",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Check_prices",
+          "name": "Check_prices",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "MANUFACTURER",
+          "name": "MANUFACTURER",
           "show": false
         }
       ],
@@ -685,6 +769,22 @@
     [
       "44178ae5-5248-442a-9dc0-1d6c28c8bc02",
       "Root"
+    ],
+    [
+      "8adad8f8-b759-44ee-884d-fee51920b30a",
+      "PSU"
+    ],
+    [
+      "5cc6e492-33bb-4a23-8faa-5325b3c33802",
+      "SOUND"
+    ],
+    [
+      "39852447-a9d7-4134-a663-793bca9558b2",
+      "RTC"
+    ],
+    [
+      "9426d6bd-41f0-4c60-a994-62c55fb365c9",
+      "UART"
     ]
   ],
   "text_variables": {}
