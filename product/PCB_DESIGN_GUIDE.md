@@ -1294,6 +1294,54 @@ git clone https://github.com/espressif/kicad-libraries.git
 | **Teardrops** | Melhorar fiabilidade das vias |
 | **RF Tools** | Para antena WiFi do ESP32 |
 
+### 4.5 Importar Componentes LCSC com easyeda2kicad
+
+O **easyeda2kicad** é uma ferramenta Python que permite importar símbolos, footprints e modelos 3D diretamente da biblioteca LCSC/EasyEDA para o KiCad.
+
+**Instalação:**
+```bash
+pip3 install easyeda2kicad
+```
+
+**Uso básico - importar componente completo:**
+```bash
+# Sintaxe: python3 -m easyeda2kicad --symbol --footprint --3d --lcsc_id=CXXXXXX
+
+# Exemplos deste projeto:
+python3 -m easyeda2kicad --symbol --footprint --3d --lcsc_id=C207642   # SY8368AQQC (Buck Converter)
+python3 -m easyeda2kicad --symbol --footprint --3d --lcsc_id=C2831487  # SRP1265A-2R2M (Indutor 2.2µH)
+python3 -m easyeda2kicad --symbol --footprint --3d --lcsc_id=C603176   # IP2721 (PD Trigger)
+python3 -m easyeda2kicad --symbol --footprint --3d --lcsc_id=C20917    # AO3400A (MOSFET)
+```
+
+**Localização dos ficheiros gerados (default):**
+```
+~/Documents/Kicad/easyeda2kicad/
+├── easyeda2kicad.kicad_sym      # Símbolos
+├── easyeda2kicad.pretty/        # Footprints (.kicad_mod)
+└── easyeda2kicad.3dshapes/      # Modelos 3D (.wrl)
+```
+
+**Configurar biblioteca no KiCad:**
+
+1. **Símbolos:** Preferences → Manage Symbol Libraries → Add `easyeda2kicad.kicad_sym`
+2. **Footprints:** No **PCB Editor** → Preferences → Manage Footprint Libraries → Add:
+   - Nickname: `easyeda2kicad`
+   - Path: `~/Documents/Kicad/easyeda2kicad/easyeda2kicad.pretty`
+
+**Opções úteis:**
+```bash
+--overwrite          # Atualizar componente existente
+--output /path/      # Especificar pasta de destino
+--symbol             # Só símbolo
+--footprint          # Só footprint
+--3d                 # Só modelo 3D
+```
+
+**Troubleshooting:**
+- Se aparecer `[WARNING] This id is already in...` usa `--overwrite`
+- Se o nome do footprint não corresponder ao esperado, renomeia o ficheiro `.kicad_mod` ou edita a referência no esquemático
+
 ---
 
 ## 5. Regras de Design PCB

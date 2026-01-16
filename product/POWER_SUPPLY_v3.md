@@ -4,6 +4,15 @@ Este documento descreve a arquitetura de alimentação v3 baseada em USB-C Power
 
 ---
 
+## Changelog
+
+| Data | Versão | Alterações |
+|------|--------|------------|
+| Jan 2026 | 3.1 | **Corrigido valores feedback**: R_FB1=22kΩ/R_FB2=3kΩ (era 16.2kΩ/3.01kΩ - erro de cálculo). Atualizado L1 LCSC para C2831487. Atualizadas referências para coincidir com KiCad: U10 (IP2721), U12 (SY8368), Q3 (MOSFET). |
+| Jan 2025 | 3.0 | Versão inicial com IP2721 + SY8368AQQC |
+
+---
+
 ## 1. Visão Geral
 
 ### 1.1 Filosofia de Design
@@ -183,7 +192,7 @@ Fluxo de Energia (15V @ 2A = 30W entrada):
 
 ## 3. Componentes Principais
 
-### 3.1 U1 - IP2721 (PD Trigger) + Q1 - AO3400A (Power MOSFET)
+### 3.1 U10 - IP2721 (PD Trigger) + Q3 - AO3400A/AO3404A (Power MOSFET)
 
 O IP2721 é um controlador USB-C PD 2.0/3.0 sink com controlo de MOSFET externo integrado via pino VBUSG.
 
@@ -341,7 +350,7 @@ AO3400A - N-Channel MOSFET (Power Path):
 ═══════════════════════════════════════════════════════════════
 ```
 
-### 3.2 U2 - SY8368AQQC (Buck Síncrono 8A)
+### 3.2 U12 - SY8368AQQC (Buck Síncrono 8A)
 
 O SY8368AQQC é um buck converter síncrono de alta eficiência com MOSFETs integrados.
 
@@ -460,15 +469,15 @@ SY8368AQQC - Buck Converter 8A:
                           VOUT = 5V
                               │
                               │
-                             [R1]  16.2kΩ (1%)
+                             [R1]  22kΩ (1%)
                               │
                               ├────────────► FB (pino 14)
                               │
-                             [R2]  3.01kΩ (1%)
+                             [R2]  3kΩ (1%)
                               │
                              GND
 
-  Cálculo: VOUT = 0.6V × (1 + R1/R2) = 0.6 × (1 + 16.2/3.01) = 5.03V ✓
+  Cálculo: VOUT = 0.6V × (1 + R1/R2) = 0.6 × (1 + 22/3) = 5.0V ✓
 
 
   Rede de Compensação:
@@ -517,13 +526,15 @@ Indutor para Buck Converter:
   Alternativas (Basic Stock):
   ───────────────────────────
 
-  ┌──────────────────┬────────┬───────┬───────┬─────────────────┐
-  │ Part Number      │ Value  │ Isat  │ DCR   │ LCSC            │
-  ├──────────────────┼────────┼───────┼───────┼─────────────────┤
-  │ SRP1265A-2R2M    │ 2.2µH  │ 13A   │ 8.4mΩ │ C132462         │
-  │ SWPA6045S2R2MT   │ 2.2µH  │ 8.5A  │ 16mΩ  │ C408335         │
-  │ WPN5040S2R2MT    │ 2.2µH  │ 10A   │ 12mΩ  │ C495537         │
-  └──────────────────┴────────┴───────┴───────┴─────────────────┘
+  ┌──────────────────────┬────────┬───────┬───────┬─────────────────┐
+  │ Part Number          │ Value  │ Isat  │ DCR   │ LCSC            │
+  ├──────────────────────┼────────┼───────┼───────┼─────────────────┤
+  │ **SRP1265A-2R2M** ★  │ 2.2µH  │ 22A   │ 4.2mΩ │ **C2831487**    │
+  │ SWPA6045S2R2MT       │ 2.2µH  │ 8.5A  │ 16mΩ  │ C408335         │
+  │ WPN5040S2R2MT        │ 2.2µH  │ 10A   │ 12mΩ  │ C495537         │
+  └──────────────────────┴────────┴───────┴───────┴─────────────────┘
+
+  ★ Usado no KiCad v3 - Bourns SRP1265A-2R2M (Extended, LCSC C2831487)
 
   Dimensionamento:
   ────────────────
@@ -670,7 +681,7 @@ Condensadores de Entrada e Saída:
 │                    │           │           │                                │
 │                    ▼           ▼           ▼                                │
 │               ┌─────────────────────────────────┐                           │
-│               │      IP2721 (U1) + AO3400A (Q1) │                           │
+│               │     IP2721 (U10) + AO3404A (Q3) │                           │
 │               │          PD + Power Path        │                           │
 │               │                                 │                           │
 │     VBUS ─────┤ VBUS(16)              CC1(12)───┼─► CC1                     │
@@ -705,7 +716,7 @@ Condensadores de Entrada e Saída:
 │                 │    ┌──────────────────────────────────┤                   │
 │                 │    │                                  │                   │
 │                 │    │  ┌─────────────────────────────┐ │                   │
-│                 │    │  │       SY8368AQQC (U2)       │ │                   │
+│                 │    │  │      SY8368AQQC (U12)       │ │                   │
 │                 │    │  │       Buck 8A               │ │                   │
 │                 │    │  │                             │ │                   │
 │                 ├────┼──┤ VIN (19,20)                 │ │                   │
@@ -747,7 +758,7 @@ Condensadores de Entrada e Saída:
 │         │       │    │       │                                              │
 │         │      ═╧═  ═╧═     ═╧═                                             │
 │         │   R1      R2    C_OUT (x4-8)                                      │
-│         │  16.2k   3.01k   22µF/10V                                         │
+│         │  22k     3k      22µF/10V                                         │
 │         │       │    │       │                                              │
 │         │       └────┤       │                                              │
 │         │            │       │                                              │
@@ -1094,23 +1105,20 @@ void loop() {
 
 | Ref | Componente | Especificação | Package | Qty | Preço | LCSC | Stock |
 |-----|------------|---------------|---------|-----|-------|------|-------|
-| U1 | IP2721 | USB-C PD Trigger | TSSOP-16 | 1 | €0.40 | C603176 | Extended |
-| Q1 | AO3400A | N-MOSFET 30V 5.7A | SOT-23 | 1 | €0.03 | C20917 | Basic |
-| U2 | SY8368AQQC | Buck Sync 8A | QFN-20 3x3 | 1 | €0.55 | C207642 | Basic |
-| L1 | CKST0603-2.2uH/M | Indutor 2.2µH 10A | 6.6x6.6x3mm | 1 | €0.25 | C3002634 | Extended |
-| | *Alt: SRP1265A-2R2M* | *2.2µH 13A* | *12.5x12.5mm* | 1 | €0.30 | C132462 | Basic |
-| C_BOOT | 100nF 25V | MLCC X7R | 0402 | 1 | €0.01 | C307331 | Basic |
-| C_IN | CL32A226KAJNNNE | MLCC 22µF 25V | 1210 | 4 | €0.08 | C52306 | Basic |
-| C_OUT | CL31A226KAHL | MLCC 22µF 10V | 1206 | 6 | €0.03 | C12891 | Basic |
+| U10 | IP2721 | USB-C PD Trigger | TSSOP-16 | 1 | €0.40 | C603176 | Extended |
+| Q3 | AO3400A / AO3404A | N-MOSFET 30V ~5A | SOT-23 | 1 | €0.03 | C20917 | Basic |
+| U12 | SY8368AQQC | Buck Sync 8A | QFN-20 3x3 | 1 | €0.55 | C207642 | Basic |
+| L1 | **Bourns SRP1265A-2R2M** | Indutor 2.2µH 22A | 12.5x12.5x6.5mm | 1 | €0.30 | **C2831487** | Extended |
+| | *Alt: CKST0603-2.2uH/M* | *2.2µH 10A* | *6.6x6.6x3mm* | 1 | €0.25 | C3002634 | Extended |
+| C_BOOT1 | 100nF 50V | MLCC X7R | 0402 | 1 | €0.01 | C307331 | Basic |
+| C14,C15 | CL32A226KAJNNNE | MLCC 22µF 25V | 1210 | 2 | €0.08 | C52306 | Basic |
+| C_OUT1-4 | CL31A226KAHL | MLCC 22µF 25V | 1206 | 4 | €0.03 | C52306 | Basic |
 | C_BULK | 470µF 16V | Electrolítico | Φ8x10mm | 1 | €0.08 | C3339 | Basic |
-| C_SS | 10nF 25V | MLCC X7R | 0402 | 1 | €0.01 | C15195 | Basic |
-| R_FB1 | 16.2kΩ 1% | Resistor | 0402 | 1 | €0.01 | C25762 | Basic |
-| R_FB2 | 3.01kΩ 1% | Resistor | 0402 | 1 | €0.01 | C25754 | Basic |
-| R_EN | 10kΩ 1% | Resistor | 0402 | 1 | €0.01 | C25744 | Basic |
-| R_SEL | 100kΩ 1% | SEL→VIN (20V) | 0402 | 1 | €0.01 | C25741 | Basic |
-| R_C | 10kΩ | Compensação | 0402 | 1 | €0.01 | C25744 | Basic |
-| C_C | 22nF | Compensação | 0402 | 1 | €0.01 | C1604 | Basic |
-| C_HF | 100pF | Compensação | 0402 | 1 | €0.01 | C1546 | Basic |
+| C17 | 1µF 50V | VCC Buck bypass | 0603 | 1 | €0.01 | C15849 | Basic |
+| R_FB1 | 22kΩ 1% | Resistor (FB upper) | 0603 | 1 | €0.01 | C31850 | Basic |
+| R_FB2 | 3kΩ 1% | Resistor (FB lower) | 0603 | 1 | €0.01 | C4211 | Basic |
+| R9 | 100kΩ 1% | SEL→VIN (20V max) | 0402 | 1 | €0.01 | C25741 | Basic |
+| R3,R4 | 5.1kΩ | CC1/CC2 resistors | 0402 | 2 | €0.01 | C25905 | Basic |
 | **Total PSU** | | | | | **~€2.30** | | |
 
 ### 6.2 Componentes Sensing (ADC)
@@ -1122,15 +1130,17 @@ void loop() {
 | C_FILTER | 100nF 16V | Filtro ADC | 0402 | 1 | €0.01 | C307331 |
 | **Total Sensing** | | | | | **€0.03** | |
 
-### 6.3 Proteções
+### 6.3 Proteções e Conectores
 
 | Ref | Componente | Especificação | Package | Qty | Preço | LCSC | Stock |
 |-----|------------|---------------|---------|-----|-------|------|-------|
-| J1 | USB-C Receptacle | 16-pin USB 2.0 | SMD | 1 | €0.40 | C165948 | Basic |
-| F1 | PTC Fuse | 3A hold, 6A trip, 30V | 2920 | 1 | €0.05 | C2982291 | Extended |
-| D1 | SMAJ24A-13-F | TVS 24V (VBUS) | SMA | 1 | €0.08 | C134973 | Basic |
-| D2 | SRV05-4 | 4-ch ESD (CC/D+/D-) | SOT-23-6 | 1 | €0.10 | C558418 | Basic |
-| **Total Proteções** | | | | | **€0.73** | | |
+| J1 | USB-C Receptacle | GCT USB4105-GF-A 16-pin | SMD | 1 | €0.40 | C3020560 | Extended |
+| F1 | PTC Fuse | ASMD2920-300 3A/30V | 2920 | 1 | €0.05 | C2982291 | Extended |
+| D3 | H7VN10B | TVS USB VBUS | DFN1006-2L | 1 | €0.05 | C20615788 | Extended |
+| D4 | SMBJ5.0A | TVS 5V output | SMB | 1 | €0.08 | C113620 | Basic |
+| J3 | Barrier Terminal | KF301-5.0-2P 10A | THT | 1 | €0.10 | C474881 | Extended |
+| J6 | Pin Header 1×3 | J_MODE selector | 2.54mm | 1 | €0.02 | C2337 | Basic |
+| **Total Proteções** | | | | | **€0.70** | | |
 
 ### 6.4 Regulador 3.3V e Periféricos
 
@@ -1145,31 +1155,22 @@ void loop() {
 | R_LED2 | 1kΩ | LED 3.3V | 0402 | 1 | €0.01 | C11702 |
 | **Total 3.3V** | | | | | **€0.25** | |
 
-### 6.5 Terminais de Saída
-
-| Ref | Componente | Especificação | Package | Qty | Preço | LCSC |
-|-----|------------|---------------|---------|-----|-------|------|
-| J2 | Screw Terminal | 2-pin 5.0mm 10A | THT | 1 | €0.10 | C474881 |
-| C_TERM | 100µF 10V | MLCC (opcional) | 1206 | 2 | €0.30 | C408880 |
-| **Total Terminais** | | | | | **€0.70** | |
-
-### 6.6 Resumo Total
+### 6.5 Resumo Total
 
 | Secção | Custo |
 |--------|-------|
-| PSU (IP2721 + AO3400A + SY8368A + passivos) | €2.30 |
+| PSU (U10 IP2721 + Q3 MOSFET + U12 SY8368A + passivos) | €2.30 |
 | Sensing (divisor ADC) | €0.03 |
-| Proteções (TVS, PTC, ESD) | €0.73 |
+| Proteções e Conectores (J1, F1, D3, D4, J3, J6) | €0.70 |
 | Regulador 3.3V | €0.25 |
-| Terminais e bulk caps | €0.70 |
-| **TOTAL PSU v3** | **~€4.00** |
+| **TOTAL PSU v3** | **~€3.30** |
 
-> **Nota:** Custo similar ao v2 (~€3.25), mas com:
-> - IP2721 + AO3400A: Power-path controlado, soft-start
-> - Buck de 8A (vs 3-5A)
+> **Nota:**
+> - U10 (IP2721) + Q3 (MOSFET): Power-path controlado, soft-start
+> - U12 (SY8368AQQC): Buck de 8A (vs 3-5A anterior)
 > - Melhor compatibilidade de fontes (fallback automático)
 > - Gestão automática de potência
-> - Todos os componentes críticos em Basic Stock (excepto IP2721, L1)
+> - Componentes Extended: U10, L1, J1, F1, D3, J3
 
 ---
 
