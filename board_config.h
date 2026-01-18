@@ -21,7 +21,7 @@
 // SELEÇÃO DE PLACA (alterar aqui ou via build flags)
 // ============================================================
 #ifndef BOARD_MATRIXPORTAL_S3
-  #define BOARD_MATRIXPORTAL_S3 0  // 0 = ESP32 Dev Module, 1 = Matrix Portal S3
+  #define BOARD_MATRIXPORTAL_S3 1  // 0 = ESP32 Dev Module, 1 = Matrix Portal S3
 #endif
 
 // ============================================================
@@ -166,6 +166,31 @@
 
 // Tipo de painel (P10 quarter-scan)
 #define DISPLAY_DRIVER  HUB75_I2S_CFG::SHIFTREG
+
+// ============================================================
+// POWER MANAGEMENT - Brightness Cap
+// ============================================================
+#if BOARD_MATRIXPORTAL_S3
+  // Matrix Portal S3 - PSU integrada de 25W
+  // Painel consome 28W @ 100%, ESP32-S3 consome ~1-2W
+  // Cap a 80% para garantir consumo < 25W
+  //
+  // Cálculo:
+  //   - Disponível para painel: 25W - 2W = 23W
+  //   - Cap: 23W / 28W = 82% → usar 80% (204/255)
+  //
+  #ifndef MAX_BRIGHTNESS_CAP
+    #define MAX_BRIGHTNESS_CAP 204  // 80% de 255 (~23W)
+  #endif
+  #define PANEL_MAX_WATTS     28
+  #define PSU_WATTS           25
+  #define ESP32_RESERVE_WATTS 2
+#else
+  // ESP32 Dev Module - Sem limite (PSU externa adequada)
+  #ifndef MAX_BRIGHTNESS_CAP
+    #define MAX_BRIGHTNESS_CAP 255  // 100%
+  #endif
+#endif
 
 // ============================================================
 // CONFIGURAÇÕES DE WIFI

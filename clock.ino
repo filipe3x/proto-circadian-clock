@@ -148,22 +148,13 @@ void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 
 // ============= BOTAO =============
 // BUTTON_PIN agora definido em board_config.h
-// Matrix Portal S3: GPIO 6 (UP) e GPIO 7 (DOWN)
+// Matrix Portal S3: GPIO 6 (UP) - GPIO 7 (DOWN) reservado para uso futuro
 // ESP32 Dev Module: GPIO 0 (BOOT)
 volatile bool buttonPressed = false;
-#if BOARD_MATRIXPORTAL_S3 && BUTTON_COUNT > 1
-volatile bool buttonDownPressed = false;
-#endif
 
 void IRAM_ATTR buttonISR() {
   buttonPressed = true;
 }
-
-#if BOARD_MATRIXPORTAL_S3 && BUTTON_COUNT > 1
-void IRAM_ATTR buttonDownISR() {
-  buttonDownPressed = true;
-}
-#endif
 
 // ============= MODOS =============
 enum Mode {
@@ -226,6 +217,27 @@ void prepareForRestart(bool showOK);
 
 // Brightness preview animation (para captive portal)
 void previewBrightness(int brightness);
+
+// ============= POWER MANAGEMENT =============
+// Aplica cap de brightness para proteger a PSU
+// MAX_BRIGHTNESS_CAP definido em board_config.h (204 para Matrix Portal S3)
+
+inline uint8_t cappedBrightness(uint8_t brightness) {
+  return min(brightness, (uint8_t)MAX_BRIGHTNESS_CAP);
+}
+
+void setSafeBrightness(uint8_t brightness) {
+  uint8_t safe = cappedBrightness(brightness);
+  if (dma_display != nullptr) {
+    dma_display->setBrightness8(safe);
+  }
+  #if BOARD_MATRIXPORTAL_S3
+    if (safe < brightness) {
+      Serial.printf("[POWER] Brightness capado: %d -> %d (max %d = %dW)\n",
+                    brightness, safe, MAX_BRIGHTNESS_CAP, PSU_WATTS - ESP32_RESERVE_WATTS);
+    }
+  #endif
+}
 
 // Captive Portal - declaracoes em captive_portal.h
 
@@ -312,8 +324,8 @@ void previewBrightness(int brightness) {
 
   Serial.printf("[PREVIEW] Brightness preview: %d\n", brightness);
 
-  // Aplicar o brilho selecionado
-  dma_display->setBrightness8(brightness);
+  // Aplicar o brilho selecionado (com cap de segurança)
+  setSafeBrightness(brightness);
 
   // Fade in com luz vermelha (0 -> 255)
   for (int b = 0; b <= 255; b += 10) {
@@ -1257,10 +1269,13 @@ void startCaptivePortalWithDisplay() {
 
 // ============= PREENCHER PAINEL =============
 void fillPanel(SolarColor color) {
-  uint8_t r = ((uint16_t)color.r * color.brightness) / 255;
-  uint8_t g = ((uint16_t)color.g * color.brightness) / 255;
-  uint8_t b = ((uint16_t)color.b * color.brightness) / 255;
-  
+  // Aplicar cap de brightness para proteger a PSU (dupla proteção)
+  uint8_t safeBrightness = cappedBrightness(color.brightness);
+
+  uint8_t r = ((uint16_t)color.r * safeBrightness) / 255;
+  uint8_t g = ((uint16_t)color.g * safeBrightness) / 255;
+  uint8_t b = ((uint16_t)color.b * safeBrightness) / 255;
+
   uint16_t color565 = display->color565(r, g, b);
   display->fillScreen(color565);
 }
@@ -1299,6 +1314,9 @@ void setup() {
   Serial.printf("Placa: %s\n", BOARD_INFO_STRING);
   #if BOARD_MATRIXPORTAL_S3
     Serial.println("Modo: Matrix Portal S3");
+    Serial.printf("Power: PSU %dW, Painel %dW, Cap %d%% (%d/255)\n",
+                  PSU_WATTS, PANEL_MAX_WATTS,
+                  (MAX_BRIGHTNESS_CAP * 100) / 255, MAX_BRIGHTNESS_CAP);
   #else
     Serial.println("Modo: ESP32 Dev Module");
   #endif
@@ -1317,7 +1335,7 @@ void setup() {
   mxconfig.driver = HUB75_I2S_CFG::SHIFTREG;  // ← Faltava isto!
   
   dma_display = new MatrixPanel_I2S_DMA(mxconfig);
-  dma_display->setBrightness8(80);
+  dma_display->setBrightness8(cappedBrightness(80));  // Cap inicial para PSU
   
   if (!dma_display->begin()) {
     Serial.println("❌ ERRO: Display não inicializou!");
@@ -1334,25 +1352,14 @@ void setup() {
   updateBootStatus(display->color565(50, 0, 0), 10);
   
   // Botões
+  // Botão UP (principal) - muda modo / long-press para config
   #if BUTTON_NEEDS_PULLUP
     pinMode(BUTTON_PIN, INPUT_PULLUP);
   #else
     pinMode(BUTTON_PIN, INPUT);
   #endif
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
-
-  #if BOARD_MATRIXPORTAL_S3 && BUTTON_COUNT > 1
-    // Matrix Portal S3 tem botão DOWN adicional
-    #if BUTTON_NEEDS_PULLUP
-      pinMode(BUTTON_DOWN_PIN, INPUT_PULLUP);
-    #else
-      pinMode(BUTTON_DOWN_PIN, INPUT);
-    #endif
-    attachInterrupt(digitalPinToInterrupt(BUTTON_DOWN_PIN), buttonDownISR, FALLING);
-    Serial.println("✅ Botões UP/DOWN configurados (Matrix Portal S3)");
-  #else
-    Serial.println("✅ Botão configurado");
-  #endif
+  Serial.println("✅ Botão UP configurado");
 
   currentMode = AUTO_SOLAR;
   updateBootStatus(display->color565(50, 0, 0), 20);
@@ -1403,8 +1410,8 @@ void setup() {
   loadConfig();
   initSolarCalc();
 
-  // Aplicar brilho configurado
-  dma_display->setBrightness8(configBrightness);
+  // Aplicar brilho configurado (com cap de segurança para PSU)
+  setSafeBrightness(configBrightness);
 
   updateBootStatus(display->color565(50, 0, 0), 45);
 
@@ -1499,11 +1506,13 @@ void displayAutoSolar() {
   static uint8_t lastMinute = 255;
   if (now.minute() % 5 == 0 && now.minute() != lastMinute) {
     lastMinute = now.minute();
-    Serial.printf("[AUTO] %02d:%02d (offset %+dh) | Elev: %.2f° | %dK | RGB(%d,%d,%d) | Brilho: %d%%\n",
+    uint8_t actualBrightness = cappedBrightness(color.brightness);
+    Serial.printf("[AUTO] %02d:%02d (offset %+dh) | Elev: %.2f° | %dK | RGB(%d,%d,%d) | Brilho: %d%%%s\n",
                   now.hour(), now.minute(),
                   SOLAR_OFFSET_HOURS,
                   elevation, color.colorTemp, color.r, color.g, color.b,
-                  (color.brightness * 100) / 255);
+                  (actualBrightness * 100) / 255,
+                  (actualBrightness < color.brightness) ? " [CAP]" : "");
   }
 }
 
@@ -1513,8 +1522,9 @@ void displayTherapyRed() {
   color.r = 255;
   color.g = 0;
   color.b = 0;
-  // Usar configBrightness mas limitado a 240 para terapia vermelha
-  // (evita desconforto visual e consumo excessivo nos 5V)
+  // Limite de conforto visual: 240 (~94%)
+  // Limite de PSU (Matrix Portal S3): 204 (~80%)
+  // fillPanel() aplica o mais restritivo via cappedBrightness()
   color.brightness = min(configBrightness, 240);
   color.colorTemp = 0;
   fillPanel(color);
@@ -1611,40 +1621,12 @@ void handleButton() {
   }
 }
 
-// ============= HANDLER BOTÃO DOWN (Matrix Portal S3) =============
-#if BOARD_MATRIXPORTAL_S3 && BUTTON_COUNT > 1
-void handleButtonDown() {
-  if (!buttonDownPressed) return;
-  buttonDownPressed = false;
-  delay(50);  // Debounce
-
-  if (digitalRead(BUTTON_DOWN_PIN) == LOW) {
-    // Botão DOWN pressionado - diminuir brilho
-    static uint8_t brightnessLevels[] = {20, 40, 80, 120, 180, 255};
-    static int brightnessIndex = 2;  // Começa em 80
-
-    // Ciclar para baixo (ou voltar ao máximo)
-    brightnessIndex = (brightnessIndex + 1) % 6;
-    uint8_t newBrightness = brightnessLevels[brightnessIndex];
-
-    dma_display->setBrightness8(newBrightness);
-    configBrightness = newBrightness;
-
-    // Guardar na NVS
-    preferences.begin("clock", false);
-    preferences.putUChar("brightness", newBrightness);
-    preferences.end();
-
-    Serial.printf("[BRIGHTNESS] Nível %d: %d/255 (%d%%)\n",
-                  brightnessIndex + 1, newBrightness, (newBrightness * 100) / 255);
-
-    // Feedback visual rápido
-    display->fillScreen(display->color565(newBrightness, newBrightness, newBrightness));
-    delay(150);
-    updateDisplay();
-  }
-}
-#endif
+// ============= BOTÃO DOWN (Matrix Portal S3) - RESERVADO =============
+// GPIO 7 disponível para uso futuro. Sugestões:
+//   - Forçar sync NTP manual
+//   - Mostrar info sistema (IP, temp RTC, status mesh)
+//   - Toggle modo eco (reduz refresh rate)
+//   - Ajuste rápido de offset solar (+/- 1h)
 
 // ============= ATUALIZAR DISPLAY =============
 void updateDisplay() {
@@ -1671,10 +1653,6 @@ void loop() {
   }
 
   handleButton();
-
-  #if BOARD_MATRIXPORTAL_S3 && BUTTON_COUNT > 1
-    handleButtonDown();  // Botão DOWN para ajuste de brilho
-  #endif
 
   // Atualizar mesh sync
   updateMeshSync();
