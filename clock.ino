@@ -148,22 +148,13 @@ void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 
 // ============= BOTAO =============
 // BUTTON_PIN agora definido em board_config.h
-// Matrix Portal S3: GPIO 6 (UP) e GPIO 7 (DOWN)
+// Matrix Portal S3: GPIO 6 (UP) - GPIO 7 (DOWN) reservado para uso futuro
 // ESP32 Dev Module: GPIO 0 (BOOT)
 volatile bool buttonPressed = false;
-#if BOARD_MATRIXPORTAL_S3 && BUTTON_COUNT > 1
-volatile bool buttonDownPressed = false;
-#endif
 
 void IRAM_ATTR buttonISR() {
   buttonPressed = true;
 }
-
-#if BOARD_MATRIXPORTAL_S3 && BUTTON_COUNT > 1
-void IRAM_ATTR buttonDownISR() {
-  buttonDownPressed = true;
-}
-#endif
 
 // ============= MODOS =============
 enum Mode {
@@ -1361,25 +1352,14 @@ void setup() {
   updateBootStatus(display->color565(50, 0, 0), 10);
   
   // Botões
+  // Botão UP (principal) - muda modo / long-press para config
   #if BUTTON_NEEDS_PULLUP
     pinMode(BUTTON_PIN, INPUT_PULLUP);
   #else
     pinMode(BUTTON_PIN, INPUT);
   #endif
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
-
-  #if BOARD_MATRIXPORTAL_S3 && BUTTON_COUNT > 1
-    // Matrix Portal S3 tem botão DOWN adicional
-    #if BUTTON_NEEDS_PULLUP
-      pinMode(BUTTON_DOWN_PIN, INPUT_PULLUP);
-    #else
-      pinMode(BUTTON_DOWN_PIN, INPUT);
-    #endif
-    attachInterrupt(digitalPinToInterrupt(BUTTON_DOWN_PIN), buttonDownISR, FALLING);
-    Serial.println("✅ Botões UP/DOWN configurados (Matrix Portal S3)");
-  #else
-    Serial.println("✅ Botão configurado");
-  #endif
+  Serial.println("✅ Botão UP configurado");
 
   currentMode = AUTO_SOLAR;
   updateBootStatus(display->color565(50, 0, 0), 20);
@@ -1641,45 +1621,12 @@ void handleButton() {
   }
 }
 
-// ============= HANDLER BOTÃO DOWN (Matrix Portal S3) =============
-#if BOARD_MATRIXPORTAL_S3 && BUTTON_COUNT > 1
-void handleButtonDown() {
-  if (!buttonDownPressed) return;
-  buttonDownPressed = false;
-  delay(50);  // Debounce
-
-  if (digitalRead(BUTTON_DOWN_PIN) == LOW) {
-    // Botão DOWN pressionado - ciclar brilho
-    // Níveis capados a MAX_BRIGHTNESS_CAP para segurança da PSU
-    static uint8_t brightnessLevels[] = {
-      20, 40, 80, 120,
-      cappedBrightness(180),
-      cappedBrightness(255)
-    };
-    static int brightnessIndex = 2;  // Começa em 80
-
-    // Ciclar para cima (ou voltar ao mínimo)
-    brightnessIndex = (brightnessIndex + 1) % 6;
-    uint8_t newBrightness = brightnessLevels[brightnessIndex];
-
-    setSafeBrightness(newBrightness);
-    configBrightness = newBrightness;
-
-    // Guardar na NVS
-    preferences.begin("clock", false);
-    preferences.putUChar("brightness", newBrightness);
-    preferences.end();
-
-    Serial.printf("[BRIGHTNESS] Nível %d: %d/255 (%d%%)\n",
-                  brightnessIndex + 1, newBrightness, (newBrightness * 100) / 255);
-
-    // Feedback visual rápido
-    display->fillScreen(display->color565(newBrightness, newBrightness, newBrightness));
-    delay(150);
-    updateDisplay();
-  }
-}
-#endif
+// ============= BOTÃO DOWN (Matrix Portal S3) - RESERVADO =============
+// GPIO 7 disponível para uso futuro. Sugestões:
+//   - Forçar sync NTP manual
+//   - Mostrar info sistema (IP, temp RTC, status mesh)
+//   - Toggle modo eco (reduz refresh rate)
+//   - Ajuste rápido de offset solar (+/- 1h)
 
 // ============= ATUALIZAR DISPLAY =============
 void updateDisplay() {
@@ -1706,10 +1653,6 @@ void loop() {
   }
 
   handleButton();
-
-  #if BOARD_MATRIXPORTAL_S3 && BUTTON_COUNT > 1
-    handleButtonDown();  // Botão DOWN para ajuste de brilho
-  #endif
 
   // Atualizar mesh sync
   updateMeshSync();
