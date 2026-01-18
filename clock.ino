@@ -1278,10 +1278,13 @@ void startCaptivePortalWithDisplay() {
 
 // ============= PREENCHER PAINEL =============
 void fillPanel(SolarColor color) {
-  uint8_t r = ((uint16_t)color.r * color.brightness) / 255;
-  uint8_t g = ((uint16_t)color.g * color.brightness) / 255;
-  uint8_t b = ((uint16_t)color.b * color.brightness) / 255;
-  
+  // Aplicar cap de brightness para proteger a PSU (dupla proteção)
+  uint8_t safeBrightness = cappedBrightness(color.brightness);
+
+  uint8_t r = ((uint16_t)color.r * safeBrightness) / 255;
+  uint8_t g = ((uint16_t)color.g * safeBrightness) / 255;
+  uint8_t b = ((uint16_t)color.b * safeBrightness) / 255;
+
   uint16_t color565 = display->color565(r, g, b);
   display->fillScreen(color565);
 }
@@ -1523,11 +1526,13 @@ void displayAutoSolar() {
   static uint8_t lastMinute = 255;
   if (now.minute() % 5 == 0 && now.minute() != lastMinute) {
     lastMinute = now.minute();
-    Serial.printf("[AUTO] %02d:%02d (offset %+dh) | Elev: %.2f° | %dK | RGB(%d,%d,%d) | Brilho: %d%%\n",
+    uint8_t actualBrightness = cappedBrightness(color.brightness);
+    Serial.printf("[AUTO] %02d:%02d (offset %+dh) | Elev: %.2f° | %dK | RGB(%d,%d,%d) | Brilho: %d%%%s\n",
                   now.hour(), now.minute(),
                   SOLAR_OFFSET_HOURS,
                   elevation, color.colorTemp, color.r, color.g, color.b,
-                  (color.brightness * 100) / 255);
+                  (actualBrightness * 100) / 255,
+                  (actualBrightness < color.brightness) ? " [CAP]" : "");
   }
 }
 
@@ -1537,8 +1542,9 @@ void displayTherapyRed() {
   color.r = 255;
   color.g = 0;
   color.b = 0;
-  // Usar configBrightness mas limitado a 240 para terapia vermelha
-  // (evita desconforto visual e consumo excessivo nos 5V)
+  // Limite de conforto visual: 240 (~94%)
+  // Limite de PSU (Matrix Portal S3): 204 (~80%)
+  // fillPanel() aplica o mais restritivo via cappedBrightness()
   color.brightness = min(configBrightness, 240);
   color.colorTemp = 0;
   fillPanel(color);
