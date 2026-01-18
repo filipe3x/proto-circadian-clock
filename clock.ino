@@ -227,6 +227,27 @@ void prepareForRestart(bool showOK);
 // Brightness preview animation (para captive portal)
 void previewBrightness(int brightness);
 
+// ============= POWER MANAGEMENT =============
+// Aplica cap de brightness para proteger a PSU
+// MAX_BRIGHTNESS_CAP definido em board_config.h (204 para Matrix Portal S3)
+
+inline uint8_t cappedBrightness(uint8_t brightness) {
+  return min(brightness, (uint8_t)MAX_BRIGHTNESS_CAP);
+}
+
+void setSafeBrightness(uint8_t brightness) {
+  uint8_t safe = cappedBrightness(brightness);
+  if (dma_display != nullptr) {
+    dma_display->setBrightness8(safe);
+  }
+  #if BOARD_MATRIXPORTAL_S3
+    if (safe < brightness) {
+      Serial.printf("[POWER] Brightness capado: %d -> %d (max %d = %dW)\n",
+                    brightness, safe, MAX_BRIGHTNESS_CAP, PSU_WATTS - ESP32_RESERVE_WATTS);
+    }
+  #endif
+}
+
 // Captive Portal - declaracoes em captive_portal.h
 
 // ============= SAFE RESTART =============
@@ -312,8 +333,8 @@ void previewBrightness(int brightness) {
 
   Serial.printf("[PREVIEW] Brightness preview: %d\n", brightness);
 
-  // Aplicar o brilho selecionado
-  dma_display->setBrightness8(brightness);
+  // Aplicar o brilho selecionado (com cap de segurança)
+  setSafeBrightness(brightness);
 
   // Fade in com luz vermelha (0 -> 255)
   for (int b = 0; b <= 255; b += 10) {
@@ -1299,6 +1320,9 @@ void setup() {
   Serial.printf("Placa: %s\n", BOARD_INFO_STRING);
   #if BOARD_MATRIXPORTAL_S3
     Serial.println("Modo: Matrix Portal S3");
+    Serial.printf("Power: PSU %dW, Painel %dW, Cap %d%% (%d/255)\n",
+                  PSU_WATTS, PANEL_MAX_WATTS,
+                  (MAX_BRIGHTNESS_CAP * 100) / 255, MAX_BRIGHTNESS_CAP);
   #else
     Serial.println("Modo: ESP32 Dev Module");
   #endif
@@ -1317,7 +1341,7 @@ void setup() {
   mxconfig.driver = HUB75_I2S_CFG::SHIFTREG;  // ← Faltava isto!
   
   dma_display = new MatrixPanel_I2S_DMA(mxconfig);
-  dma_display->setBrightness8(80);
+  dma_display->setBrightness8(cappedBrightness(80));  // Cap inicial para PSU
   
   if (!dma_display->begin()) {
     Serial.println("❌ ERRO: Display não inicializou!");
@@ -1403,8 +1427,8 @@ void setup() {
   loadConfig();
   initSolarCalc();
 
-  // Aplicar brilho configurado
-  dma_display->setBrightness8(configBrightness);
+  // Aplicar brilho configurado (com cap de segurança para PSU)
+  setSafeBrightness(configBrightness);
 
   updateBootStatus(display->color565(50, 0, 0), 45);
 
@@ -1619,15 +1643,20 @@ void handleButtonDown() {
   delay(50);  // Debounce
 
   if (digitalRead(BUTTON_DOWN_PIN) == LOW) {
-    // Botão DOWN pressionado - diminuir brilho
-    static uint8_t brightnessLevels[] = {20, 40, 80, 120, 180, 255};
+    // Botão DOWN pressionado - ciclar brilho
+    // Níveis capados a MAX_BRIGHTNESS_CAP para segurança da PSU
+    static uint8_t brightnessLevels[] = {
+      20, 40, 80, 120,
+      cappedBrightness(180),
+      cappedBrightness(255)
+    };
     static int brightnessIndex = 2;  // Começa em 80
 
-    // Ciclar para baixo (ou voltar ao máximo)
+    // Ciclar para cima (ou voltar ao mínimo)
     brightnessIndex = (brightnessIndex + 1) % 6;
     uint8_t newBrightness = brightnessLevels[brightnessIndex];
 
-    dma_display->setBrightness8(newBrightness);
+    setSafeBrightness(newBrightness);
     configBrightness = newBrightness;
 
     // Guardar na NVS

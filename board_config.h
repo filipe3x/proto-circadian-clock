@@ -168,6 +168,31 @@
 #define DISPLAY_DRIVER  HUB75_I2S_CFG::SHIFTREG
 
 // ============================================================
+// POWER MANAGEMENT - Brightness Cap
+// ============================================================
+#if BOARD_MATRIXPORTAL_S3
+  // Matrix Portal S3 - PSU integrada de 25W
+  // Painel consome 28W @ 100%, ESP32-S3 consome ~1-2W
+  // Cap a 80% para garantir consumo < 25W
+  //
+  // Cálculo:
+  //   - Disponível para painel: 25W - 2W = 23W
+  //   - Cap: 23W / 28W = 82% → usar 80% (204/255)
+  //
+  #ifndef MAX_BRIGHTNESS_CAP
+    #define MAX_BRIGHTNESS_CAP 204  // 80% de 255 (~23W)
+  #endif
+  #define PANEL_MAX_WATTS     28
+  #define PSU_WATTS           25
+  #define ESP32_RESERVE_WATTS 2
+#else
+  // ESP32 Dev Module - Sem limite (PSU externa adequada)
+  #ifndef MAX_BRIGHTNESS_CAP
+    #define MAX_BRIGHTNESS_CAP 255  // 100%
+  #endif
+#endif
+
+// ============================================================
 // CONFIGURAÇÕES DE WIFI
 // ============================================================
 // O ESP32-S3 suporta WiFi 802.11 b/g/n (2.4 GHz)
