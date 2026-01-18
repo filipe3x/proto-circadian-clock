@@ -21,7 +21,7 @@
 // SELEÇÃO DE PLACA (alterar aqui ou via build flags)
 // ============================================================
 #ifndef BOARD_MATRIXPORTAL_S3
-  #define BOARD_MATRIXPORTAL_S3 0  // 0 = ESP32 Dev Module, 1 = Matrix Portal S3
+  #define BOARD_MATRIXPORTAL_S3 1  // 0 = ESP32 Dev Module, 1 = Matrix Portal S3
 #endif
 
 // ============================================================
