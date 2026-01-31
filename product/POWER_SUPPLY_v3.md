@@ -8,8 +8,9 @@ Este documento descreve a arquitetura de alimentação v3 baseada em USB-C Power
 
 | Data | Versão | Alterações |
 |------|--------|------------|
-| Jan 2026 | 3.1 | **Corrigido valores feedback**: R_FB1=22kΩ/R_FB2=3kΩ (era 16.2kΩ/3.01kΩ - erro de cálculo). Atualizado L1 LCSC para C2831487. Atualizadas referências para coincidir com KiCad: U10 (IP2721), U12 (SY8368), Q3 (MOSFET). |
-| Jan 2025 | 3.0 | Versão inicial com IP2721 + SY8368AQQC |
+| Jan 2026 | 3.2 | **Substituição buck converter**: TPS56838 → **TPS56838** (TI). Motivo: coil whine em modo PFM a light load. TPS56838 opera em FCCM nativo, D-CAP3 sem compensação externa, 28V max. Adicionadas lições PCB: Zone Keepout sob indutor, minimizar cobre LX, C_FF obrigatório. |
+| Jan 2026 | 3.1 | **Corrigido valores feedback**: R_FB1=22kΩ/R_FB2=3kΩ (era 16.2kΩ/3.01kΩ - erro de cálculo). Atualizado L1 LCSC para C2831487. Atualizadas referências para coincidir com KiCad: U10 (IP2721), U12 (TPS56838), Q3 (MOSFET). |
+| Jan 2025 | 3.0 | Versão inicial com IP2721 + TPS56838 |
 
 ---
 
@@ -31,7 +32,7 @@ Este documento descreve a arquitetura de alimentação v3 baseada em USB-C Power
 │   • IP2721 ou CYPD3177                 • IP2721 + AO3400A MOSFET            │
 │     (configuração complexa)              (power-path controlado, 1 resistor) │
 │                                                                             │
-│   • MP1584EN (3A) ou TPS54531 (5A)     • SY8368AQQC (8A síncrono)          │
+│   • MP1584EN (3A) ou TPS54531 (5A)     • TPS56838 (8A síncrono)          │
 │     (margem limitada)                    (folga para picos HUB75)           │
 │                                                                             │
 │   • 5V/5A ou tensão alta               • 15V preferido, 9V fallback         │
@@ -119,7 +120,7 @@ Estratégia de Negociação PD:
 │   │  FONTE     │      │                      PCB                         │ │
 │   │  USB-C PD  │      │                                                  │ │
 │   │  27-45W    │      │  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐ │ │
-│   │            ├──────┤─►│ USB-C  │─►│ IP2721 │─►│SY8368A │─►│TERMINAL│ │ │
+│   │            ├──────┤─►│ USB-C  │─►│ IP2721 │─►│TPS56838 │─►│TERMINAL│ │ │
 │   │  9V/15V/   │      │  │ Recept.│  │ +MOSFET│  │ BUCK   │  │PARAFUSO│ │ │
 │   │  20V       │      │  │        │  │AO3400A │  │ 8A     │  │        │ │ │
 │   │            │      │  └────┬───┘  └───┬────┘  └───┬────┘  └───┬────┘ │ │
@@ -158,7 +159,7 @@ Estratégia de Negociação PD:
 Fluxo de Energia (15V @ 2A = 30W entrada):
 ═══════════════════════════════════════════════════════════════
 
-  USB-C         IP2721          SY8368A          Cargas
+  USB-C         IP2721          TPS56838          Cargas
   Fonte         PD Trigger      Buck Sync
   ─────         ──────────      ─────────        ──────
     │                │               │               │
@@ -321,7 +322,7 @@ AO3400A - N-Channel MOSFET (Power Path):
                                           │               │
                                           │               │
                                           ▼               │
-                                    Para SY8368A         │
+                                    Para TPS56838         │
                                     (VIN = até 20V)      │
                                                          │
                     GND ─────────────────────────────────┘
@@ -350,117 +351,149 @@ AO3400A - N-Channel MOSFET (Power Path):
 ═══════════════════════════════════════════════════════════════
 ```
 
-### 3.2 U12 - SY8368AQQC (Buck Síncrono 8A)
+### 3.2 U12 - TPS56838 (Buck Síncrono 8A, FCCM)
 
-O SY8368AQQC é um buck converter síncrono de alta eficiência com MOSFETs integrados.
+O TPS56838 (Texas Instruments, família TPS5683x) é um buck converter síncrono de alta eficiência
+com MOSFETs integrados e controlo D-CAP3 (sem compensação externa).
+
+**Porquê TPS56838 (substituiu SY8368AQQC):**
+- SY8368 entrava em pulse-skipping (PFM) a light load → **coil whine audível**
+- SY8368 não tem pin MODE para forçar PWM contínuo
+- TPS56838 opera em **FCCM nativo** (Forced Continuous Conduction Mode)
+- D-CAP3: sem rede de compensação externa (COMP pin não existe)
+- 28V máximo (vs 18V do SY8368) → margem segura para 20V PD
+- Package mais compacto: 10-pin 3×3mm HotRod QFN (vs QFN-20)
 
 ```
-SY8368AQQC - Buck Converter 8A:
+TPS56838 - Buck Converter 8A (FCCM):
 ═══════════════════════════════════════════════════════════════
 
   Características:
   ─────────────────
-  • Tensão entrada: 4.5V - 18V
-  • Tensão saída: 0.6V - VIN
+  • Tensão entrada: 4.5V - 28V (margem para 20V PD!)
+  • Tensão saída: 0.6V - 13V
   • Corrente: 8A contínua
-  • Frequência: 500kHz (ajustável)
-  • Eficiência: 93% @ 15V→5V, 3A
-  • MOSFETs integrados (síncrono)
-  • Package: QFN-20 (3x3mm)
-  • LCSC: C207642
+  • Frequência: 500kHz / 800kHz / 1200kHz (selecionável via MODE)
+  • Controlo: D-CAP3 (sem compensação externa!)
+  • Modo: FCCM nativo (sem coil whine a light load)
+  • RDS(ON): 20.4mΩ (high-side) / 9.5mΩ (low-side)
+  • VFB: 0.6V ±1% @ 25°C
+  • Soft-start: 1.8ms default (ajustável via SS cap)
+  • Proteções: OV, UV, OC, OT, UVLO (não-latched)
+  • Package: VQFN-HR 10-pin (3×3mm) - HotRod QFN
+  • LCSC: C37533416
 
-  Pinout:
-  ───────
+  Pinout (VQFN-HR 10-pin, vista de cima):
+  ────────────────────────────────────────
 
               ┌──────────────────────┐
-              │   SY8368AQQC (QFN20) │
+              │   TPS56838 (10-pin)  │
+              │    VQFN-HR 3×3mm     │
               │                      │
-       BOOT ─┤1                  20├─ VIN
-        SW ──┤2                  19├─ VIN
-        SW ──┤3                  18├─ EN
-        SW ──┤4                  17├─ SS
-       PGND ─┤5                  16├─ PGOOD
-       PGND ─┤6                  15├─ COMP
-       PGND ─┤7                  14├─ FB
-       PGND ─┤8                  13├─ SGND
-       PGND ─┤9                  12├─ SGND
-       PGND ─┤10                 11├─ MODE
+         EN ─┤1                  10├─ MODE
+         SS ─┤2                   9├─ PGND
+         FB ─┤3                   8├─ VIN
+         PG ─┤4                   7├─ SW
+       AGND ─┤5                   6├─ BOOT
               │                      │
-              │      (PAD = PGND)    │
+              │   [THERMAL PAD]      │
+              │      PGND            │
               └──────────────────────┘
+
+  Descrição dos Pinos:
+  ────────────────────
+  │ Pin │ Nome │ Tipo │ Descrição                                    │
+  │  1  │ EN   │  I   │ Enable. Float ou HIGH = ligado. Divisor      │
+  │     │      │      │ resistivo para UVLO externo.                 │
+  │  2  │ SS   │  I   │ Soft-start. Cap → AGND ou float (1.8ms).    │
+  │  3  │ FB   │  I   │ Feedback. Divisor resistivo de VOUT.         │
+  │  4  │ PG   │  O   │ Power-Good (open-drain). LOW se fora spec.  │
+  │  5  │ AGND │  G   │ Ground analógico. Ligar a PGND num ponto.   │
+  │  6  │ BOOT │  I   │ Bootstrap. 100nF entre BOOT e SW.           │
+  │  7  │ SW   │  P   │ Switch node. Liga ao indutor.               │
+  │  8  │ VIN  │  P   │ Entrada. Caps CIN entre VIN e PGND.         │
+  │  9  │ PGND │  G   │ Power ground. Source do low-side MOSFET.     │
+  │ 10  │ MODE │  I   │ Seleção frequência + current limit.         │
+  │ PAD │ PGND │  G   │ Thermal pad. Vias térmicas para GND.        │
+
+  Seleção MODE (resistor RMODE → AGND):
+  ──────────────────────────────────────
+  O pino MODE aceita 6 configurações via resistor para AGND.
+  Combina 3 frequências × 2 limites de corrente.
+  Consultar tabela no datasheet SLVSGM3B para valores RMODE.
+
+  Recomendação: 500kHz com ILIM standard para 20V→5V @ 8A.
 
   Circuito de Aplicação (20V → 5V @ 8A):
   ──────────────────────────────────────
 
-                     VIN = 5-20V (do IP2721 via AO3400A)
+                     VIN = 5-20V (do IP2721 via AO3404A)
                           │
                           │
-            ┌─────────────┼─────────────────────────────────────┐
-            │             │                                     │
-           ═╧═           ═╧═                                    │
-       C_IN1          C_IN2                                     │
-      22µF/25V       22µF/25V                                   │
-       (1210)         (1210)                                    │
-            │             │                                     │
-            └──────┬──────┘                                     │
-                   │                                            │
-                   │  ┌─────────────────────────────────────┐   │
-                   │  │           SY8368AQQC                │   │
-                   │  │                                     │   │
-                   ├──┤ VIN (19,20)                         │   │
-                   │  │                                     │   │
-                   │  │ EN (18) ────────────────────────────┼───┤
-                   │  │              (ligar a VIN via 10k)  │   │
-                   │  │                                     │   │
-                   │  │ SS (17) ─────[10nF]───┬─ GND        │   │
-                   │  │                       │             │   │
-                   │  │ MODE (11) ──────────[GND] (forced CCM) │
-                   │  │                                     │   │
-                   │  │ FB (14) ◄────────────┤              │   │
-                   │  │                      │              │   │
-                   │  │ COMP (15) ───[R_C]───┼──[C_C]─ GND  │   │
-                   │  │                      │              │   │
-                   │  │ PGOOD (16) ─○ (opcional ao ESP32)   │   │
-                   │  │                                     │   │
-                   │  │ BOOT (1) ───[100nF]──┤              │   │
-                   │  │                      │              │   │
-                   │  │ SW (2,3,4) ──────────┼──────────────┤   │
-                   │  │                      │              │   │
-                   │  │ PGND (5-10,PAD) ─────┴─ GND         │   │
-                   │  │                                     │   │
-                   │  └─────────────────────────────────────┘   │
-                   │                      │                     │
-                   │                      │ SW                  │
-                   │                      │                     │
-                   │              ┌───────┴───────┐             │
-                   │              │               │             │
-                   │             ═╪═             ═╧═            │
-                   │          L1 2.2µH       C_BOOT             │
-                   │           10A          100nF               │
-                   │              │               │             │
-                   │              │               │             │
-                   │              ├───────────────┘             │
-                   │              │                             │
-                   │              │ VOUT = 5V                   │
-                   │              │                             │
-            ┌──────┴──────────────┼───────────────────────┐     │
-            │                     │                       │     │
-           ═╧═                   ═╧═                     ═╧═    │
-       C_OUT1                C_OUT2                  C_OUT3     │
-      22µF/10V              22µF/10V                22µF/10V    │
-       (1206)                (1206)                  (1206)     │
-            │                     │                       │     │
-            └─────────────────────┴───────────────────────┘     │
-                                  │                             │
-                                  │                             │
-                                 ═╧═                            │
-                            C_BULK                              │
-                          470-1000µF                            │
-                          10V Elect.                            │
-                          (opcional)                            │
-                                  │                             │
-                                  │                             │
-      GND ────────────────────────┴─────────────────────────────┘
+            ┌─────────────┼──────────────────────────────┐
+            │             │                              │
+           ═╧═           ═╧═          ═╧═                │
+       C_IN1          C_IN2       C_HF                   │
+      22µF/25V       22µF/25V    100nF/50V               │
+       (1210)         (1210)      (0402)                 │
+            │             │          │                   │
+            └──────┬──────┴──────────┘                   │
+                   │                                     │
+                   │  ┌──────────────────────────────┐   │
+                   │  │        TPS56838              │   │
+                   │  │     VQFN-HR 10-pin           │   │
+                   │  │                              │   │
+                   ├──┤ VIN (8)                      │   │
+                   │  │                              │   │
+                   │  │ EN (1) ◄──[R_EN1]──┬         │   │
+                   │  │          (float OK) │         │   │
+                   │  │                    │         │   │
+                   │  │ SS (2) ─[C_SS]──── AGND      │   │
+                   │  │        (float=1.8ms default)  │   │
+                   │  │                              │   │
+                   │  │ MODE (10) ──[RMODE]── AGND   │   │
+                   │  │  (seleciona freq + ILIM)     │   │
+                   │  │                              │   │
+                   │  │ FB (3) ◄──────────┤          │   │
+                   │  │                   │          │   │
+                   │  │ PG (4) ─○ (opcional ao ESP32)│   │
+                   │  │                   │          │   │
+                   │  │ BOOT (6)──[100nF]─┤          │   │
+                   │  │                   │          │   │
+                   │  │ SW (7) ───────────┤          │   │
+                   │  │                   │          │   │
+                   │  │ AGND (5) ─── GND  │          │   │
+                   │  │ PGND (9,PAD) ─ GND│          │   │
+                   │  │                   │          │   │
+                   │  └───────────────────│──────────┘   │
+                   │                      │              │
+                   │                      │ SW           │
+                   │              ┌───────┴───────┐      │
+                   │              │               │      │
+                   │             ═╪═             ═╧═     │
+                   │          L1 2.2µH       C_BOOT      │
+                   │         (shielded)     100nF        │
+                   │              │               │      │
+                   │              ├───────────────┘      │
+                   │              │                      │
+                   │              │ VOUT = 5V            │
+                   │              │                      │
+            ┌──────┴──────────────┼──────────────────┐   │
+            │                     │                  │   │
+           ═╧═                   ═╧═                ═╧═  │
+       C_OUT1                C_OUT2              C_OUT3   │
+      22µF/10V              22µF/10V            22µF/10V  │
+       (1206)                (1206)              (1206)   │
+            │                     │                  │   │
+            └─────────────────────┴──────────────────┘   │
+                                  │                      │
+                                 ═╧═                     │
+                            C_BULK                       │
+                          470-1000µF                     │
+                          10V Elect.                     │
+                          (opcional)                     │
+                                  │                      │
+      GND ────────────────────────┴──────────────────────┘
 
 
   Rede de Feedback (5.0V):
@@ -469,27 +502,29 @@ SY8368AQQC - Buck Converter 8A:
                           VOUT = 5V
                               │
                               │
-                             [R1]  22kΩ (1%)
-                              │
-                              ├────────────► FB (pino 14)
-                              │
-                             [R2]  3kΩ (1%)
-                              │
-                             GND
+                        ┌────[C_FF]────┐
+                        │    22pF      │
+                        │              │
+                       [R_FB1] 22kΩ (1%)
+                        │
+                        ├────────────► FB (pino 3)
+                        │
+                       [R_FB2] 3kΩ (1%)
+                        │
+                       GND
 
-  Cálculo: VOUT = 0.6V × (1 + R1/R2) = 0.6 × (1 + 22/3) = 5.0V ✓
+  Cálculo: VOUT = 0.6V × (1 + R_FB1/R_FB2) = 0.6 × (1 + 22/3) = 5.0V ✓
 
+  C_FF (feedforward): 22pF em paralelo com R_FB1
+  → Zero a f = 1/(2π × 22kΩ × 22pF) ≈ 329kHz
+  → Melhora estabilidade em transientes de carga
+  → OBRIGATÓRIO para evitar instabilidade!
 
-  Rede de Compensação:
-  ────────────────────
-
-  COMP (pino 15) ───[R_C 10kΩ]───┬───[C_C 22nF]─── GND
-                                 │
-                            [C_HF 100pF]
-                                 │
-                                GND
-
-  (Valores típicos para 500kHz, ajustar conforme estabilidade)
+  ⚠️ SEM REDE DE COMPENSAÇÃO EXTERNA!
+  ─────────────────────────────────────
+  O TPS56838 usa controlo D-CAP3 que NÃO necessita de
+  componentes COMP/R_C/C_C externos. Isto simplifica o
+  design e elimina problemas de tuning de loop.
 
 ═══════════════════════════════════════════════════════════════
 ```
@@ -557,7 +592,7 @@ Indutor para Buck Converter:
 Condensadores de Entrada e Saída:
 ═══════════════════════════════════════════════════════════════
 
-  ENTRADA (perto do SY8368A):
+  ENTRADA (perto do TPS56838):
   ──────────────────────────
 
   Requisito: Suportar ripple de corrente de entrada do buck
@@ -579,7 +614,7 @@ Condensadores de Entrada e Saída:
   └─────────────────────────────────────────────────────────────┘
 
 
-  SAÍDA (perto do SY8368A):
+  SAÍDA (perto do TPS56838):
   ─────────────────────────
 
   Requisito: Baixo ESR para resposta transitória rápida
@@ -716,7 +751,7 @@ Condensadores de Entrada e Saída:
 │                 │    ┌──────────────────────────────────┤                   │
 │                 │    │                                  │                   │
 │                 │    │  ┌─────────────────────────────┐ │                   │
-│                 │    │  │      SY8368AQQC (U12)       │ │                   │
+│                 │    │  │      TPS56838 (U12)       │ │                   │
 │                 │    │  │       Buck 8A               │ │                   │
 │                 │    │  │                             │ │                   │
 │                 ├────┼──┤ VIN (19,20)                 │ │                   │
@@ -1107,7 +1142,7 @@ void loop() {
 |-----|------------|---------------|---------|-----|-------|------|-------|
 | U10 | IP2721 | USB-C PD Trigger | TSSOP-16 | 1 | €0.40 | C603176 | Extended |
 | Q3 | AO3400A / AO3404A | N-MOSFET 30V ~5A | SOT-23 | 1 | €0.03 | C20917 | Basic |
-| U12 | SY8368AQQC | Buck Sync 8A | QFN-20 3x3 | 1 | €0.55 | C207642 | Basic |
+| U12 | **TPS56838** (TI) | Buck Sync 8A FCCM D-CAP3 | VQFN-HR 10-pin 3x3 | 1 | ~€1.00 | **C37533416** | Extended |
 | L1 | **Bourns SRP1265A-2R2M** | Indutor 2.2µH 22A | 12.5x12.5x6.5mm | 1 | €0.30 | **C2831487** | Extended |
 | | *Alt: CKST0603-2.2uH/M* | *2.2µH 10A* | *6.6x6.6x3mm* | 1 | €0.25 | C3002634 | Extended |
 | C_BOOT1 | 100nF 50V | MLCC X7R | 0402 | 1 | €0.01 | C307331 | Basic |
@@ -1159,7 +1194,7 @@ void loop() {
 
 | Secção | Custo |
 |--------|-------|
-| PSU (U10 IP2721 + Q3 MOSFET + U12 SY8368A + passivos) | €2.30 |
+| PSU (U10 IP2721 + Q3 MOSFET + U12 TPS56838 + passivos) | €2.30 |
 | Sensing (divisor ADC) | €0.03 |
 | Proteções e Conectores (J1, F1, D3, D4, J3, J6) | €0.70 |
 | Regulador 3.3V | €0.25 |
@@ -1167,7 +1202,7 @@ void loop() {
 
 > **Nota:**
 > - U10 (IP2721) + Q3 (MOSFET): Power-path controlado, soft-start
-> - U12 (SY8368AQQC): Buck de 8A (vs 3-5A anterior)
+> - U12 (TPS56838): Buck de 8A (vs 3-5A anterior)
 > - Melhor compatibilidade de fontes (fallback automático)
 > - Gestão automática de potência
 > - Componentes Extended: U10, L1, J1, F1, D3, J3
@@ -1179,13 +1214,13 @@ void loop() {
 ### 7.1 Considerações Críticas
 
 ```
-Layout Buck Converter - Boas Práticas:
+Layout Buck Converter - Boas Práticas (TPS56838):
 ═══════════════════════════════════════════════════════════════
 
   1. LOOP DE ALTA CORRENTE (minimizar área)
   ─────────────────────────────────────────
 
-     VIN ──┬──[CIN]──┬──[SY8368 VIN/SW]──[L1]──┬──[COUT]──┬── VOUT
+     VIN ──┬──[CIN]──┬──[TPS56838 VIN/SW]──[L1]──┬──[COUT]──┬── VOUT
            │         │                         │          │
           GND       GND                       GND        GND
            │         │                         │          │
@@ -1194,6 +1229,11 @@ Layout Buck Converter - Boas Práticas:
                          │
                    MANTER ESTE LOOP
                    O MAIS CURTO POSSÍVEL!
+
+     Loops críticos (mínima área):
+     • CIN → VIN → PGND → CIN (loop de entrada)
+     • CBOOT → BOOT → SW → CBOOT (bootstrap)
+     • L1 → COUT → GND → PGND (loop de saída)
 
   2. PLACEMENT
   ────────────
@@ -1205,15 +1245,15 @@ Layout Buck Converter - Boas Práticas:
      │      ▼                                                  │
      │   [IP2721]  ◄── Perto do conector USB-C                │
      │      │                                                  │
-     │      │  VOUT (15V)                                      │
+     │      │  VOUT (20V)                                      │
      │      ▼                                                  │
-     │   [CIN x4] ── Imediatamente ao lado do SY8368          │
+     │   [CIN + C_HF] ── Imediatamente ao lado do TPS56838   │
      │      │                                                  │
-     │   [SY8368] ◄── Centro da área de potência              │
+     │   [TPS56838] ◄── Centro da área de potência            │
      │      │                                                  │
-     │   [L1] ──────── Adjacente ao SW pin                    │
+     │   [L1] ──────── Adjacente ao SW pin (≤2mm)             │
      │      │                                                  │
-     │   [COUT x6-8] ─ Distribuídos após L1                   │
+     │   [COUT x3-4] ─ Distribuídos após L1                   │
      │      │                                                  │
      │      │  5V                                              │
      │      ▼                                                  │
@@ -1227,17 +1267,79 @@ Layout Buck Converter - Boas Práticas:
   ──────────────────
 
   • Usar plano de ground contínuo na layer inferior
-  • Evitar cortar o plano sob o indutor
-  • Vias múltiplas nos pads PGND do SY8368
+  • Vias múltiplas nos pads PGND do TPS56838
+  • AGND (pin 5) ligar a PGND num único ponto
   • Separar ground analógico (ADC) do ground de potência
     com ferrite bead ou ligação em ponto único
 
   4. THERMAL
   ──────────
 
-  • Pad exposto do SY8368 ligado ao ground com vias térmicas
-  • Mínimo 9 vias (3x3) no thermal pad
-  • Copper pour na top layer para dissipação
+  • Thermal pad (PGND) ligado ao ground com vias térmicas
+  • Mínimo 4-6 vias (0.3mm) no thermal pad com espaçamento 1mm
+  • Copper pour na top layer e bottom layer para dissipação
+  • NÃO usar thermal relief nas vias do pad (conexão completa)
+
+═══════════════════════════════════════════════════════════════
+```
+
+### 7.2 Lições Aprendidas - Ruído e Coil Whine (PCB v3.0)
+
+```
+LIÇÕES PCB v3.0 - PROBLEMAS IDENTIFICADOS E CORREÇÕES:
+═══════════════════════════════════════════════════════════════
+
+  ⚠️ PROBLEMA 1: COIL WHINE (RUÍDO AUDÍVEL)
+  ───────────────────────────────────────────
+  Causa: SY8368 entrava em pulse-skipping (PFM) a light load.
+  Frequência de switching caia para range audível (<20kHz).
+  Manifesta-se como zumbido repetitivo, intensifica com LED blink.
+
+  Solução: TPS56838 com FCCM nativo (frequência constante
+  independentemente da carga). Elimina modos PFM/pulse-skip.
+
+  ⚠️ PROBLEMA 2: GROUND POUR + VIAS SOB O INDUTOR L1
+  ────────────────────────────────────────────────────
+  Causa: Copper pour GND com vias sob o indutor L1 gera:
+  • Correntes de eddy no cobre (perdas, aquecimento)
+  • Acoplamento magnético entre indutor e plano de ground
+  • Contribuição para vibração e ruído
+
+  Solução: ZONE KEEPOUT sob o indutor L1
+  • Sem cobre (top NEM bottom layer) sob a área do indutor
+  • Sem vias na zona de keepout
+  • Mínimo: área do footprint do indutor + 1mm margem
+  • Aplicar em AMBAS as layers (F.Cu e B.Cu)
+
+  ⚠️ PROBLEMA 3: ÁREA DE COBRE LX/SW DEMASIADO GRANDE
+  ────────────────────────────────────────────────────
+  Causa: Copper pour ou traces excessivos no nó SW (LX)
+  funcionam como antena EMI (alta dV/dt no switch node).
+
+  Solução: MINIMIZAR cobre no nó SW
+  • Trace curto e direto do pin SW ao pad do indutor
+  • NÃO incluir SW em copper flooding/pour
+  • SW NÃO deve ser usado para dissipação térmica
+  • Usar VIN, VOUT e GND pours para thermal (sinais DC quietos)
+
+  ⚠️ PROBLEMA 4: C_FF (FEEDFORWARD) AUSENTE
+  ──────────────────────────────────────────
+  Causa: Condensador feedforward 22pF não incluído na v3.0.
+  Resulta em resposta lenta a transientes e possível instabilidade.
+
+  Solução: SEMPRE incluir C_FF = 22pF em paralelo com R_FB1
+  • Zero a ~329kHz (1/(2π×22kΩ×22pF))
+  • Colocar fisicamente adjacente a R_FB1
+  • LCSC: C1555 (Basic, 0402)
+
+  ⚠️ PROBLEMA 5: CONDENSADOR EN LONGE DO ESP32
+  ─────────────────────────────────────────────
+  Causa: C6 (100nF) no pin EN do ESP32 colocado perto do
+  botão RESET, longe do pin EN. Auto-reset instável.
+
+  Solução: C6 deve estar a ≤3mm do pin EN do ESP32.
+  R5 (10k pull-up) pode ficar perto do botão.
+  Considerar 1-10µF para EN (100nF pode ser insuficiente).
 
 ═══════════════════════════════════════════════════════════════
 ```
@@ -1299,7 +1401,7 @@ Testes de Validação PSU v3:
 
   □ POWER-ON (com fonte PD 15V)
     ├─ IP2721 negocia 15V (medir VOUT)
-    ├─ SY8368 arranca (LED PWR acende)
+    ├─ TPS56838 arranca (LED PWR acende)
     ├─ VOUT = 5.0V ±2% (medir com multímetro)
     └─ Sem oscilação audível (coil whine)
 
@@ -1324,7 +1426,7 @@ Testes de Validação PSU v3:
   □ FALLBACK 9V
     ├─ Usar fonte PD que só tem 9V
     ├─ IP2721 negocia 9V
-    ├─ SY8368 produz 5V
+    ├─ TPS56838 produz 5V
     └─ Firmware detecta e capa brilho a 80%
 
   □ FALLBACK 5V
@@ -1335,7 +1437,7 @@ Testes de Validação PSU v3:
 
   □ THERMAL
     ├─ Operação contínua 30 min @ 5A
-    ├─ Temperatura SY8368 <85°C
+    ├─ Temperatura TPS56838 <85°C
     ├─ Temperatura L1 <100°C
     └─ Sem degradação de performance
 
@@ -1366,8 +1468,8 @@ Evolução da PSU:
   │ PD Controller          │ IP2721 / CYPD   │ IP2721+AO3400A  │
   │ Configuração           │ Complexa        │ Simples (1 res) │
   │                        │                 │                 │
-  │ Buck Converter         │ MP1584 (3A)     │ SY8368 (8A)     │
-  │                        │ TPS54531 (5A)   │                 │
+  │ Buck Converter         │ MP1584 (3A)     │ TPS56838 (8A)   │
+  │                        │ TPS54531 (5A)   │ FCCM, D-CAP3   │
   │                        │                 │                 │
   │ Corrente saída         │ 3-5A            │ 8A              │
   │                        │                 │                 │
@@ -1393,19 +1495,26 @@ Evolução da PSU:
 
 ### Datasheets
 - [IP2721 Datasheet](https://datasheet.lcsc.com/lcsc/2006111335_INJOINIC-IP2721_C603176.pdf) - INJOINIC
-- [SY8368AQQC Datasheet](https://www.silergy.com/product/detail/SY8368) - Silergy
+- [TPS56838 Datasheet (SLVSGM3B)](https://www.ti.com/lit/gpn/TPS56837) - Texas Instruments
+- [TPS5683x Datasheet PDF](https://www.mouser.com/datasheet/2/405/1/tps56838-3395403.pdf) - Mouser mirror
 - [Indutor CKST Series](https://www.coilcraft.com) - Coilcraft
 
 ### Application Notes
 - [IP2721 USB-C PD Application](https://aichiplink.com/blog/IP2721-Datasheet-Specifications-Schematic-Features-Alternative_389)
 - [High Current Buck Design](https://www.ti.com/lit/an/slva477b/slva477b.pdf) - TI
+- [AN-1229 SIMPLE SWITCHER PCB Layout](https://www.ti.com/lit/pdf/snva054) - TI
+- [QFN Thermal Pad Layout](https://www.ti.com/lit/an/sloa122/sloa122.pdf) - TI
 
 ### Projectos de Referência
 - [Hackaday TS100 USB-C](https://cdn.hackaday.io/files/1721877366848608/V1_2%20Schematic_TS100%20-%20USB%20C%20IP2721.pdf)
-- [SY8368 Layout Tips](https://www.silergy.com/technical-documents)
+
+### Notas de Substituição (SY8368 → TPS56838)
+- SY8368AQQC (Silergy, C207642) descontinuado neste design por coil whine em PFM
+- TPS56838 (TI, C37533416) escolhido: FCCM nativo, D-CAP3, 28V max, sem COMP externo
+- Package mudou de QFN-20 para VQFN-HR 10-pin (mesmo 3×3mm)
 
 ---
 
 *Documento criado: Janeiro 2025*
-*Versão: 3.0 - USB-C PD 30W com Buck 8A*
+*Versão: 3.2 - USB-C PD 30W com TPS56838 FCCM Buck 8A*
 *Baseado em: POWER_SUPPLY_v2.md*
