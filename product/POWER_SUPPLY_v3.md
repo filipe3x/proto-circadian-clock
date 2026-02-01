@@ -1556,8 +1556,64 @@ que suporte forced PWM (FCCM) para eliminar coil whine a light load.
 - Para 2-layer board com GND pour: usar ilha de copper pour local no top layer que una os
   3 pads, com trace larga única desde Q1:Source. Vias de 20V desnecessárias se routing no top.
 
+### Investigação: SY8388ARHC como Alternativa FCCM (Fev 2026)
+
+**Objectivo**: Documentar ligações pin-a-pin do SY8388ARHC (C5110279) para uso com
+FCCM forçado, optimizado para mínimo ruído a light load, 20V→5V.
+
+**Chip**: SY8388ARHC — Silergy, QFN2.5×2.5-16, 4-24V, 8A, 600kHz, Instant-PWM (COT)
+**⚠️ VIN max 24V** — margem de 20% sobre 20V PD (apertado vs 40% do TPS56838)
+
+**Pinout (top view):**
+```
+     BS ─┤1          16├─ LX
+     IN ─┤2          15├─ LX
+     IN ─┤3          14├─ GND
+     IN ─┤4          13├─ VCC
+     LX ─┤5          12├─ FB
+    GND ─┤6          11├─ ILMT
+     PG ─┤7          10├─ BYP
+   MODE ─┤8           9├─ EN
+          └────────────┘
+               EP (GND)
+```
+
+**Ligações para FCCM low-noise (17 pinos):**
+
+| Pin | Nome | Liga a | Valor | Notas |
+|-----|------|--------|-------|-------|
+| 1 | BS | C_BOOT → LX | 100nF 25V (0402) | Loop curto BS↔LX |
+| 2,3,4 | IN | VBUS + C_VIN + C_HF | 2×22µF 25V (1210) + 100nF 50V (0402) | 3 pinos em copper pour local |
+| 5,15,16 | LX | Indutor L1 | Trace curto | Minimizar área cobre (EMI) |
+| 6,14 | GND | GND pour | Via(s) directas | — |
+| EP | GND | GND pour | 4-6 vias 0.3mm | Pad térmico |
+| 7 | PG | NC ou 100kΩ→VOUT | — | Open-drain, opcional |
+| 8 | MODE | **VCC (HIGH)** | Pull-up ou trace | **FCCM forçado** — elimina PFM/coil whine |
+| 9 | EN | VIN via 100kΩ | 100kΩ (0402) | Não ligar directamente a IN |
+| 10 | BYP | GND | — | Sem fonte externa 3.3V |
+| 11 | ILMT | **GND (LOW)** | 0Ω ou trace | LOW=≥8A (Table 1: 0-20kΩ→GND) |
+| 12 | FB | Divisor → VOUT | R1=22kΩ, R2=3kΩ (0603, 1%) | VOUT=0.6×(1+22k/3k)=5.0V |
+| 13 | VCC | C_VCC → GND | 2.2µF 10V (0402) | LDO interno 3.3V |
+
+**Indutor recomendado para mínimo ruído:**
+
+| Indutor | L | ΔIL (20V→5V@600kHz) | Ripple % | LCSC | Stock |
+|---------|---|---------------------|----------|------|-------|
+| SRP1265A-2R2M | 2.2µH | 2.84A | 36% | C2831487 | — |
+| SRP1265A-3R3M | 3.3µH | 1.89A | 24% | C1329348 | Sem stock |
+| **SRP1265A-4R7M** | **4.7µH** | **1.33A** | **17%** | **C780205** | **897 un.** |
+
+Escolha: **SRP1265A-4R7M (4.7µH, C780205)** — mesmo footprint 12.5×13.5mm,
+13.5A RMS / 28A Isat, menor ripple (17% vs 36%), menos ruído em FCCM.
+
+**Comparação SY8388A vs SY21243A (ruído):**
+- SY8388A: Instant-PWM COT, 600kHz — geração mais antiga
+- SY21243A: COT ripple-based, freq. não confirmada — geração mais recente, menos jitter
+- Ambos eliminam coil whine em FCCM. Diferença marginal em ripple.
+- SY8388A disponível no LCSC (C5110279), SY21243A não encontrado.
+
 ---
 
 *Documento criado: Janeiro 2025*
-*Versão: 3.2 - USB-C PD 30W com TPS56838 FCCM Buck 8A*
+*Versão: 3.3 - USB-C PD 30W com TPS56838 FCCM Buck 8A + SY8388A investigation*
 *Baseado em: POWER_SUPPLY_v2.md*
