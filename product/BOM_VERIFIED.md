@@ -520,5 +520,39 @@ ESP32, CH340C, USB-C, ESD, LDO, UMH3N, TVS, Terminal, Buzzer, Botões, Battery H
 
 ---
 
+## PSU Components (Sub-board / Secção PSU)
+
+Componentes específicos da secção de alimentação. BOM detalhado em `POWER_SUPPLY_v3.md` e `PSU_20V_SCHEMA_DESIGN.md`.
+
+### Buck Converter - TPS56838 (substitui SY8368AQQC)
+
+| Ref | Componente | LCSC | Tipo | Nota |
+|-----|------------|------|------|------|
+| U12 | **TPS56838** (TI) - Buck 8A FCCM | **C37533416** | Extended | D-CAP3, 28V, VQFN-HR 10-pin 3×3mm |
+| L1 | Bourns SRP1265A-2R2M (2.2µH 22A) | C2831487 | Extended | Shielded, Zone Keepout obrigatório! |
+| C_VIN1,2 | 22µF 25V MLCC (1210) | C52306 | **Basic** | Input caps |
+| C_OUT1-3 | 22µF 10V MLCC (1206) | C12891 | **Basic** | Output caps |
+| C_BOOT | 100nF 25V (0402) | C307331 | **Basic** | Bootstrap |
+| C_HF | 100nF 50V (0402) | C307331 | **Basic** | HF bypass VIN→PGND |
+| C_FF | **22pF 50V (0402)** | **C1555** | **Basic** | Feedforward (// R_FB1). OBRIGATÓRIO! |
+| R_FB1 | 22kΩ 1% (0603) | C31850 | **Basic** | Feedback upper |
+| R_FB2 | 3kΩ 1% (0603) | C4211 | **Basic** | Feedback lower |
+
+**Porquê TPS56838 em vez de SY8368AQQC (C207642)?**
+- SY8368 entra em pulse-skipping (PFM) a light load → coil whine audível
+- SY8368 não tem pin MODE para forçar PWM contínuo
+- TPS56838: FCCM nativo, D-CAP3 (sem compensação externa), 4.5-28V
+- Trade-off: Extended (+$3 taxa) mas elimina problema de ruído
+
+### PD Trigger
+
+| Ref | Componente | LCSC | Tipo | Nota |
+|-----|------------|------|------|------|
+| U10 | IP2721 PD Trigger | C603176 | Extended | USB-C PD 2.0/3.0 |
+| Q3 | AO3404A N-MOSFET | C20917 | **Basic** | Power path switch |
+
+---
+
 *Documento atualizado: Janeiro 2026*
 *Análise de custos Basic/Extended incluída*
+*PSU: TPS56838 (FCCM) substitui SY8368 (PFM coil whine)*
