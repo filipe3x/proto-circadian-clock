@@ -1513,6 +1513,49 @@ Evolução da PSU:
 - TPS56838 (TI, C37533416) escolhido: FCCM nativo, D-CAP3, 28V max, sem COMP externo
 - Package mudou de QFN-20 para VQFN-HR 10-pin (mesmo 3×3mm)
 
+### Investigação: Alternativa Silergy Drop-In com Forced PWM (Fev 2026)
+
+**Objectivo**: Verificar se existe um chip Silergy pin-compatible com o SY8368AQQC (QFN3x3-12)
+que suporte forced PWM (FCCM) para eliminar coil whine a light load.
+
+**Análise do SY8368AQQC (QFN3x3-12, pinout confirmado no KiCad)**:
+- Pinos 4, 5, 6: IN (VIN) — 3 pinos de entrada, todos obrigatórios (bond wires paralelos)
+- Pinos 1, 3: GND
+- Pin 2: LX (switch node)
+- Pin 7: BS (bootstrap)
+- Pin 8: VCC (LDO interno 3.3V)
+- Pin 9: FB (feedback)
+- Pin 10: ILMT (current limit: 8A/12A/16A)
+- Pin 11: PG (power good)
+- Pin 12: EN (enable)
+- **Não tem pin MODE** — usa arquitectura "Instant PWM" (COT) que entra automaticamente
+  em pulse-skipping/PFM a light load. Não há forma de forçar CCM contínuo.
+
+**Candidatos Silergy investigados**:
+
+| Chip | Package | VIN | IOUT | MODE/FCCM | Drop-in? | LCSC |
+|------|---------|-----|------|-----------|----------|------|
+| SY8368QNC | QFN3x3-10 | 4-28V | 8A | Não | Não (10 pinos, sem ILMT/PG) | C125897 |
+| SY21228AQQC | QFN3x3-12 | 4-28V | 8A | A confirmar | Provável (mesmo package) | Não encontrado |
+| SY21228LQQC | QFN3x3-12 | 4.5-28V | 8A | A confirmar | Provável (mesmo package) | Não encontrado |
+| SY8388ARHC | QFN2.5x2.5-16 | 4-24V | 8A | **Sim (MODE pin)** | Não (package diferente) | C5110279 |
+| SY21243ARHC | QFN2.5x2.5-16 | 4-24V | 8A | **Sim (MODE pin)** | Não (package diferente) | — |
+| SY8386RHC | QFN2.5x2.5-16 | 4-28V | 6A | Não claro | Não (package diferente, 6A) | — |
+
+**Conclusão**: Não existe alternativa Silergy drop-in confirmada com FCCM no mesmo QFN3x3-12.
+- Os chips Silergy com MODE pin (SY8388A, SY21243A) usam packages QFN2.5x2.5-16 — incompatíveis.
+- O SY21228 (A/L) é o sucessor do SY8368 no mesmo QFN3x3-12, mas: (a) não está no LCSC/JLCPCB,
+  (b) o datasheet não foi acessível para confirmar se tem FCCM.
+- A decisão de migrar para **TPS56838 (TI)** mantém-se como a correcta: FCCM nativo, disponível
+  no JLCPCB (C37533416), e elimina o problema de coil whine sem depender de pin MODE.
+
+**Nota sobre os 3 pinos VIN do SY8368 (layout legacy)**:
+- Os pinos IN (4, 5, 6) são bond wires paralelos ao mesmo die pad interno.
+- Todos os 3 DEVEM ser ligados ao VBUS — não é válido ligar apenas 1.
+- Razões: distribuição de corrente nos bond wires, impedância parasita, e dissipação térmica.
+- Para 2-layer board com GND pour: usar ilha de copper pour local no top layer que una os
+  3 pads, com trace larga única desde Q1:Source. Vias de 20V desnecessárias se routing no top.
+
 ---
 
 *Documento criado: Janeiro 2025*
