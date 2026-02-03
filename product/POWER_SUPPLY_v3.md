@@ -142,8 +142,8 @@ Estratégia de Negociação PD:
 │                       │  │              ESP32                  │        │ │
 │                       │  │                                     │        │ │
 │                       │  │  ┌─────────────┐  ┌──────────────┐  │        │ │
-│                       │  │  │ VSENSE_ADC  │  │ Power Manager│  │        │ │
-│                       │  │  │ (GPIO36)    │──│ (Firmware)   │  │        │ │
+│                       │  │  │ VBUS_SENSE  │  │ Power Manager│  │        │ │
+│                       │  │  │ (GPIO9/J5)  │──│ (Firmware)   │  │        │ │
 │                       │  │  └─────────────┘  └──────────────┘  │        │ │
 │                       │  │                                     │        │ │
 │                       │  └─────────────────────────────────────┘        │ │
@@ -825,37 +825,37 @@ Medição de Tensão de Entrada (para detecção de perfil):
   O ESP32 mede a tensão de entrada para detectar o perfil PD
   negociado e ajustar o brilho máximo automaticamente.
 
-  VIN após MOSFET (5V-20V)
+  Q3:Source (5V-20V)
           │
           │
-         [R3]  100kΩ (1%)
+         [R_DIV1]  47kΩ (1%) — C25792
           │
-          ├────────────────► GPIO36 (ADC1_CH0) do ESP32
+          ├────────────────► GPIO 9 (ADC1_CH8) do ESP32 (J5)
           │
-         [R4]  22kΩ (1%)
+         [R_DIV2]  5.6kΩ (1%) — C25846
           │
           │
-         ═╧═  C_FILTER
-        100nF
+         ═╧═  C_FILT
+        100nF — C307331
           │
           │
          GND
 
-  Divisor: 22k / (100k + 22k) = 0.18
+  Divisor: 5.6k / (47k + 5.6k) = 0.1065 (ratio = 9.39)
 
   ┌──────────────────────────────────────────────────────────┐
   │ Tensão PD │ Após Divisor │ ADC (12-bit) │ Perfil         │
   ├───────────┼──────────────┼──────────────┼────────────────┤
-  │ 5V        │ 0.90V        │ ~1117        │ USB_5V_3A      │
-  │ 9V        │ 1.62V        │ ~2011        │ PD_9V (27W)    │
-  │ 12V       │ 2.16V        │ ~2681        │ PD_12V (36W)   │
-  │ 15V       │ 2.70V        │ ~3351        │ PD_15V (45W)   │
-  │ 20V       │ 3.60V        │ ~4095 (sat)  │ PD_20V (60W+)  │
+  │ 5V        │ 0.53V        │ ~701         │ USB_5V_3A      │
+  │ 9V        │ 0.96V        │ ~1267        │ PD_9V (27W)    │
+  │ 12V       │ 1.28V        │ ~1690        │ PD_12V (36W)   │
+  │ 15V       │ 1.60V        │ ~2113        │ PD_15V (45W)   │
+  │ 20V       │ 2.13V        │ ~2815        │ PD_20V (60W+)  │
   └──────────────────────────────────────────────────────────┘
 
-  ⚠️ Nota: Para 20V, o divisor satura o ADC.
-  Pode usar 100k/15k (0.13) para range completo, ou
-  aceitar que 20V = "saturado = potência máxima".
+  ✓ Todos os níveis PD dentro do range ADC (max 3.1V).
+  Corrente de fuga: 20V / 52.6kΩ = 0.38mA (desprezável).
+  Resolução: ~7.1mV por step no lado VBUS.
 
 ═══════════════════════════════════════════════════════════════
 ```
@@ -900,11 +900,11 @@ Mapeamento Potência → Brilho Máximo:
 #include <Arduino.h>
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 
-// Pino ADC para medir tensão de entrada (após divisor 100k/22k)
-#define VSENSE_PIN 36  // GPIO36 (ADC1_CH0)
+// Pino ADC para medir tensão de entrada (após divisor 47k/5.6k)
+#define VBUS_SENSE_PIN  9  // GPIO9 (ADC1_CH8) via J5
 
-// Divisor de tensão: 22k / (100k + 22k) = 0.18
-#define VOLTAGE_DIVIDER_RATIO 0.18f
+// Divisor de tensão: 5.6k / (47k + 5.6k) = 0.1065 (ratio = 9.39)
+#define VDIV_RATIO  ((47.0f + 5.6f) / 5.6f)  // 9.393
 
 // Thresholds de tensão (com histerese)
 #define THRESH_20V  17.0f   // >17V = 20V PD
@@ -953,15 +953,15 @@ public:
         // Média de múltiplas leituras para estabilidade
         uint32_t sum = 0;
         for (int i = 0; i < 16; i++) {
-            sum += analogRead(VSENSE_PIN);
+            sum += analogRead(VBUS_SENSE_PIN);
             delayMicroseconds(100);
         }
         float adcValue = sum / 16.0f;
 
         // Converter para tensão real
-        // ADC 12-bit: 0-4095 = 0-3.3V (com atenuação default)
-        float adcVoltage = (adcValue / 4095.0f) * 3.3f;
-        config.inputVoltage = (adcVoltage / VOLTAGE_DIVIDER_RATIO) * adcCalibration;
+        // ADC 12-bit: 0-4095 = 0-3.1V (ESP32 ADC1)
+        float adcVoltage = (adcValue / 4095.0f) * 3.1f;
+        config.inputVoltage = adcVoltage * VDIV_RATIO * adcCalibration;
 
         return config.inputVoltage;
     }
@@ -1160,8 +1160,8 @@ void loop() {
 
 | Ref | Componente | Especificação | Package | Qty | Preço | LCSC |
 |-----|------------|---------------|---------|-----|-------|------|
-| R_SENSE1 | 100kΩ 1% | Divisor tensão | 0402 | 1 | €0.01 | C25741 |
-| R_SENSE2 | 22kΩ 1% | Divisor tensão | 0402 | 1 | €0.01 | C25768 |
+| R_DIV1 | 47kΩ 1% | Divisor tensão (série) | 0402 | 1 | €0.01 | C25792 |
+| R_DIV2 | 5.6kΩ 1% | Divisor tensão (GND) | 0402 | 1 | €0.01 | C25846 |
 | C_FILTER | 100nF 16V | Filtro ADC | 0402 | 1 | €0.01 | C307331 |
 | **Total Sensing** | | | | | **€0.03** | |
 
