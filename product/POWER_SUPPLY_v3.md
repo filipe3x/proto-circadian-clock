@@ -143,7 +143,7 @@ Estratégia de Negociação PD:
 │                       │  │                                     │        │ │
 │                       │  │  ┌─────────────┐  ┌──────────────┐  │        │ │
 │                       │  │  │ VBUS_SENSE  │  │ Power Manager│  │        │ │
-│                       │  │  │ (GPIO9/J5)  │──│ (Firmware)   │  │        │ │
+│                       │  │  │ (IO33/J5)   │──│ (Firmware)   │  │        │ │
 │                       │  │  └─────────────┘  └──────────────┘  │        │ │
 │                       │  │                                     │        │ │
 │                       │  └─────────────────────────────────────┘        │ │
@@ -830,7 +830,7 @@ Medição de Tensão de Entrada (para detecção de perfil):
           │
          [R_DIV1]  47kΩ (1%) — C25792
           │
-          ├────────────────► GPIO 9 (ADC1_CH8) do ESP32 (J5)
+          ├────────────────► IO33 / GPIO33 (ADC1_CH5) do ESP32 (J5)
           │
          [R_DIV2]  5.6kΩ (1%) — C25846
           │
@@ -901,7 +901,7 @@ Mapeamento Potência → Brilho Máximo:
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 
 // Pino ADC para medir tensão de entrada (após divisor 47k/5.6k)
-#define VBUS_SENSE_PIN  9  // GPIO9 (ADC1_CH8) via J5
+#define VBUS_SENSE_PIN  33  // IO33 / GPIO33 (ADC1_CH5) via J5
 
 // Divisor de tensão: 5.6k / (47k + 5.6k) = 0.1065 (ratio = 9.39)
 #define VDIV_RATIO  ((47.0f + 5.6f) / 5.6f)  // 9.393
