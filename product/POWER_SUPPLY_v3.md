@@ -828,11 +828,11 @@ Medição de Tensão de Entrada (para detecção de perfil):
   Q3:Source (5V-20V)
           │
           │
-         [R_DIV1]  47kΩ (1%) — C25792
+         [R_DIV1]  47kΩ (1%) 0603 — C25819
           │
           ├────────────────► IO33 / GPIO33 (ADC1_CH5) do ESP32 (J5)
           │
-         [R_DIV2]  5.6kΩ (1%) — C25846
+         [R_DIV2]  5.6kΩ (1%) 0603 — C23189
           │
           │
          ═╧═  C_FILT
@@ -1160,8 +1160,8 @@ void loop() {
 
 | Ref | Componente | Especificação | Package | Qty | Preço | LCSC |
 |-----|------------|---------------|---------|-----|-------|------|
-| R_DIV1 | 47kΩ 1% | Divisor tensão (série) | 0402 | 1 | €0.01 | C25792 |
-| R_DIV2 | 5.6kΩ 1% | Divisor tensão (GND) | 0402 | 1 | €0.01 | C25846 |
+| R_DIV1 | 47kΩ 1% | Divisor tensão (série) | 0603 | 1 | €0.01 | C25819 | Basic |
+| R_DIV2 | 5.6kΩ 1% | Divisor tensão (GND) | 0603 | 1 | €0.01 | C23189 | Basic |
 | C_FILTER | 100nF 16V | Filtro ADC | 0402 | 1 | €0.01 | C307331 |
 | **Total Sensing** | | | | | **€0.03** | |
 
