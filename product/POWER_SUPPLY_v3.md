@@ -8,7 +8,8 @@ Este documento descreve a arquitetura de alimentação v3 baseada em USB-C Power
 
 | Data | Versão | Alterações |
 |------|--------|------------|
-| Fev 2026 | 3.5 | **Proteção VBUS 20V**: Adicionada secção de segurança CH224K a 20V. D3 TVS atualizado de H7VN10B (Vrwm=7V, incompatível com 20V!) para **SMAJ24CA** (Vrwm=24V, bidirecional). R_VBUS=**10kΩ 0402** (~28mW a 20V, alta impedância para detecção). Documentadas 3 camadas de proteção: C_IN (44µF), TVS (D3), R_VBUS (10kΩ). Removidos R3/R4 5.1kΩ (CH224K tem Rd internos). |
+| Fev 2026 | 3.6 | **Simplificação CH224K**: Removido R_VBUS — pin 8 (VBUS) fica NC. USB PD negoceia via CC1/CC2, não precisa de detecção VBUS (só seria necessário para BC1.2/QC legacy). VDD é SAÍDA do LDO interno, não entrada. |
+| Fev 2026 | 3.5 | **Proteção VBUS 20V**: D3 TVS atualizado de H7VN10B (Vrwm=7V, incompatível com 20V!) para **SMAJ24CA** (Vrwm=24V, bidirecional). Documentadas 2 camadas de proteção: C_IN (44µF), TVS (D3). Removidos R3/R4 5.1kΩ (CH224K tem Rd internos). |
 | Fev 2026 | 3.4 | **Substituição PD trigger**: IP2721 → **CH224K** (WCH, C970725). Motivo: IP2721 só suporta 5V/15V/20V, sem 9V/12V. CH224K suporta 5V/9V/12V/15V/20V, tem PG (Power Good) pin para LED de status, e permite controlo dinâmico via MCU (CFG1/2/3). Remoção do Q3 MOSFET (VBUS liga directo ao buck) — simplifica circuito e garante 5V pass-through para programação ESP32. |
 | Jan 2026 | 3.2 | **Substituição buck converter**: TPS56838 → **TPS56838** (TI). Motivo: coil whine em modo PFM a light load. TPS56838 opera em FCCM nativo, D-CAP3 sem compensação externa, 28V max. Adicionadas lições PCB: Zone Keepout sob indutor, minimizar cobre LX, C_FF obrigatório. |
 | Jan 2026 | 3.1 | **Corrigido valores feedback**: R_FB1=22kΩ/R_FB2=3kΩ (era 16.2kΩ/3.01kΩ - erro de cálculo). Atualizado L1 LCSC para C2831487. Atualizadas referências para coincidir com KiCad: U10 (IP2721), U12 (TPS56838), Q3 (MOSFET). |
@@ -382,18 +383,15 @@ CH224K - USB PD 3.0 Sink Controller:
 
   A 20V, o chip está DENTRO das especificações.
 
-  R_VBUS = 10kΩ (valor do esquemático de referência WCH):
-  ─────────────────────────────────────────────────────────
+  Pino VBUS (pin 8) — NC (Not Connected):
+  ────────────────────────────────────────
 
-  O pino VBUS é alta impedância — serve para detectar a tensão
-  VBUS para protocolos A-port (BC1.2/QC). Pode ser NC se só usar PD.
+  O pino VBUS serve APENAS para detectar tensão em protocolos
+  legacy (BC1.2/QC via D+/D-). Para USB PD puro, é desnecessário.
 
-    I_VBUS = (20V - 3.3V) / 10kΩ = 1.67mA
-    P_R    = 16.7V × 1.67mA = 28mW  (trivial para 0402)
-
-  ✓ 0402 (62.5mW rated) tem margem de sobra para 28mW
-  ✓ 10kΩ é o valor do datasheet WCH — alta impedância, baixo consumo
-  ✓ Pode ser NC se não precisar de BC1.2/QC (só PD via CC1/CC2)
+  ✓ USB PD negoceia tensão via CC1/CC2 — não precisa de VBUS pin
+  ✓ BC1.2/QC não são necessários (carregadores modernos usam PD)
+  ✓ Pin 8 fica NC — menos um componente no BOM
 
   NOTA: O CH224D (QFN-20, C3975094) tem regulador HV mais robusto
   e pino GATE para MOSFET externo — mas é QFN (mais difícil rotear).
@@ -409,7 +407,7 @@ CH224K - USB PD 3.0 Sink Controller:
   A review Beyondlogic documentou um CH224K que morreu a 20V por
   spike indutivo quando a carga DC foi desligada abruptamente.
 
-  Protecção (3 camadas):
+  Protecção (2 camadas):
   ──────────────────────
   1. C_IN (2×22µF 25V cerâmicas) no TPS56838 VIN:
      → Absorvem energia de spikes lentos (µs)
@@ -422,10 +420,8 @@ CH224K - USB PD 3.0 Sink Controller:
        MAS na prática os 44µF impedem que a tensão chegue tão alto
      → TVS actua como segurança adicional, não proteção primária
 
-  3. R_VBUS (10kΩ) para o CH224K VBUS pin:
-     → Alta impedância para detecção de tensão
-     → Limita corrente: mesmo a 50V spike → 4.7mA
-     → Protecção dedicada para o CH224K
+  NOTA: CH224K VBUS pin (pin 8) fica NC — não precisa de protecção.
+        O chip é alimentado internamente via CC1/CC2 e VBUS interno.
 
 ═══════════════════════════════════════════════════════════════
 
@@ -1272,7 +1268,7 @@ void loop() {
 | C_VDD | 1µF 10V | Decoupling VDD CH224K | 0402 | 1 | €0.01 | C52923 | Basic |
 | LED_PG | LED Vermelho | Indicador PD status (PG pin) | 0805 | 1 | €0.02 | C84256 | Basic |
 | R_PG | 1kΩ | Resistor LED PG | 0402 | 1 | €0.01 | C11702 | Basic |
-| R_VBUS | 10kΩ 1% | Série VBUS→CH224K pin 8 (detecção, ~28mW) | 0402 | 1 | €0.01 | C25744 | Basic |
+| — | ~~R_VBUS removido~~ | ~~VBUS detection~~ (pin 8 NC — só PD, sem BC1.2/QC) | — | 0 | — | — | — |
 | U12 | **TPS56838** (TI) | Buck Sync 8A FCCM D-CAP3 | VQFN-HR 10-pin 3x3 | 1 | ~€1.00 | **C37533416** | Extended |
 | L1 | **Bourns SRP1265A-2R2M** | Indutor 2.2µH 22A | 12.5x12.5x6.5mm | 1 | €0.30 | **C2831487** | Extended |
 | | *Alt: CKST0603-2.2uH/M* | *2.2µH 10A* | *6.6x6.6x3mm* | 1 | €0.25 | C3002634 | Extended |
