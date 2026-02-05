@@ -246,8 +246,8 @@ CH224K - USB PD 3.0 Sink Controller:
   │  3   │ CFG2 │  I   │ Config tensão (digital). Max 3.7V!          │
   │  4   │ DP   │ I/O  │ USB D+. Para BC1.2/QC fallback              │
   │  5   │ DM   │ I/O  │ USB D-. Para BC1.2/QC fallback              │
-  │  6   │ CC1  │ I/O  │ USB-C CC1. Negociação PD                    │
-  │  7   │ CC2  │ I/O  │ USB-C CC2. Negociação PD                    │
+  │  6   │ CC1  │ I/O  │ USB-C CC1. Rd interno (5.1kΩ). Directo ao conector │
+  │  7   │ CC2  │ I/O  │ USB-C CC2. Rd interno (5.1kΩ). Directo ao conector │
   │  8   │ VBUS │  I   │ Detecção tensão VBUS (via resistência)      │
   │  9   │ CFG3 │  I   │ Config tensão (digital). Max 3.7V!          │
   │ 10   │ PG   │  O   │ Power Good. Open-drain, LOW = PD OK         │
@@ -339,8 +339,8 @@ CH224K - USB PD 3.0 Sink Controller:
     DP ──┤ DP(4) ─────────────────────────── D+    │
     DM ──┤ DM(5) ─────────────────────────── D-    │
          │                                         │
-   CC1 ──┤ CC1(6) ────────────────────────── CC1   │
-   CC2 ──┤ CC2(7) ────────────────────────── CC2   │
+   CC1 ──┤ CC1(6) ────────────────────────── CC1   │  (Rd interno,
+   CC2 ──┤ CC2(7) ────────────────────────── CC2   │   sem R externo)
          │                                         │
   VBUS ──┤ VBUS(8) ──[R_VBUS]── VBUS              │
          │  (série com resistência para detecção)  │
@@ -1285,7 +1285,7 @@ void loop() {
 | R_FB1 | 22kΩ 1% | Resistor (FB upper) | 0603 | 1 | €0.01 | C31850 | Basic |
 | R_FB2 | 3kΩ 1% | Resistor (FB lower) | 0603 | 1 | €0.01 | C4211 | Basic |
 | — | ~~R9 100kΩ removido~~ | ~~SEL IP2721~~ (CH224K: CFG1 float = 20V, sem resistência) | — | 0 | — | — | — |
-| R3,R4 | 5.1kΩ | CC1/CC2 resistors | 0402 | 2 | €0.01 | C25905 | Basic |
+| — | ~~R3,R4 5.1kΩ removidos~~ | ~~CC1/CC2 pull-downs~~ (CH224K tem Rd internos 5.1kΩ) | — | 0 | — | — | — |
 | **Total PSU** | | | | | **~€2.30** | | |
 
 ### 6.2 Componentes Sensing (ADC)
