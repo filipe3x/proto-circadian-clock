@@ -8,7 +8,8 @@ Este documento descreve a arquitetura de alimentação v3 baseada em USB-C Power
 
 | Data | Versão | Alterações |
 |------|--------|------------|
-| Fev 2026 | 3.6 | **Simplificação CH224K**: Removido R_VBUS — pin 8 (VBUS) fica NC. USB PD negoceia via CC1/CC2, não precisa de detecção VBUS (só seria necessário para BC1.2/QC legacy). VDD é SAÍDA do LDO interno, não entrada. |
+| Fev 2026 | 3.7 | **Circuito CH224K completo**: Adicionado R1 1kΩ (VBUS→VDD) para alimentação. CFG1/2/3 todos NC para 20V fixo (resistor mode). Error LED com NPN inverter (MMBT2222A) — acende quando sem PD. Tabela fallback actualizada com estado PG e Error LED. |
+| Fev 2026 | 3.6 | **Simplificação CH224K**: Removido R_VBUS — pin 8 (VBUS) fica NC. USB PD negoceia via CC1/CC2, não precisa de detecção VBUS (só seria necessário para BC1.2/QC legacy). |
 | Fev 2026 | 3.5 | **Proteção VBUS 20V**: D3 TVS atualizado de H7VN10B (Vrwm=7V, incompatível com 20V!) para **SMAJ24CA** (Vrwm=24V, bidirecional). Documentadas 2 camadas de proteção: C_IN (44µF), TVS (D3). Removidos R3/R4 5.1kΩ (CH224K tem Rd internos). |
 | Fev 2026 | 3.4 | **Substituição PD trigger**: IP2721 → **CH224K** (WCH, C970725). Motivo: IP2721 só suporta 5V/15V/20V, sem 9V/12V. CH224K suporta 5V/9V/12V/15V/20V, tem PG (Power Good) pin para LED de status, e permite controlo dinâmico via MCU (CFG1/2/3). Remoção do Q3 MOSFET (VBUS liga directo ao buck) — simplifica circuito e garante 5V pass-through para programação ESP32. |
 | Jan 2026 | 3.2 | **Substituição buck converter**: TPS56838 → **TPS56838** (TI). Motivo: coil whine em modo PFM a light load. TPS56838 opera em FCCM nativo, D-CAP3 sem compensação externa, 28V max. Adicionadas lições PCB: Zone Keepout sob indutor, minimizar cobre LX, C_FF obrigatório. |
@@ -330,40 +331,47 @@ CH224K - USB PD 3.0 Sink Controller:
               ▼               ▼               ▼
          ┌─────────────────────────────────────────┐
          │              CH224K (U10)                │
+         │              ESSOP-10                    │
          │                                         │
-   VDD ──┤ VDD(1) ──[1µF]── GND                   │
+  VBUS ──┤──[R1 1kΩ]──► VDD(1) ──[1µF]── GND      │  ← Alimentação
          │                                         │
-  [NC] ──┤ CFG1(2) ── NC (floating = 20V)          │
-  [NC] ──┤ CFG2(3) ── NC                           │
-  [NC] ──┤ CFG3(9) ── NC                           │
+         │         CFG2(2) ── NC                   │
+         │         CFG3(3) ── NC                   │
+         │           DP(4) ── NC                   │  (D+/D- não usados,
+         │           DM(5) ── NC                   │   só PD via CC)
          │                                         │
-    DP ──┤ DP(4) ─────────────────────────── D+    │
-    DM ──┤ DM(5) ─────────────────────────── D-    │
+   CC2 ──┤────────► CC2(6) ─────────────── USB-C   │  (Rd interno 5.1kΩ,
+   CC1 ──┤────────► CC1(7) ─────────────── USB-C   │   sem R externo)
          │                                         │
-   CC1 ──┤ CC1(6) ────────────────────────── CC1   │  (Rd interno,
-   CC2 ──┤ CC2(7) ────────────────────────── CC2   │   sem R externo)
+         │         VBUS(8) ── NC                   │  ← NC (só PD, sem BC1.2/QC)
+         │         CFG1(9) ── NC                   │  ← NC = 20V (resistor mode)
          │                                         │
-  VBUS ──┤ VBUS(8) ──[R_VBUS]── VBUS              │
-         │  (série com resistência para detecção)  │
-         │                                         │
-    PG ──┤ PG(10) ──────────────┐                  │
-         │                      │                  │
-   GND ──┤ EPAD                 │                  │
-         │                      │                  │
-         └──────────────────────│──────────────────┘
-                                │
-                                │ PG (open-drain)
-                                ▼
-                    ┌───────────────────────────┐
-                    │ LED de Status PD          │
-                    │                           │
-                    │ VDD ──[1kΩ]──[LED RED]──┐ │
-                    │                          │ │
-                    │              PG ─────────┘ │
-                    │                           │
-                    │ PD OK:  PG=LOW → LED ON   │
-                    │ Sem PD: PG=HIGH→ LED OFF  │
-                    └───────────────────────────┘
+    PG ◄─┤──────── PG(10) ──────────────┐          │
+         │                              │          │
+   GND ──┤ EPAD(0)                      │          │
+         │                              │          │
+         └──────────────────────────────│──────────┘
+                                        │
+                                        │ PG (open-drain)
+                                        ▼
+                    ┌─────────────────────────────────────┐
+                    │ Error LED (acende quando sem PD)    │
+                    │                                     │
+                    │  VDD ──[R_PU 10kΩ]──┬── PG          │
+                    │                     │               │
+                    │                [R_BASE 10kΩ]        │
+                    │                     │               │
+                    │                     B               │
+                    │                    /                │
+                    │  VDD ──[R_LED]──LED──C  Q (NPN)     │
+                    │          330Ω       \               │
+                    │                      E              │
+                    │                      │              │
+                    │                     GND             │
+                    │                                     │
+                    │  Sem PD: PG=HIGH-Z → NPN ON → LED ON│
+                    │  PD OK:  PG=LOW    → NPN OFF→ LED OFF│
+                    └─────────────────────────────────────┘
 
                     VBUS ──┬──────────────────────► TPS56838 VIN
                            │ (DIRECTO, sem MOSFET)     (5-20V)
@@ -374,24 +382,45 @@ CH224K - USB PD 3.0 Sink Controller:
 
 ═══════════════════════════════════════════════════════════════
 
-  Segurança VBUS a 20V — Regulador Interno CH224K:
-  ─────────────────────────────────────────────────
+  Alimentação CH224K — R1 1kΩ de VBUS para VDD:
+  ──────────────────────────────────────────────
 
-  O CH224K tem um regulador interno (LDO série) que gera 3.3V (VDD).
-  O pino VBUS (pin 8) é para DETECÇÃO de tensão, não alimentação.
+  O CH224K é alimentado através de R1 1kΩ ligado de VBUS ao pin VDD.
+  O regulador interno (LDO série) gera 3.3V estável no pin VDD.
   O datasheet classifica o chip para operação de 4V a 22V.
 
   A 20V, o chip está DENTRO das especificações.
 
+  Cálculo de dissipação R1 (1kΩ) a 20V:
+  ─────────────────────────────────────
+  O CH224K consome ~5mA (típico de PD controllers).
+
+    I_chip = 5mA
+    V_drop = 5mA × 1kΩ = 5V
+    V_VDD  = 20V - 5V = 15V (entrada LDO, dentro de 4-22V ✓)
+    P_R1   = 5mA × 5V = 25mW
+
+  ✓ 0603 (100mW rated) tem margem de sobra para 25mW
+  ✓ R1 também limita corrente de inrush no startup
+
   Pino VBUS (pin 8) — NC (Not Connected):
   ────────────────────────────────────────
 
-  O pino VBUS serve APENAS para detectar tensão em protocolos
+  O pino VBUS (pin 8) serve APENAS para detectar tensão em protocolos
   legacy (BC1.2/QC via D+/D-). Para USB PD puro, é desnecessário.
 
   ✓ USB PD negoceia tensão via CC1/CC2 — não precisa de VBUS pin
   ✓ BC1.2/QC não são necessários (carregadores modernos usam PD)
   ✓ Pin 8 fica NC — menos um componente no BOM
+
+  Configuração 20V — CFG1 NC (Resistor Mode):
+  ───────────────────────────────────────────
+
+  Para 20V fixo, usar resistor mode com CFG1 floating:
+
+    CFG1 (pin 9) = NC → 20V
+    CFG2 (pin 2) = NC (ignorado em resistor mode)
+    CFG3 (pin 3) = NC (ignorado em resistor mode)
 
   NOTA: O CH224D (QFN-20, C3975094) tem regulador HV mais robusto
   e pino GATE para MOSFET externo — mas é QFN (mais difícil rotear).
@@ -421,7 +450,7 @@ CH224K - USB PD 3.0 Sink Controller:
      → TVS actua como segurança adicional, não proteção primária
 
   NOTA: CH224K VBUS pin (pin 8) fica NC — não precisa de protecção.
-        O chip é alimentado internamente via CC1/CC2 e VBUS interno.
+        O chip é alimentado via R1 1kΩ de VBUS para VDD (pin 1).
 
 ═══════════════════════════════════════════════════════════════
 
@@ -429,16 +458,21 @@ CH224K - USB PD 3.0 Sink Controller:
   ────────────────────
 
   O CH224K negocia automaticamente a tensão máxima suportada.
-  Com CFG1 floating (20V):
+  Com CFG1 floating (resistor mode) = pedido de 20V.
 
-  ┌─────────────────────────┬──────────────────┐
-  │ Fonte PD suporta        │ CH224K negocia   │
-  ├─────────────────────────┼──────────────────┤
-  │ 20V, 15V, 9V, 5V        │ 20V ✓            │
-  │ 15V, 9V, 5V             │ 15V ✓ (fallback) │
-  │ 9V, 5V                  │ 9V ✓ (fallback)  │
-  │ 5V só (sem PD)          │ 5V ✓ (pass-thru) │
-  └─────────────────────────┴──────────────────┘
+  ┌─────────────────────────┬──────────────┬─────────┬───────────┐
+  │ Carregador              │ Tensão obtida│ PG pin  │ Error LED │
+  ├─────────────────────────┼──────────────┼─────────┼───────────┤
+  │ PD 20V/15V/12V/9V/5V    │ 20V          │ LOW     │ OFF ✓     │
+  │ PD só 15V/12V/9V/5V     │ 15V fallback │ LOW     │ OFF ✓     │
+  │ PD só 12V/9V/5V         │ 12V fallback │ LOW     │ OFF ✓     │
+  │ PD só 9V/5V             │ 9V fallback  │ LOW     │ OFF ✓     │
+  │ PD só 5V                │ 5V PD        │ LOW     │ OFF ✓     │
+  │ USB sem PD (USB-A, etc) │ 5V default   │ HIGH-Z  │ ON ⚠️     │
+  └─────────────────────────┴──────────────┴─────────┴───────────┘
+
+  NOTA: PG indica "PD negociado com sucesso" — qualquer tensão PD!
+        Para saber a tensão exacta → usar ADC (GPIO33).
 
   O firmware do ESP32 detecta a tensão real via ADC (IO33) e ajusta
   o brilho máximo em conformidade.
@@ -1265,9 +1299,13 @@ void loop() {
 | Ref | Componente | Especificação | Package | Qty | Preço | LCSC | Stock |
 |-----|------------|---------------|---------|-----|-------|------|-------|
 | U10 | **CH224K** (WCH) | USB PD 3.0 Sink, 5/9/12/15/20V, PG pin | ESSOP-10 | 1 | €0.30 | **C970725** | Extended |
+| R1 | 1kΩ | VBUS → VDD (alimentação CH224K) | 0603 | 1 | €0.01 | C21190 | Basic |
 | C_VDD | 1µF 10V | Decoupling VDD CH224K | 0402 | 1 | €0.01 | C52923 | Basic |
-| LED_PG | LED Vermelho | Indicador PD status (PG pin) | 0805 | 1 | €0.02 | C84256 | Basic |
-| R_PG | 1kΩ | Resistor LED PG | 0402 | 1 | €0.01 | C11702 | Basic |
+| Q_PG | MMBT2222A | NPN para Error LED inverter | SOT-23 | 1 | €0.01 | C8512 | Basic |
+| R_PU | 10kΩ | Pull-up PG | 0402 | 1 | €0.01 | C25744 | Basic |
+| R_BASE | 10kΩ | Base NPN | 0402 | 1 | €0.01 | C25744 | Basic |
+| R_LED | 330Ω | Corrente LED erro (~4mA) | 0402 | 1 | €0.01 | C25104 | Basic |
+| LED_ERR | LED Vermelho | Error LED (sem PD) | 0603 | 1 | €0.02 | C2286 | Basic |
 | — | ~~R_VBUS removido~~ | ~~VBUS detection~~ (pin 8 NC — só PD, sem BC1.2/QC) | — | 0 | — | — | — |
 | U12 | **TPS56838** (TI) | Buck Sync 8A FCCM D-CAP3 | VQFN-HR 10-pin 3x3 | 1 | ~€1.00 | **C37533416** | Extended |
 | L1 | **Bourns SRP1265A-2R2M** | Indutor 2.2µH 22A | 12.5x12.5x6.5mm | 1 | €0.30 | **C2831487** | Extended |
