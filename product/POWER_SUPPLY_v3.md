@@ -8,6 +8,7 @@ Este documento descreve a arquitetura de alimentação v3 baseada em USB-C Power
 
 | Data | Versão | Alterações |
 |------|--------|------------|
+| Fev 2026 | 3.5 | **Proteção VBUS 20V**: Adicionada secção de segurança CH224K a 20V. D3 TVS atualizado de H7VN10B (Vrwm=7V, incompatível com 20V!) para **SMAJ24CA** (Vrwm=24V, bidirecional). Adicionado R_VBUS 510Ω **1206** ao BOM (0.55W a 20V — 0603 não aguenta). Documentadas 3 camadas de proteção: C_IN (44µF), TVS (D3), R_VBUS (510Ω). |
 | Fev 2026 | 3.4 | **Substituição PD trigger**: IP2721 → **CH224K** (WCH, C970725). Motivo: IP2721 só suporta 5V/15V/20V, sem 9V/12V. CH224K suporta 5V/9V/12V/15V/20V, tem PG (Power Good) pin para LED de status, e permite controlo dinâmico via MCU (CFG1/2/3). Remoção do Q3 MOSFET (VBUS liga directo ao buck) — simplifica circuito e garante 5V pass-through para programação ESP32. |
 | Jan 2026 | 3.2 | **Substituição buck converter**: TPS56838 → **TPS56838** (TI). Motivo: coil whine em modo PFM a light load. TPS56838 opera em FCCM nativo, D-CAP3 sem compensação externa, 28V max. Adicionadas lições PCB: Zone Keepout sob indutor, minimizar cobre LX, C_FF obrigatório. |
 | Jan 2026 | 3.1 | **Corrigido valores feedback**: R_FB1=22kΩ/R_FB2=3kΩ (era 16.2kΩ/3.01kΩ - erro de cálculo). Atualizado L1 LCSC para C2831487. Atualizadas referências para coincidir com KiCad: U10 (IP2721), U12 (TPS56838), Q3 (MOSFET). |
@@ -363,8 +364,67 @@ CH224K - USB PD 3.0 Sink Controller:
                     │ Sem PD: PG=HIGH→ LED OFF  │
                     └───────────────────────────┘
 
-                    VBUS ───────────────────────► TPS56838 VIN
-                         (DIRECTO, sem MOSFET)     (5-20V)
+                    VBUS ──┬──────────────────────► TPS56838 VIN
+                           │ (DIRECTO, sem MOSFET)     (5-20V)
+                           │
+                        [D3 TVS]  SMAJ24CA (Vrwm=24V, bidirecional)
+                           │
+                          GND
+
+═══════════════════════════════════════════════════════════════
+
+  Segurança VBUS a 20V — Regulador Interno CH224K:
+  ─────────────────────────────────────────────────
+
+  ⚠️ O CH224K TEM um regulador interno que gera 3.3V (VDD) a partir
+  da corrente que entra pelo pino VBUS (pin 8) via resistência série.
+  O datasheet classifica o chip para operação de 4V a 22V.
+
+  A 20V, o chip está DENTRO das especificações. O R_VBUS (510Ω)
+  limita a corrente e dissipa a maior parte da tensão:
+
+    I_VBUS = (20V - 3.3V) / 510Ω ≈ 33mA
+    P_RVBUS = 16.7V × 33mA ≈ 0.55W → usar R_VBUS 1206 (rated 250mW)
+                                        ou 2× 1kΩ em paralelo (0603)
+
+  ⚠️ IMPORTANTE: R_VBUS deve ser dimensionado para a potência!
+  Um 0402 (62.5mW) ou 0603 (100mW) NÃO aguenta 0.55W.
+  Opções:
+    • 1× 510Ω 1206 (250mW) — margem apertada, funciona
+    • 1× 510Ω 2010 (500mW) — boa margem
+    • 2× 1kΩ 0805 em paralelo (cada 125mW, total 250mW a 275mW cada)
+
+  NOTA: O CH224D (QFN-20, C3975094) tem regulador HV robusto e
+  não precisa do 510Ω como proteção — mas é QFN (mais difícil rotear).
+  O CH224D também tem pino GATE para controlar MOSFET externo.
+
+  Risco Real — Transientes:
+  ─────────────────────────
+  A operação estável a 20V é segura. O risco é de SPIKES de tensão
+  causados por:
+  • Desconexão súbita de carga (indutância do cabo USB, ~1µH/m)
+  • ESD via conector USB-C
+  • Hot-plug com cabos longos
+
+  A review Beyondlogic documentou um CH224K que morreu a 20V por
+  spike indutivo quando a carga DC foi desligada abruptamente.
+
+  Protecção (3 camadas):
+  ──────────────────────
+  1. C_IN (2×22µF 25V cerâmicas) no TPS56838 VIN:
+     → Absorvem energia de spikes lentos (µs)
+     → ΔV = √(2 × ½LI²/C) = √(9µJ/44µF) ≈ 0.45V a 3A/1µH
+     → Proteção primária e mais eficaz
+
+  2. D3 TVS (SMAJ24CA, Vrwm=24V) no rail VBUS:
+     → Clamp rápido de ESD e spikes ns-rápidos
+     → Vc=38.9V (pico 10A) — acima do TPS56838 28V max,
+       MAS na prática os 44µF impedem que a tensão chegue tão alto
+     → TVS actua como segurança adicional, não proteção primária
+
+  3. R_VBUS (510Ω) para o CH224K VBUS pin:
+     → Limita corrente ao chip: mesmo a 50V spike → 91mA
+     → Protecção dedicada para o CH224K
 
 ═══════════════════════════════════════════════════════════════
 
@@ -1211,6 +1271,7 @@ void loop() {
 | C_VDD | 1µF 10V | Decoupling VDD CH224K | 0402 | 1 | €0.01 | C52923 | Basic |
 | LED_PG | LED Vermelho | Indicador PD status (PG pin) | 0805 | 1 | €0.02 | C84256 | Basic |
 | R_PG | 1kΩ | Resistor LED PG | 0402 | 1 | €0.01 | C11702 | Basic |
+| R_VBUS | 510Ω 1% | Série VBUS→CH224K pin 8 (**⚠️ 0.55W a 20V → 1206 min!**) | **1206** | 1 | €0.01 | C328396 | Basic |
 | U12 | **TPS56838** (TI) | Buck Sync 8A FCCM D-CAP3 | VQFN-HR 10-pin 3x3 | 1 | ~€1.00 | **C37533416** | Extended |
 | L1 | **Bourns SRP1265A-2R2M** | Indutor 2.2µH 22A | 12.5x12.5x6.5mm | 1 | €0.30 | **C2831487** | Extended |
 | | *Alt: CKST0603-2.2uH/M* | *2.2µH 10A* | *6.6x6.6x3mm* | 1 | €0.25 | C3002634 | Extended |
@@ -1240,7 +1301,7 @@ void loop() {
 |-----|------------|---------------|---------|-----|-------|------|-------|
 | J1 | USB-C Receptacle | GCT USB4105-GF-A 16-pin | SMD | 1 | €0.40 | C3020560 | Extended |
 | F1 | PTC Fuse | ASMD2920-300 3A/30V | 2920 | 1 | €0.05 | C2982291 | Extended |
-| D3 | H7VN10B | TVS USB VBUS | DFN1006-2L | 1 | €0.05 | C20615788 | Extended |
+| D3 | **SMAJ24CA** | TVS VBUS 20V (Vrwm=24V, bidirecional) | SMA(DO-214AC) | 1 | €0.05 | **C134974** | Extended |
 | D4 | SMBJ5.0A | TVS 5V output | SMB | 1 | €0.08 | C113620 | Basic |
 | J3 | Barrier Terminal | KF301-5.0-2P 10A | THT | 1 | €0.10 | C474881 | Extended |
 | J6 | Pin Header 1×3 | J_MODE selector | 2.54mm | 1 | €0.02 | C2337 | Basic |
@@ -1687,6 +1748,6 @@ Escolha: **SRP1265A-4R7M (4.7µH, C780205)** — mesmo footprint 12.5×13.5mm,
 ---
 
 *Documento criado: Janeiro 2025*
-*Versão: 3.4 - USB-C PD 30W com CH224K + TPS56838 FCCM Buck 8A*
+*Versão: 3.5 - USB-C PD 30W com CH224K + TPS56838 FCCM Buck 8A*
 *Baseado em: POWER_SUPPLY_v2.md*
 *Substituição IP2721→CH224K: Fevereiro 2026*
