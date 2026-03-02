@@ -4,6 +4,44 @@ Este documento regista as decisões de design tomadas para a PSU de 20V com prot
 
 ---
 
+## Changelog
+
+| Data | Versão | Alterações |
+|------|--------|------------|
+| Mar 2026 | 3.0 | **Migração IP2721 → CH224K**. Corrigidos dois bugs críticos: CFG3=GND (pedia 5V em vez de 20V) e resistências CC externas (5.1kΩ) que impediam negociação PD e mantinham LED_ERR sempre acesa. Removidos R_CC1, R_CC2. CFG3 ligado a VDD via 100kΩ. MOSFET AO3400A e sinal VBUSG removidos (CH224K não controla power-path). |
+| Jan 2026 | 2.1 | Substituição SY8368 → TPS56838 (FCCM). Bloco 2 completo. |
+| Jan 2025 | 2.0 | Versão inicial com IP2721 + TPS56838. |
+
+---
+
+## ⚠️ Bugs Corrigidos (v2 → v3)
+
+### Bug 1: CFG3=GND → CH224K pedia 5V em vez de 20V
+
+**Causa:** Todos os pinos CFG1/CFG2/CFG3 ligados a GND.
+
+| CFG3 | CFG2 | CFG1 | Tensão pedida |
+|------|------|------|---------------|
+| GND  | GND  | GND  | **5V** ❌ (configuração errada) |
+| VDD  | GND  | GND  | **20V** ✓ (configuração correta) |
+
+**Fix:** CFG3 ligado a VDD via resistência 100kΩ. CFG1 e CFG2 mantidos a GND.
+
+### Bug 2: R_CC1/R_CC2 (5.1kΩ) externos → LED_ERR sempre acesa
+
+**Causa:** Resistências de pull-down 5.1kΩ nos pinos CC1/CC2, herdadas do design IP2721.
+O IP2721 **precisa** dessas resistências externas para sinalizar ao carregador que é um sink USB-C.
+O CH224K tem CC handling **interno** — resistências externas nos CC distorcem o sinal e impedem a negociação PD.
+
+**Efeito em cadeia:**
+1. R_CC1/R_CC2 externos → CC lines distorcidas
+2. CH224K não consegue negociar PD → timeout
+3. `LED_ERR` pulled LOW (open-drain activo) → LED erro sempre aceso
+
+**Fix:** Remover R_CC1 e R_CC2 (DNP — Do Not Populate). O CH224K gere os CC internamente.
+
+---
+
 ## 1. Visão Geral
 
 ### 1.1 Objectivo
@@ -16,8 +54,8 @@ PSU USB-C PD de 20V com:
 ### 1.2 Arquitectura
 
 ```
-USB-C VBUS ──► F1 (PTC) ──► IP2721 + AO3400A ──► J_MODE ──► Buck ──► 5V
-                              (PD Trigger)       (1×3)     (TPS56838)
+USB-C VBUS ──► F1 (PTC) ──► CH224K ──► J_MODE ──► Buck ──► 5V
+                              (PD Trigger)  (1×3)   (TPS56838)
 ```
 
 ### 1.3 Modos de Operação (J_MODE)
@@ -56,7 +94,12 @@ Buck VOUT ───────────┘  ← Saída regulada
 
 ---
 
-## 2. Bloco 1: Entrada USB-C + PD Trigger
+## 2. Bloco 1: Entrada USB-C + PD Trigger (CH224K)
+
+**Migração v3.0**: Substituiu IP2721 + AO3400A por **CH224K** (WCH, SOP-8).
+- CH224K é mais simples: sem MOSFET externo, sem CC pull-downs externos
+- VBUS após F1 vai diretamente ao Buck VIN
+- Dois bugs do design anterior corrigidos (ver secção de Bugs acima)
 
 ### 2.1 Esquema
 
@@ -66,66 +109,77 @@ Buck VOUT ───────────┘  ← Saída regulada
                                                 │   1 2 3   │
                                                 │   │ │ │   │
 USB-C VBUS ───┬──[F1]───────────────────────────┴───┘ │ │   │
-              │    │                                  │ │   │
-              │    └────────► AO3400A D               │ │   │
-              │                    │                  │ │   │
-              │                    S ──► Buck VIN ────┘ │   │
-              │                    │                    │   │
-              │                    G               Buck VOUT┘
-              │                    │                    │
-              ├──► IP2721 VBUS     │                    ▼
-              │    (pin 16)        │               5V Cargas
-              │                    │                    │
-             ═╧═ C_IN         IP2721:VBUSG             ═╧═ C2
-             10µF 50V              │                 10µF 50V
-              │              IP2721:VIN                 │
-             GND                   │                   GND
-                                  ═╧═ C1
-                                  1µF 50V
-                                   │
-                                  GND
-
-USB-C CC1 ────┬──► IP2721 pin 12 (CC1)
-              │
-             [R] 5.1kΩ (R_CC1)
-              │
+              │                                       │ │   │
+              │                            Buck VIN ──┘ │   │
+              │                                         │   │
+              │                                    Buck VOUT┘
+              │                                         │
+              │                                         ▼
+              ├──► CH224K VBUS                     5V Cargas
+              │    (pin 6)                              │
+              │                                        ═╧═ C2
+             ═╧═ C_IN                              10µF 50V
+             10µF 50V                                   │
+              │                                        GND
              GND
 
-USB-C CC2 ────┬──► IP2721 pin 13 (CC2)
-              │
-             [R] 5.1kΩ (R_CC2)
-              │
-             GND
+USB-C CC1 ────────► CH224K CC1 (pin 2)   ← SEM resistência externa!
+USB-C CC2 ────────► CH224K CC2 (pin 7)   ← SEM resistência externa!
 
-IP2721 pin 7 (SEL) ──[100kΩ]──► VIN (para selecionar 20V max)
+CH224K VDD (pin 1) ──[100nF]──► GND      (bypass VDD interno)
+CH224K CFG3 (pin 4) ──[100kΩ]──► VDD    ← CFG3=HIGH → pede 20V ✓
+CH224K CFG2 (pin 8) ──────────► GND     ← CFG2=LOW
+CH224K CFG1 (pin 3) ──────────► GND     ← CFG1=LOW
+
+CH224K LED_ERR (pin 5) ──[1kΩ]──► VDD
+                                    │
+                                  [LED_ERR]  ← LED acende só em erro
+                                    │
+                                   GND
 ```
 
-### 2.2 Ligações IP2721
+**Tabela de seleção de tensão CH224K:**
+
+| CFG3 | CFG2 | CFG1 | Tensão pedida |
+|------|------|------|---------------|
+| GND  | GND  | GND  | 5V  (❌ design anterior — bug!) |
+| VDD  | GND  | GND  | **20V** ✓ (configuração correta) |
+| GND  | GND  | VDD  | 9V  |
+| GND  | VDD  | GND  | 12V |
+| GND  | VDD  | VDD  | 15V |
+
+### 2.2 Ligações CH224K (SOP-8)
 
 | Pino | Nome | Liga a | Notas |
 |------|------|--------|-------|
-| 1 | VIN | Source AO3400A + C1 | Alimentação IC (após MOSFET) |
-| 4 | VBUSG | Gate AO3400A | Controla o MOSFET |
-| 5,6,14,15 | GND | GND | Todos ao ground |
-| 7 | SEL | 100kΩ → VIN | Seleciona 20V máximo |
-| 12 | CC1 | USB-C CC1 | Comunicação PD |
-| 13 | CC2 | USB-C CC2 | Comunicação PD |
-| 16 | VBUS | USB-C VBUS + C_IN | Entrada (antes MOSFET) |
-| 2,3,8-11 | N/C | Não ligar | Pinos não usados |
+| 1 | VDD | 100nF → GND | LDO interno 3.3V do CH224K. Bypass obrigatório. |
+| 2 | CC1 | USB-C CC1 | Direto. **Sem resistência externa.** CC handling interno. |
+| 3 | CFG1 | GND | Seleção tensão bit 0. GND = 0. |
+| 4 | CFG3 | 100kΩ → VDD | Seleção tensão bit 2. VDD = 1 → 20V. |
+| 5 | LED_ERR | 1kΩ → VDD + LED → GND | Open-drain. LOW = erro PD. LED acende em falha. |
+| 6 | VBUS | USB-C VBUS + C_IN | Entrada de alimentação do IC. |
+| 7 | CC2 | USB-C CC2 | Direto. **Sem resistência externa.** |
+| 8 | CFG2 | GND | Seleção tensão bit 1. GND = 0. |
 
-### 2.3 Ligações AO3400A (SOT-23)
+> ⚠️ **Diferença crítica vs IP2721**: O CH224K NÃO tem pino VBUSG nem controla um MOSFET externo. VBUS flui diretamente para o Buck após F1. O CH224K só faz a negociação PD no protocolo.
 
-| Pino | Nome | Liga a |
-|------|------|--------|
-| 1 | G (Gate) | IP2721 VBUSG (pin 4) |
-| 2 | S (Source) | IP2721 VIN (pin 1) + C1 + Buck VIN |
-| 3 | D (Drain) | F1 saída + IP2721 VBUS (pin 16) + C_IN |
+### 2.3 Remoção do AO3400A (MOSFET)
 
-### 2.4 Ligações J_MODE (1×3)
+O MOSFET Q1 (AO3400A) e o sinal VBUSG são **removidos** nesta versão.
+
+| Componente | Estado | Motivo |
+|------------|--------|--------|
+| Q1 AO3400A | **Remover** | CH224K não tem gate driver de MOSFET |
+| VBUSG net | **Remover** | Inexistente no CH224K |
+| R_CC1 (5.1kΩ) | **Remover (DNP)** | CH224K tem CC internos |
+| R_CC2 (5.1kΩ) | **Remover (DNP)** | CH224K tem CC internos |
+| R_SEL (100kΩ → VIN) | **Remover** | SEL é pino do IP2721, não existe no CH224K |
+
+### 2.4 Ligações J_MODE (1×3) — sem alteração
 
 | Pino J_MODE | Liga a | Função |
 |-------------|--------|--------|
-| 1 | F1 saída | Entrada bypass (5V USB direto) |
+| 1 | F1 saída (VBUS) | Entrada bypass (5V USB direto) |
 | 2 | 5V cargas | Saída comum |
 | 3 | Buck VOUT | Saída regulada do Buck |
 
@@ -139,9 +193,9 @@ IP2721 pin 7 (SEL) ──[100kΩ]──► VIN (para selecionar 20V max)
 
 | Ref | Valor | Posição | Função |
 |-----|-------|---------|--------|
-| C_IN | 10µF 50V | VBUS → GND (entrada, antes MOSFET) | Filtro entrada |
-| C1 | 1µF 50V | VIN → GND (perto IP2721) | Bypass IC |
-| C2 | 10µF 50V | Saída → GND (perto Buck) | Estabilidade saída |
+| C_IN | 10µF 50V | VBUS → GND (entrada, antes Buck) | Filtro entrada |
+| C_VDD | 100nF 16V | VDD → GND (perto CH224K) | Bypass VDD interno |
+| C2 | 10µF 50V | Saída Buck → GND | Estabilidade saída |
 
 ---
 
@@ -387,26 +441,30 @@ P_DISS = 30W / 0.91 - 30W = 3W
 
 | Ref | Descrição | Valor | LCSC | Stock | Footprint KiCad |
 |-----|-----------|-------|------|-------|-----------------|
-| U1 | PD Trigger | IP2721 | C603176 | Extended | `Package_SO:TSSOP-16_4.4x5mm_P0.65mm` |
-| Q1 | N-MOSFET | AO3400A 30V | C20917 | **Basic** | `Package_TO_SOT_SMD:SOT-23` |
+| U1 | **PD Trigger** | **CH224K** | **C2977806** | **Basic** | `Package_SO:SOP-8_3.9x4.9mm_P1.27mm` |
+| ~~Q1~~ | ~~N-MOSFET~~ | ~~AO3400A~~ | ~~C20917~~ | — | **REMOVIDO** — CH224K não controla MOSFET |
 | F1 | PTC Fuse | 3A 30V | C2982291 | Extended | `Fuse:Fuse_2920_7451Metric` |
 | D1 | TVS Diode | SMBJ5.0A | C19077558 | Extended (Promo) | `Diode_SMD:D_SMB` |
+| LED_ERR | LED Erro PD | Vermelho 0805 | C84256 | **Basic** | `LED_SMD:LED_0805_2012Metric` |
 
 ### 3.2 Condensadores
 
 | Ref | Descrição | Valor | LCSC | Stock | Footprint KiCad |
 |-----|-----------|-------|------|-------|-----------------|
 | C_IN | MLCC | 10µF 50V | C13585 | **Basic** | `Capacitor_SMD:C_1206_3216Metric` |
-| C1 | MLCC | 1µF 50V | C15849 | **Basic** | `Capacitor_SMD:C_0603_1608Metric` |
+| **C_VDD** | **MLCC bypass VDD CH224K** | **100nF 16V** | C307331 | **Basic** | `Capacitor_SMD:C_0402_1005Metric` |
 | C2 | MLCC | 10µF 50V | C13585 | **Basic** | `Capacitor_SMD:C_1206_3216Metric` |
+| ~~C1~~ | ~~MLCC 1µF~~ | — | — | — | **REMOVIDO** — era bypass do IP2721 |
 
 ### 3.3 Resistências
 
-| Ref | Descrição | Valor | LCSC | Stock | Footprint KiCad |
-|-----|-----------|-------|------|-------|-----------------|
-| R_SEL | Config 20V | 100kΩ | C25741 | **Basic** | `Resistor_SMD:R_0402_1005Metric` |
-| R_CC1 | Fallback 5V | 5.1kΩ | C25905 | **Basic** | `Resistor_SMD:R_0402_1005Metric` |
-| R_CC2 | Fallback 5V | 5.1kΩ | C25905 | **Basic** | `Resistor_SMD:R_0402_1005Metric` |
+| Ref | Descrição | Valor | LCSC | Stock | Footprint KiCad | Notas |
+|-----|-----------|-------|------|-------|-----------------|-------|
+| **R_CFG3** | **CH224K CFG3 → VDD** | **100kΩ** | C25741 | **Basic** | `Resistor_SMD:R_0402_1005Metric` | **Novo — seleciona 20V** |
+| **R_LED_ERR** | **Pull-up LED_ERR** | **1kΩ** | C11702 | **Basic** | `Resistor_SMD:R_0402_1005Metric` | **Novo — pull-up open-drain** |
+| ~~R_SEL~~ | ~~Config 20V IP2721~~ | ~~100kΩ~~ | — | — | — | **REMOVIDO** — pino SEL não existe no CH224K |
+| ~~R_CC1~~ | ~~CC1 pull-down~~ | ~~5.1kΩ~~ | — | — | — | **REMOVIDO (DNP)** — causa LED_ERR sempre acesa |
+| ~~R_CC2~~ | ~~CC2 pull-down~~ | ~~5.1kΩ~~ | — | — | — | **REMOVIDO (DNP)** — causa LED_ERR sempre acesa |
 
 ### 3.4 Conectores
 
@@ -639,21 +697,26 @@ Com bypass 20V: TVS limita a ~9V enquanto F1 (3A) dispara, protegendo as cargas.
 
 | Bloco | Custo |
 |-------|-------|
-| Bloco 1 (USB-C PD) | €0.65 |
+| Bloco 1 (USB-C PD) | ~€0.45 (CH224K mais barato que IP2721; sem MOSFET) |
 | Bloco 2 (Buck + Heatsink) | €1.20 |
-| **Total PSU** | **~€1.85** |
+| **Total PSU** | **~€1.65** |
 
 ---
 
-## 6. Próximos Passos
+## 6. Próximos Passos (KiCad)
 
 - [x] ~~Bloco 2: Buck Converter~~ → Secção 2B (TPS56838 FCCM)
 - [x] ~~Bloco 3: Condensadores entrada/saída do Buck~~ → Secção 2B.5
 - [x] ~~Bloco 4: Resistências feedback (divisor para 5V)~~ → Secção 2B.3
 - [x] ~~Bloco 5: Proteção adicional~~ → TVS D1 (secção 4.6)
 - [x] ~~Substituição SY8368 → TPS56838~~ → Secção 2B.1 (coil whine fix)
-- [ ] Criar símbolo TPS56838 no KiCad (VQFN-HR 10-pin)
-- [ ] Adicionar C_FF (22pF) ao esquema
+- [x] ~~Migração IP2721 → CH224K~~ → Secção 2 (fix CFG3 + remoção R_CC1/R_CC2)
+- [ ] Substituir símbolo IP2721 por CH224K no psu.kicad_sch
+- [ ] Remover Q1 (AO3400A) e net VBUSG do esquema
+- [ ] Remover R_CC1, R_CC2 do esquema (ou marcar DNP)
+- [ ] Adicionar R_CFG3 (100kΩ, CFG3→VDD) e C_VDD (100nF, VDD→GND)
+- [ ] Adicionar circuito LED_ERR (R_LED_ERR 1kΩ + LED vermelho)
+- [ ] Adicionar C_FF (22pF) ao esquema Buck
 - [ ] Adicionar Zone Keepout sob L1 no PCB
 - [ ] Corrigir TX/RX swap no uart.kicad_sch
 
@@ -661,7 +724,8 @@ Com bypass 20V: TVS limita a ~9V enquanto F1 (3A) dispara, protegendo as cargas.
 
 ## 7. Referências
 
-- [IP2721 Datasheet](https://datasheet.lcsc.com/lcsc/2006111335_INJOINIC-IP2721_C603176.pdf)
+- [CH224K Datasheet](https://www.wch-ic.com/downloads/CH224DS1_PDF.html) - WCH
+- ~~[IP2721 Datasheet](https://datasheet.lcsc.com/lcsc/2006111335_INJOINIC-IP2721_C603176.pdf)~~ — substituído
 - [TPS56838 Datasheet (SLVSGM3B)](https://www.ti.com/lit/gpn/TPS56837) - Texas Instruments
 - [TPS5683x Datasheet PDF](https://www.mouser.com/datasheet/2/405/1/tps56838-3395403.pdf) - Mouser mirror
 - [POWER_SUPPLY_v3.md](./POWER_SUPPLY_v3.md) - Documentação principal PSU

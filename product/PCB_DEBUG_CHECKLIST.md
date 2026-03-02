@@ -166,6 +166,38 @@ void loop() {
 
 ---
 
+## Debug CH224K (PD Trigger)
+
+### LED_ERR sempre acesa
+
+| Verificação | Ferramenta | Esperado |
+|-------------|------------|----------|
+| R_CC1/R_CC2 presentes? | Visual/Multímetro | **NÃO devem estar.** CH224K tem CC internos. Se montadas, retirar. |
+| CFG3 ligado a VDD? | Multímetro (resistência) | ~100kΩ entre CFG3 e VDD |
+| CFG1/CFG2 a GND? | Multímetro (continuidade) | Continuidade para GND |
+| Fonte PD suporta 20V? | Testar com fonte 20V conhecida | LED_ERR apaga se fonte aceitar |
+
+### Não negocia 20V (VBUS fica em 5V)
+
+| Causa | Verificação | Fix |
+|-------|-------------|-----|
+| **CFG3=GND** (bug comum!) | Medir CFG3: deve ser ~3.3V, não 0V | Ligar CFG3 a VDD via 100kΩ |
+| R_CC1/R_CC2 externas montadas | Ver se há resistências 5.1kΩ nos CC | Remover (DNP) |
+| Fonte não suporta 20V | Testar outra fonte | Confirmar fonte PD 20V |
+| C_VDD ausente | 100nF entre VDD e GND? | Montar C_VDD perto do CH224K |
+
+### Tabela CFG → Tensão pedida
+
+| CFG3 | CFG2 | CFG1 | Tensão |
+|------|------|------|--------|
+| GND | GND | GND | 5V ← **ERRADO** se quiser 20V |
+| **VDD** | GND | GND | **20V** ← correto |
+| GND | GND | VDD | 9V |
+| GND | VDD | GND | 12V |
+| GND | VDD | VDD | 15V |
+
+---
+
 ## Notas
 
 - Primeiro teste sempre com carregador USB descartável (não MacBook!)
