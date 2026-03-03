@@ -5,6 +5,8 @@
 #include <esp_wifi.h>
 #include <Preferences.h>
 #include <Dusk2Dawn.h>
+#include <driver/adc.h>       // adc1_get_raw, adc1_config_*
+#include <esp_adc_cal.h>      // esp_adc_cal_characterize, esp_adc_cal_raw_to_voltage
 #include "board_config.h"     // Configuração de placa (DEVE vir antes dos outros headers)
 #include "captive_portal.h"   // Modulo do captive portal
 #include "auto_solar.h"       // Modulo de calculo solar
@@ -1301,11 +1303,71 @@ DateTime getCurrentTime() {
   }
 }
 
+// ============= VBUS SENSING =============
+// GPIO33 = ADC1_CH5 no ESP32E
+// Divisor resistivo: 47k (R1) + 5.6k (R2) → VDIV = (R1+R2)/R2 = 9.393
+//
+// Porquê esp_adc_cal em vez de raw * 3.1 / 4095:
+//   O ADC do ESP32 tem não-linearidade pronunciada abaixo de ~0.8V.
+//   Para VBUS=5V, Vpin≈0.53V — nessa zona o ADC subestima ~150mV,
+//   o que após VDIV×9.4 produz ~1.4V de erro (5V lê como ~3.5V).
+//   esp_adc_cal_characterize usa os eFuses do chip (Two-Point ou Vref)
+//   para calibrar e corrigir a curva real do ADC.
+#define VBUS_SENSE_CHANNEL    ADC1_CHANNEL_5   // GPIO33
+#define VBUS_ERROR_LED_PIN    LED_BUILTIN_PIN  // GPIO2 (definido em board_config.h)
+#define VDIV_RATIO            ((47.0f + 5.6f) / 5.6f)  // 9.393
+#define VBUS_20V_MIN          17.0f   // Limiar: 19.7V real → margem para 15V fallback
+#define VBUS_LOG_INTERVAL_MS  30000   // Log periódico a cada 30s
+
+static esp_adc_cal_characteristics_t vbus_adc_chars;
+
+void initVbusSensing() {
+  pinMode(VBUS_ERROR_LED_PIN, OUTPUT);
+  digitalWrite(VBUS_ERROR_LED_PIN, HIGH);  // LED ON até confirmar 20V
+
+  adc1_config_width(ADC_WIDTH_BIT_12);
+  adc1_config_channel_atten(VBUS_SENSE_CHANNEL, ADC_ATTEN_DB_11);
+
+  esp_adc_cal_value_t cal = esp_adc_cal_characterize(
+      ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1100, &vbus_adc_chars);
+
+  Serial.printf("[VBUS] ADC cal: %s\n",
+      cal == ESP_ADC_CAL_VAL_EFUSE_VREF ? "eFuse VREF" :
+      cal == ESP_ADC_CAL_VAL_EFUSE_TP   ? "eFuse Two Point" : "padrão (sem eFuse)");
+}
+
+float readVbusVoltage() {
+  uint32_t sum = 0;
+  for (int i = 0; i < 16; i++) sum += adc1_get_raw(VBUS_SENSE_CHANNEL);
+  uint32_t vpin_mv = esp_adc_cal_raw_to_voltage(sum / 16, &vbus_adc_chars);
+  return (vpin_mv / 1000.0f) * VDIV_RATIO;
+}
+
+// bootCheck=true → banner detalhado (só no arranque)
+void checkVbusStatus(bool bootCheck) {
+  float vbus = readVbusVoltage();
+  bool is20V = vbus >= VBUS_20V_MIN;
+  digitalWrite(VBUS_ERROR_LED_PIN, is20V ? LOW : HIGH);
+  if (bootCheck) {
+    Serial.println("┌─── VBUS STATUS ───────────────────┐");
+    Serial.printf( "│  Tensão medida : %5.1f V           │\n", vbus);
+    Serial.printf( "│  Threshold 20V : %5.1f V           │\n", VBUS_20V_MIN);
+    Serial.printf( "│  Estado        : %s │\n",
+        is20V ? "✅ 20V PD OK          " : "⚠️  SEM 20V (fallback)");
+    Serial.println("└───────────────────────────────────┘");
+  } else {
+    Serial.printf("[VBUS] %.1fV — %s\n", vbus, is20V ? "OK" : "⚠️ SEM 20V");
+  }
+}
+
 // ============= SETUP =============
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  
+
+  initVbusSensing();
+  checkVbusStatus(true);
+
   Serial.println("\n\n");
   Serial.println("╔═══════════════════════════════════╗");
   Serial.println("║     RELÓGIO SOLAR LED v3.1        ║");
@@ -1641,6 +1703,7 @@ void updateDisplay() {
 void loop() {
   static unsigned long lastUpdate = 0;
   static unsigned long lastSync = 0;
+  static unsigned long lastVbusCheck = 0;
 
   // Se estamos em modo configuracao, processar apenas o captive portal
   if (configMode) {
@@ -1689,6 +1752,11 @@ void loop() {
     Serial.println("\n[SYNC] Re-sincronização periódica...");
     currentStatus = connectWiFiAndSync();
   }
-  
+
+  if (currentMillis - lastVbusCheck >= VBUS_LOG_INTERVAL_MS) {
+    lastVbusCheck = currentMillis;
+    checkVbusStatus(false);
+  }
+
   delay(20);
 }
