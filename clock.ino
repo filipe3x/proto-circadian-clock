@@ -5,6 +5,8 @@
 #include <esp_wifi.h>
 #include <Preferences.h>
 #include <Dusk2Dawn.h>
+#include <driver/adc.h>       // adc1_get_raw, adc1_config_width, adc1_config_channel_atten
+#include <esp_adc_cal.h>      // Calibração ADC do ESP32 (corrige não-linearidade abaixo de ~0.8V)
 #include "board_config.h"     // Configuração de placa (DEVE vir antes dos outros headers)
 #include "captive_portal.h"   // Modulo do captive portal
 #include "auto_solar.h"       // Modulo de calculo solar
@@ -70,11 +72,14 @@ Preferences preferences;
 #define MESH_IDLE_TIMEOUT_MS 300000   // 5 min sem peers = desligar mesh
 
 // ============= VBUS SENSING =============
-#define VBUS_SENSE_PIN   33  // IO33 / GPIO33 (ADC1_CH5)
-#define ERROR_LED_PIN    2
-#define VDIV_RATIO       ((47.0f + 5.6f) / 5.6f)  // 9.393
-#define VBUS_20V_MIN     17.0f   // Limiar: 19.7V real → margem para 15V fallback
+#define VBUS_SENSE_PIN     33             // IO33 / GPIO33 (ADC1_CH5 no ESP32)
+#define VBUS_SENSE_CHANNEL ADC1_CHANNEL_5 // GPIO33 = ADC1_CH5 no ESP32 clássico
+#define ERROR_LED_PIN      2
+#define VDIV_RATIO         ((47.0f + 5.6f) / 5.6f)  // 9.393
+#define VBUS_20V_MIN       17.0f   // Limiar: 19.7V real → margem para 15V fallback
 #define VBUS_LOG_INTERVAL_MS  30000  // Log a cada 30s
+
+static esp_adc_cal_characteristics_t adc_chars;  // Curva de calibração calculada no setup()
 
 // Estados do mesh (maquina de estados hibrida)
 enum MeshState {
@@ -1311,10 +1316,15 @@ DateTime getCurrentTime() {
 // ============= VBUS SENSING =============
 
 float readVbusVoltage() {
-  int sum = 0;
-  for (int i = 0; i < 16; i++) sum += analogRead(VBUS_SENSE_PIN);
-  float vadc = (sum / 16.0f) * 3.1f / 4095.0f;
-  return vadc * VDIV_RATIO;
+  // Usa adc1_get_raw() em vez de analogRead() para ter acesso direto ao valor
+  // cru e depois aplicar a curva de calibração esp_adc_cal (corrige offset e
+  // não-linearidade do ESP32 abaixo de ~0.8V).
+  uint32_t sum = 0;
+  for (int i = 0; i < 16; i++) sum += adc1_get_raw(VBUS_SENSE_CHANNEL);
+  uint32_t avg_raw = sum / 16;
+  // esp_adc_cal_raw_to_voltage devolve milivolts já calibrados
+  float vpin_mv = esp_adc_cal_raw_to_voltage(avg_raw, &adc_chars);
+  return (vpin_mv / 1000.0f) * VDIV_RATIO;
 }
 
 // Verifica tensão VBUS e controla ERROR_LED.
@@ -1381,10 +1391,20 @@ void setup() {
   // O wrapper P10_32x16_QuarterScan expõe interface lógica 32x16
   display = new P10_32x16_QuarterScan(dma_display);
   
-  // VBUS sense — verificação imediata no arranque
-  analogReadResolution(12);
+  // VBUS sense — calibração ADC + verificação imediata no arranque
+  // adc1_config_width e adc1_config_channel_atten configuram resolução e atenuação
+  // diretamente via driver IDF, independentemente do analogReadResolution() do Arduino.
+  adc1_config_width(ADC_WIDTH_BIT_12);
+  adc1_config_channel_atten(VBUS_SENSE_CHANNEL, ADC_ATTEN_DB_11);
+  // Caracteriza a curva de linearização (lê eFuses de calibração de fábrica)
+  esp_adc_cal_value_t cal_type = esp_adc_cal_characterize(
+      ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1100, &adc_chars);
+  Serial.print("[VBUS] ADC cal: ");
+  if (cal_type == ESP_ADC_CAL_VAL_EFUSE_TP)        Serial.println("eFuse Two Point");
+  else if (cal_type == ESP_ADC_CAL_VAL_EFUSE_VREF) Serial.println("eFuse VREF");
+  else                                              Serial.println("padrão (sem eFuse)");
   pinMode(ERROR_LED_PIN, OUTPUT);
-  digitalWrite(ERROR_LED_PIN, LOW);
+  digitalWrite(ERROR_LED_PIN, HIGH);  // LED ON até confirmar 20V
   checkVbusStatus(true);
 
   Serial.println("✅ Display P10 inicializado");
