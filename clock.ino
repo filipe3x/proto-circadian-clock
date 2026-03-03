@@ -70,7 +70,7 @@ Preferences preferences;
 #define MESH_IDLE_TIMEOUT_MS 300000   // 5 min sem peers = desligar mesh
 
 // ============= VBUS SENSING =============
-#define VBUS_SENSE_PIN   9
+#define VBUS_SENSE_PIN   33  // IO33 / GPIO33 (ADC1_CH5)
 #define ERROR_LED_PIN    2
 #define VDIV_RATIO       ((47.0f + 5.6f) / 5.6f)  // 9.393
 #define VBUS_20V_MIN     17.0f   // Limiar: 19.7V real → margem para 15V fallback
