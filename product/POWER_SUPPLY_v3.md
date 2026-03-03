@@ -8,6 +8,10 @@ Este documento descreve a arquitetura de alimentação v3 baseada em USB-C Power
 
 | Data | Versão | Alterações |
 |------|--------|------------|
+| Fev 2026 | 3.7 | **Circuito CH224K completo**: Adicionado R1 1kΩ (VBUS→VDD) para alimentação. CFG1/2/3 todos NC para 20V fixo (resistor mode). Error LED com NPN inverter (MMBT2222A) — acende quando sem PD. Tabela fallback actualizada com estado PG e Error LED. |
+| Fev 2026 | 3.6 | **Simplificação CH224K**: Removido R_VBUS — pin 8 (VBUS) fica NC. USB PD negoceia via CC1/CC2, não precisa de detecção VBUS (só seria necessário para BC1.2/QC legacy). |
+| Fev 2026 | 3.5 | **Proteção VBUS 20V**: D3 TVS atualizado de H7VN10B (Vrwm=7V, incompatível com 20V!) para **SMAJ24CA** (Vrwm=24V, bidirecional). Documentadas 2 camadas de proteção: C_IN (44µF), TVS (D3). Removidos R3/R4 5.1kΩ (CH224K tem Rd internos). |
+| Fev 2026 | 3.4 | **Substituição PD trigger**: IP2721 → **CH224K** (WCH, C970725). Motivo: IP2721 só suporta 5V/15V/20V, sem 9V/12V. CH224K suporta 5V/9V/12V/15V/20V, tem PG (Power Good) pin para LED de status, e permite controlo dinâmico via MCU (CFG1/2/3). Remoção do Q3 MOSFET (VBUS liga directo ao buck) — simplifica circuito e garante 5V pass-through para programação ESP32. |
 | Jan 2026 | 3.2 | **Substituição buck converter**: TPS56838 → **TPS56838** (TI). Motivo: coil whine em modo PFM a light load. TPS56838 opera em FCCM nativo, D-CAP3 sem compensação externa, 28V max. Adicionadas lições PCB: Zone Keepout sob indutor, minimizar cobre LX, C_FF obrigatório. |
 | Jan 2026 | 3.1 | **Corrigido valores feedback**: R_FB1=22kΩ/R_FB2=3kΩ (era 16.2kΩ/3.01kΩ - erro de cálculo). Atualizado L1 LCSC para C2831487. Atualizadas referências para coincidir com KiCad: U10 (IP2721), U12 (TPS56838), Q3 (MOSFET). |
 | Jan 2025 | 3.0 | Versão inicial com IP2721 + TPS56838 |
@@ -29,8 +33,8 @@ Este documento descreve a arquitetura de alimentação v3 baseada em USB-C Power
 │   • Duas estratégias separadas         • Uma estratégia unificada           │
 │     (5V direto OU PD+Buck)               (PD+Buck com fallback inteligente) │
 │                                                                             │
-│   • IP2721 ou CYPD3177                 • IP2721 + AO3400A MOSFET            │
-│     (configuração complexa)              (power-path controlado, 1 resistor) │
+│   • IP2721 ou CYPD3177                 • CH224K (WCH) PD 3.0 sink           │
+│     (configuração complexa)              (5 tensões, PG pin, sem MOSFET)    │
 │                                                                             │
 │   • MP1584EN (3A) ou TPS54531 (5A)     • TPS56838 (8A síncrono)          │
 │     (margem limitada)                    (folga para picos HUB75)           │
@@ -120,9 +124,9 @@ Estratégia de Negociação PD:
 │   │  FONTE     │      │                      PCB                         │ │
 │   │  USB-C PD  │      │                                                  │ │
 │   │  27-45W    │      │  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐ │ │
-│   │            ├──────┤─►│ USB-C  │─►│ IP2721 │─►│TPS56838 │─►│TERMINAL│ │ │
-│   │  9V/15V/   │      │  │ Recept.│  │ +MOSFET│  │ BUCK   │  │PARAFUSO│ │ │
-│   │  20V       │      │  │        │  │AO3400A │  │ 8A     │  │        │ │ │
+│   │            ├──────┤─►│ USB-C  │─►│ CH224K │─►│TPS56838 │─►│TERMINAL│ │ │
+│   │  9V/15V/   │      │  │ Recept.│  │ PD 3.0 │  │ BUCK   │  │PARAFUSO│ │ │
+│   │  20V       │      │  │        │  │  Sink  │  │ 8A     │  │        │ │ │
 │   │            │      │  └────┬───┘  └───┬────┘  └───┬────┘  └───┬────┘ │ │
 │   └────────────┘      │       │          │           │           │      │ │
 │                       │       │   20V (ou 15V/9V)    │    5V     │      │ │
@@ -142,8 +146,8 @@ Estratégia de Negociação PD:
 │                       │  │              ESP32                  │        │ │
 │                       │  │                                     │        │ │
 │                       │  │  ┌─────────────┐  ┌──────────────┐  │        │ │
-│                       │  │  │ VSENSE_ADC  │  │ Power Manager│  │        │ │
-│                       │  │  │ (GPIO36)    │──│ (Firmware)   │  │        │ │
+│                       │  │  │ VBUS_SENSE  │  │ Power Manager│  │        │ │
+│                       │  │  │ (IO33/J5)   │──│ (Firmware)   │  │        │ │
 │                       │  │  └─────────────┘  └──────────────┘  │        │ │
 │                       │  │                                     │        │ │
 │                       │  └─────────────────────────────────────┘        │ │
@@ -159,8 +163,8 @@ Estratégia de Negociação PD:
 Fluxo de Energia (15V @ 2A = 30W entrada):
 ═══════════════════════════════════════════════════════════════
 
-  USB-C         IP2721          TPS56838          Cargas
-  Fonte         PD Trigger      Buck Sync
+  USB-C         CH224K          TPS56838          Cargas
+  Fonte         PD Sink         Buck Sync
   ─────         ──────────      ─────────        ──────
     │                │               │               │
     │    VBUS        │               │               │
@@ -193,82 +197,121 @@ Fluxo de Energia (15V @ 2A = 30W entrada):
 
 ## 3. Componentes Principais
 
-### 3.1 U10 - IP2721 (PD Trigger) + Q3 - AO3400A/AO3404A (Power MOSFET)
+### 3.1 U10 - CH224K (PD 3.0 Sink Controller) — substitui IP2721 + Q3
 
-O IP2721 é um controlador USB-C PD 2.0/3.0 sink com controlo de MOSFET externo integrado via pino VBUSG.
+O CH224K (WCH, C970725) é um controlador USB PD 3.0/2.0 sink com suporte a BC1.2,
+E-Mark/VCONN, e configuração de tensão via pinos CFG ou resistência única.
+
+**Porquê CH224K em vez de IP2721:**
+- IP2721 só suporta 3 tensões: 5V, 15V, 20V (sem 9V e 12V)
+- CH224K suporta **todas as 5 tensões PD**: 5V, 9V, 12V, 15V, 20V
+- CH224K tem **PG (Power Good)** open-drain — LED de status hardware directo
+- CH224K permite **controlo dinâmico via ESP32** (CFG1/2/3) ou resistência fixa
+- Sem necessidade de MOSFET externo (Q3 removido) — VBUS liga directo ao buck
+- 5V USB pass-through garantido para programação do ESP32
 
 ```
-IP2721 - USB-C PD Sink Controller:
+CH224K - USB PD 3.0 Sink Controller:
 ═══════════════════════════════════════════════════════════════
 
   Características:
   ─────────────────
-  • Suporta USB PD 2.0/3.0
-  • Tensões máximas: 5V, 15V, 20V (via pino SEL)
-  • Fallback automático para tensão máxima suportada
-  • Controlo de MOSFET externo via VBUSG
-  • Protecção integrada (OCP, OVP, short)
-  • Package: TSSOP-16 (4.4x5mm, pitch 0.65mm)
-  • LCSC: C603176 (Extended)
+  • Suporta USB PD 3.0/2.0 + BC1.2 + QC2.0/3.0 + AFC
+  • Tensões: 5V, 9V, 12V, 15V, 20V (todas as tensões PD standard)
+  • Até 100W (20V/5A) com E-Mark
+  • PG (Power Good) open-drain — indica PD negociado com sucesso
+  • Configuração: resistência única (CFG1) ou 3 pinos digitais (MCU)
+  • Protecções: OVP, OTP integradas
+  • Package: ESSOP-10 (150mil, 1mm pitch) — mais compacto que TSSOP-16
+  • LCSC: C970725 (~$0.30)
 
-  Pinout IP2721:
-  ──────────────
+  Pinout CH224K (ESSOP-10):
+  ─────────────────────────
 
-        ┌──────────────────────────────────┐
-        │          IP2721 (TSSOP-16)        │
-        │                                  │
-   VIN ─┤1   VIN               VBUS   16├── VBUS (entrada USB-C)
-  VOUT ─┤2   VOUT              GND    15├── GND
-   N/C ─┤3   N/C               GND    14├── GND
- VBUSG ─┤4   VBUSG             CC2    13├── CC2 (do USB-C)
-   GND ─┤5   GND               CC1    12├── CC1 (do USB-C)
-   GND ─┤6   GND               N/C    11├── N/C
-   SEL ─┤7   SEL               N/C    10├── N/C
-   N/C ─┤8   N/C               N/C     9├── N/C
-        │                                  │
-        └──────────────────────────────────┘
+         ┌──────────────────────────┐
+         │      CH224K (ESSOP-10)    │
+         │                          │
+    VDD ─┤1                    10├─ PG (Power Good, open-drain)
+   CFG1 ─┤2                     9├─ CFG3
+   CFG2 ─┤3                     8├─ VBUS (detecção tensão)
+     DP ─┤4                     7├─ CC2
+     DM ─┤5                     6├─ CC1
+         │                          │
+         │     [EPAD = GND]         │
+         └──────────────────────────┘
 
-  Configuração de Tensão (pino SEL):
-  ──────────────────────────────────
+  Descrição dos Pinos:
+  ────────────────────
+  │ Pin  │ Nome │ Tipo │ Descrição                                    │
+  │  1   │ VDD  │  P   │ Regulador interno 3.3V. Decoupling 1µF→GND  │
+  │  2   │ CFG1 │  I   │ Config tensão (analógico). Resistência→GND  │
+  │  3   │ CFG2 │  I   │ Config tensão (digital). Max 3.7V!          │
+  │  4   │ DP   │ I/O  │ USB D+. Para BC1.2/QC fallback              │
+  │  5   │ DM   │ I/O  │ USB D-. Para BC1.2/QC fallback              │
+  │  6   │ CC1  │ I/O  │ USB-C CC1. Rd interno (5.1kΩ). Directo ao conector │
+  │  7   │ CC2  │ I/O  │ USB-C CC2. Rd interno (5.1kΩ). Directo ao conector │
+  │  8   │ VBUS │  I   │ Detecção tensão VBUS (via resistência)      │
+  │  9   │ CFG3 │  I   │ Config tensão (digital). Max 3.7V!          │
+  │ 10   │ PG   │  O   │ Power Good. Open-drain, LOW = PD OK         │
+  │ EPAD │ GND  │  G   │ Ground + thermal pad                        │
 
-  ┌─────────────────┬─────────────────┬─────────────────────────┐
-  │ Estado SEL      │ Tensão Máxima   │ Comportamento           │
-  ├─────────────────┼─────────────────┼─────────────────────────┤
-  │ High (100kΩ→VIN)│ 20V ★           │ Fallback: 15V→12V→9V→5V │
-  │ Floating        │ 15V             │ Fallback: 12V→9V→5V     │
-  │ GND             │ 5V              │ Sem PD (USB básico)     │
-  └─────────────────┴─────────────────┴─────────────────────────┘
+  Configuração de Tensão — Método 1 (Resistência em CFG1):
+  ────────────────────────────────────────────────────────
 
-  ★ Configuração recomendada para v3: 20V (SEL → 100kΩ → VIN)
+  ★ Recomendado para configuração fixa (sem MCU)
 
-  💡 Usar jumper/0Ω para facilitar mudança de tensão em produção
+  ┌──────────────────────┬─────────────────┬──────────────────┐
+  │ Resistência CFG1→GND │ Tensão Pedida   │ Comportamento    │
+  ├──────────────────────┼─────────────────┼──────────────────┤
+  │ NC (floating)        │ 20V ★           │ Default, máximo  │
+  │ 56kΩ                 │ 15V             │                  │
+  │ 24kΩ                 │ 12V             │                  │
+  │ 6.8kΩ                │ 9V              │                  │
+  └──────────────────────┴─────────────────┴──────────────────┘
+
+  ★ Para pedir 20V: CFG1 floating (sem resistência, sem pull-up)
+    CFG2 e CFG3 também floating neste método.
+
+  Configuração de Tensão — Método 2 (Digital, via ESP32):
+  ───────────────────────────────────────────────────────
+
+  ★ Permite mudar tensão PD em runtime via GPIO do ESP32
+
+  ┌──────┬──────┬──────┬─────────┐
+  │ CFG1 │ CFG2 │ CFG3 │ Tensão  │
+  ├──────┼──────┼──────┼─────────┤
+  │ HIGH │  —   │  —   │ 5V      │
+  │ LOW  │ LOW  │ LOW  │ 9V      │
+  │ LOW  │ LOW  │ HIGH │ 12V     │
+  │ LOW  │ HIGH │ HIGH │ 15V     │
+  │ LOW  │ HIGH │ LOW  │ 20V ★   │
+  └──────┴──────┴──────┴─────────┘
+
+  ⚠️ CFG2/CFG3 max 3.7V! Usar level shifter ou divisor se VDD ESP32 > 3.3V
+  ⚠️ Colocar pull-down em CFG2/CFG3 para evitar 20V acidental durante boot
 
 ═══════════════════════════════════════════════════════════════
 
-AO3400A - N-Channel MOSFET (Power Path):
-═══════════════════════════════════════════════════════════════
+  Porquê SEM MOSFET externo (Q3 removido):
+  ─────────────────────────────────────────
 
-  Características:
-  ─────────────────
-  • Vds: 30V (adequado para 20V PD)
-  • Id: 5.7A contínua (suficiente para aplicação)
-  • Rds(on): 26mΩ @ Vgs=4.5V
-  • Vgs(th): 1.0-2.5V
-  • Package: SOT-23
-  • LCSC: C20917 (Basic - muito comum!)
+  O IP2721 tinha pino VBUSG que controlava um N-MOSFET (Q3) no power path.
+  O CH224K NÃO tem equivalente a VBUSG — apenas PG (Power Good).
 
-  Porquê MOSFET externo?
-  ──────────────────────
-  • IP2721 controla o gate via pino VBUSG
-  • Liga MOSFET quando CC connection estabelecida
-  • Desliga MOSFET quando USB-C desconectado
-  • Soft-start controlado (limita inrush current)
-  • Protecção contra back-feed
+  Se usássemos PG para controlar um MOSFET:
+  • PD OK → PG LOW → MOSFET ON → funciona
+  • USB 5V básico (Mac) → PG HIGH-Z → MOSFET OFF → SEM POWER!
+  → Impossível flashar o ESP32 via USB 5V do Mac.
+
+  Solução: VBUS liga DIRECTAMENTE ao buck converter (sem MOSFET).
+  • TPS56838 tem soft-start próprio (pin SS) — gere inrush
+  • Input caps (2×22µF) absorvem transitórios hot-plug
+  • 5V USB do Mac → pass-through directo → ESP32 liga → flash OK
 
 ═══════════════════════════════════════════════════════════════
 
-  Circuito de Aplicação (20V max):
-  ────────────────────────────────
+  Circuito de Aplicação (20V max, CFG1 floating):
+  ────────────────────────────────────────────────
 
                         USB-C Connector
                        ┌─────────────────┐
@@ -277,8 +320,8 @@ AO3400A - N-Channel MOSFET (Power Path):
         CC1 ───────────┤ CC1             │
         CC2 ───────────┤ CC2             │
                        │                 │
-        D+ ────────────┤ D+              │──► CH340C
-        D- ────────────┤ D-              │──► CH340C
+        D+ ────────────┤ D+              │──► CH340C (dados USB)
+        D- ────────────┤ D-              │──► CH340C (dados USB)
                        │                 │
         GND ───────────┤ GND             │
                        └─────────────────┘
@@ -287,66 +330,184 @@ AO3400A - N-Channel MOSFET (Power Path):
               │               │               │
               ▼               ▼               ▼
          ┌─────────────────────────────────────────┐
-         │                 IP2721                  │
+         │              CH224K (U10)                │
+         │              ESSOP-10                    │
          │                                         │
-   VBUS ─┤ VBUS(16)                   CC1(12) ├───► CC1
+  VBUS ──┤──[R1 1kΩ]──► VDD(1) ──[1µF]── GND      │  ← Alimentação
          │                                         │
-   VIN* ─┤ VIN(1)                     CC2(13) ├───► CC2
-         │  * VIN liga ao Source do MOSFET (após switch)
+         │         CFG2(2) ── NC                   │
+         │         CFG3(3) ── NC                   │
+         │           DP(4) ── NC                   │  (D+/D- não usados,
+         │           DM(5) ── NC                   │   só PD via CC)
          │                                         │
-         │ VBUSG(4) ──────────────────────┐        │
-         │                                │        │
-  [100k] │ SEL(7) ───[100kΩ]─── VIN      │        │
-         │             (20V max)          │        │
-   VOUT ◄┤ VOUT(2)                       │        │
-         │                                │        │
-   GND ──┤ GND(5,6,14,15)                │        │
-         │                                │        │
-         └────────────────────────────────│────────┘
-                                          │
-                                          │ GATE
-                                          ▼
-                    VBUS ────────┬────────────────────────┐
-                                 │                        │
-                                 │   ┌─────────────────┐  │
-                                 │   │    AO3400A      │  │
-                                 │   │    N-MOSFET     │  │
-                                 │   │                 │  │
-                                 └───┤ D (Drain)       │  │
-                                     │                 │  │
-                    VBUSG ───────────┤ G (Gate)        │  │
-                                     │                 │  │
-                    VIN_BUCK ◄───────┤ S (Source)      │  │
-                                     │                 │  │
-                                     └─────────────────┘  │
-                                          │               │
-                                          │               │
-                                          ▼               │
-                                    Para TPS56838         │
-                                    (VIN = até 20V)      │
-                                                         │
-                    GND ─────────────────────────────────┘
+   CC2 ──┤────────► CC2(6) ─────────────── USB-C   │  (Rd interno 5.1kΩ,
+   CC1 ──┤────────► CC1(7) ─────────────── USB-C   │   sem R externo)
+         │                                         │
+         │         VBUS(8) ── NC                   │  ← NC (só PD, sem BC1.2/QC)
+         │         CFG1(9) ── NC                   │  ← NC = 20V (resistor mode)
+         │                                         │
+    PG ◄─┤──────── PG(10) ──────────────┐          │
+         │                              │          │
+   GND ──┤ EPAD(0)                      │          │
+         │                              │          │
+         └──────────────────────────────│──────────┘
+                                        │
+                                        │ PG (open-drain)
+                                        ▼
+                    ┌─────────────────────────────────────┐
+                    │ Error LED (acende quando sem PD)    │
+                    │                                     │
+                    │  VDD ──[R_PU 10kΩ]──┬── PG          │
+                    │                     │               │
+                    │                [R_BASE 10kΩ]        │
+                    │                     │               │
+                    │                     B               │
+                    │                    /                │
+                    │  VDD ──[R_LED]──LED──C  Q (NPN)     │
+                    │          330Ω       \               │
+                    │                      E              │
+                    │                      │              │
+                    │                     GND             │
+                    │                                     │
+                    │  Sem PD: PG=HIGH-Z → NPN ON → LED ON│
+                    │  PD OK:  PG=LOW    → NPN OFF→ LED OFF│
+                    └─────────────────────────────────────┘
+
+                    VBUS ──┬──────────────────────► TPS56838 VIN
+                           │ (DIRECTO, sem MOSFET)     (5-20V)
+                           │
+                        [D3 TVS]  SMAJ24CA (Vrwm=24V, bidirecional)
+                           │
+                          GND
+
+═══════════════════════════════════════════════════════════════
+
+  Alimentação CH224K — R1 1kΩ de VBUS para VDD:
+  ──────────────────────────────────────────────
+
+  O CH224K é alimentado através de R1 1kΩ ligado de VBUS ao pin VDD.
+  O regulador interno (LDO série) gera 3.3V estável no pin VDD.
+  O datasheet classifica o chip para operação de 4V a 22V.
+
+  A 20V, o chip está DENTRO das especificações.
+
+  Cálculo de dissipação R1 (1kΩ) a 20V:
+  ─────────────────────────────────────
+  O CH224K consome ~5mA (típico de PD controllers).
+
+    I_chip = 5mA
+    V_drop = 5mA × 1kΩ = 5V
+    V_VDD  = 20V - 5V = 15V (entrada LDO, dentro de 4-22V ✓)
+    P_R1   = 5mA × 5V = 25mW
+
+  ✓ 0603 (100mW rated) tem margem de sobra para 25mW
+  ✓ R1 também limita corrente de inrush no startup
+
+  Pino VBUS (pin 8) — NC (Not Connected):
+  ────────────────────────────────────────
+
+  O pino VBUS (pin 8) serve APENAS para detectar tensão em protocolos
+  legacy (BC1.2/QC via D+/D-). Para USB PD puro, é desnecessário.
+
+  ✓ USB PD negoceia tensão via CC1/CC2 — não precisa de VBUS pin
+  ✓ BC1.2/QC não são necessários (carregadores modernos usam PD)
+  ✓ Pin 8 fica NC — menos um componente no BOM
+
+  Configuração 20V — CFG1 NC (Resistor Mode):
+  ───────────────────────────────────────────
+
+  Para 20V fixo, usar resistor mode com CFG1 floating:
+
+    CFG1 (pin 9) = NC → 20V
+    CFG2 (pin 2) = NC (ignorado em resistor mode)
+    CFG3 (pin 3) = NC (ignorado em resistor mode)
+
+  NOTA: O CH224D (QFN-20, C3975094) tem regulador HV mais robusto
+  e pino GATE para MOSFET externo — mas é QFN (mais difícil rotear).
+
+  Risco Real — Transientes:
+  ─────────────────────────
+  A operação estável a 20V é segura. O risco é de SPIKES de tensão
+  causados por:
+  • Desconexão súbita de carga (indutância do cabo USB, ~1µH/m)
+  • ESD via conector USB-C
+  • Hot-plug com cabos longos
+
+  A review Beyondlogic documentou um CH224K que morreu a 20V por
+  spike indutivo quando a carga DC foi desligada abruptamente.
+
+  Protecção (2 camadas):
+  ──────────────────────
+  1. C_IN (2×22µF 25V cerâmicas) no TPS56838 VIN:
+     → Absorvem energia de spikes lentos (µs)
+     → ΔV = √(2 × ½LI²/C) = √(9µJ/44µF) ≈ 0.45V a 3A/1µH
+     → Proteção primária e mais eficaz
+
+  2. D3 TVS (SMAJ24CA, Vrwm=24V) no rail VBUS:
+     → Clamp rápido de ESD e spikes ns-rápidos
+     → Vc=38.9V (pico 10A) — acima do TPS56838 28V max,
+       MAS na prática os 44µF impedem que a tensão chegue tão alto
+     → TVS actua como segurança adicional, não proteção primária
+
+  NOTA: CH224K VBUS pin (pin 8) fica NC — não precisa de protecção.
+        O chip é alimentado via R1 1kΩ de VBUS para VDD (pin 1).
 
 ═══════════════════════════════════════════════════════════════
 
   Fallback Automático:
   ────────────────────
 
-  O IP2721 negocia automaticamente a tensão máxima suportada
-  por AMBOS (fonte PD e configuração SEL).
+  O CH224K negocia automaticamente a tensão máxima suportada.
+  Com CFG1 floating (resistor mode) = pedido de 20V.
 
-  Exemplo (SEL = 20V max):
-  ┌─────────────────────────┬──────────────────┐
-  │ Fonte PD suporta        │ IP2721 negocia   │
-  ├─────────────────────────┼──────────────────┤
-  │ 20V, 15V, 9V, 5V        │ 20V ✓            │
-  │ 15V, 9V, 5V             │ 15V ✓ (fallback) │
-  │ 9V, 5V                  │ 9V ✓ (fallback)  │
-  │ 5V só                   │ 5V ✓ (fallback)  │
-  └─────────────────────────┴──────────────────┘
+  ┌─────────────────────────┬──────────────┬─────────┬───────────┐
+  │ Carregador              │ Tensão obtida│ PG pin  │ Error LED │
+  ├─────────────────────────┼──────────────┼─────────┼───────────┤
+  │ PD 20V/15V/12V/9V/5V    │ 20V          │ LOW     │ OFF ✓     │
+  │ PD só 15V/12V/9V/5V     │ 15V fallback │ LOW     │ OFF ✓     │
+  │ PD só 12V/9V/5V         │ 12V fallback │ LOW     │ OFF ✓     │
+  │ PD só 9V/5V             │ 9V fallback  │ LOW     │ OFF ✓     │
+  │ PD só 5V                │ 5V PD        │ LOW     │ OFF ✓     │
+  │ USB sem PD (USB-A, etc) │ 5V default   │ HIGH-Z  │ ON ⚠️     │
+  └─────────────────────────┴──────────────┴─────────┴───────────┘
 
-  O firmware do ESP32 detecta a tensão real via ADC e ajusta
+  NOTA: PG indica "PD negociado com sucesso" — qualquer tensão PD!
+        Para saber a tensão exacta → usar ADC (GPIO33).
+
+  O firmware do ESP32 detecta a tensão real via ADC (IO33) e ajusta
   o brilho máximo em conformidade.
+
+═══════════════════════════════════════════════════════════════
+
+  LED de Erro "NOT 20V" — usando PG + ADC:
+  ─────────────────────────────────────────
+
+  O PG do CH224K indica apenas "PD negociado com sucesso" (qualquer tensão).
+  Para distinguir "20V" de "15V fallback", o PG sozinho NÃO basta.
+
+  Estratégia combinada:
+
+  1. PG (hardware): LED vermelho acende quando PD falha (5V USB básico)
+     VDD ──[1kΩ]──[LED_RED]── PG
+     → PD OK: PG LOW → LED ON (power good)
+     → Sem PD: PG HIGH-Z → LED OFF (sem power good)
+
+     NOTA: Inverter para "error LED" com NPN:
+     PG ──[10kΩ]── Base NPN
+                    Collector ──[1kΩ]──[LED_RED]── VDD
+                    Emitter ── GND
+     → Sem PD: PG HIGH-Z (pull-up) → NPN ON → LED ON (erro!)
+     → PD OK: PG LOW → NPN OFF → LED OFF
+
+  2. ADC (firmware): Verificar se tensão é exactamente 20V
+     float vbus = readVbusVoltage();  // via divisor IO33
+     if (vbus < 17.0f) {
+         // Não é 20V — acender LED via GPIO
+         digitalWrite(ERROR_LED_PIN, HIGH);
+     }
+
+  Recomendação: Usar ambos. PG para indicação imediata hardware
+  (antes do ESP32 arrancar), ADC para informação precisa em runtime.
 
 ═══════════════════════════════════════════════════════════════
 ```
@@ -427,7 +588,7 @@ TPS56838 - Buck Converter 8A (FCCM):
   Circuito de Aplicação (20V → 5V @ 8A):
   ──────────────────────────────────────
 
-                     VIN = 5-20V (do IP2721 via AO3404A)
+                     VIN = 5-20V (VBUS directo, sem MOSFET)
                           │
                           │
             ┌─────────────┼──────────────────────────────┐
@@ -716,28 +877,25 @@ Condensadores de Entrada e Saída:
 │                    │           │           │                                │
 │                    ▼           ▼           ▼                                │
 │               ┌─────────────────────────────────┐                           │
-│               │     IP2721 (U10) + AO3404A (Q3) │                           │
-│               │          PD + Power Path        │                           │
+│               │          CH224K (U10)            │                           │
+│               │          PD 3.0 Sink             │                           │
 │               │                                 │                           │
-│     VBUS ─────┤ VBUS(16)              CC1(12)───┼─► CC1                     │
+│     VDD ──────┤ VDD(1) ──[1µF]── GND            │                           │
 │               │                                 │                           │
-│     VBUS ─────┤ VIN(1)               CC2(13) ───┼─► CC2                     │
+│      NC ──────┤ CFG1(2) (float = 20V)  CC1(6)──┼─► CC1                     │
+│      NC ──────┤ CFG2(3)                CC2(7)──┼─► CC2                     │
+│      NC ──────┤ CFG3(9)                         │                           │
 │               │                                 │                           │
-│               │ VBUSG(4)─────────┐   GND ───────┼─► GND                     │
-│               │                  │              │                           │
-│  [100kΩ]──VIN─┤ SEL(7)           │              │                           │
-│               │                  │              │                           │
-│               └──────────────────│──────────────┘                           │
-│                                  │                                          │
-│                                  │ GATE                                     │
-│                                  ▼                                          │
-│                    VBUS ────┬────────────────────────┐                      │
-│                             │   ┌─────────────────┐  │                      │
-│                             │   │    AO3400A      │  │                      │
-│                             └───┤ D          S ├──┼──► VIN_BUCK             │
-│                    VBUSG ───────┤ G              │  │                       │
-│                                 └─────────────────┘  │                      │
-│                                                      │                      │
+│     VBUS ─────┤ VBUS(8) ──[R]── VBUS            │                           │
+│               │                                 │                           │
+│      PG ◄─────┤ PG(10) ── LED status            │                           │
+│               │                                 │                           │
+│     GND ──────┤ EPAD                            │                           │
+│               │                                 │                           │
+│               └─────────────────────────────────┘                           │
+│                                                                             │
+│                    VBUS ──────────────────────────► VIN_BUCK                 │
+│                         (DIRECTO, sem MOSFET Q3)                            │
 │                         │ VIN = 5-20V (após MOSFET)                         │
 │                         │                                                   │
 │         ┌───────────────┼───────────────────────────────┐                   │
@@ -825,37 +983,37 @@ Medição de Tensão de Entrada (para detecção de perfil):
   O ESP32 mede a tensão de entrada para detectar o perfil PD
   negociado e ajustar o brilho máximo automaticamente.
 
-  VIN após MOSFET (5V-20V)
+  Q3:Source (5V-20V)
           │
           │
-         [R3]  100kΩ (1%)
+         [R_DIV1]  47kΩ (1%) 0603 — C25819
           │
-          ├────────────────► GPIO36 (ADC1_CH0) do ESP32
+          ├────────────────► IO33 / GPIO33 (ADC1_CH5) do ESP32 (J5)
           │
-         [R4]  22kΩ (1%)
+         [R_DIV2]  5.6kΩ (1%) 0603 — C23189
           │
           │
-         ═╧═  C_FILTER
-        100nF
+         ═╧═  C_FILT
+        100nF — C307331
           │
           │
          GND
 
-  Divisor: 22k / (100k + 22k) = 0.18
+  Divisor: 5.6k / (47k + 5.6k) = 0.1065 (ratio = 9.39)
 
   ┌──────────────────────────────────────────────────────────┐
   │ Tensão PD │ Após Divisor │ ADC (12-bit) │ Perfil         │
   ├───────────┼──────────────┼──────────────┼────────────────┤
-  │ 5V        │ 0.90V        │ ~1117        │ USB_5V_3A      │
-  │ 9V        │ 1.62V        │ ~2011        │ PD_9V (27W)    │
-  │ 12V       │ 2.16V        │ ~2681        │ PD_12V (36W)   │
-  │ 15V       │ 2.70V        │ ~3351        │ PD_15V (45W)   │
-  │ 20V       │ 3.60V        │ ~4095 (sat)  │ PD_20V (60W+)  │
+  │ 5V        │ 0.53V        │ ~701         │ USB_5V_3A      │
+  │ 9V        │ 0.96V        │ ~1267        │ PD_9V (27W)    │
+  │ 12V       │ 1.28V        │ ~1690        │ PD_12V (36W)   │
+  │ 15V       │ 1.60V        │ ~2113        │ PD_15V (45W)   │
+  │ 20V       │ 2.13V        │ ~2815        │ PD_20V (60W+)  │
   └──────────────────────────────────────────────────────────┘
 
-  ⚠️ Nota: Para 20V, o divisor satura o ADC.
-  Pode usar 100k/15k (0.13) para range completo, ou
-  aceitar que 20V = "saturado = potência máxima".
+  ✓ Todos os níveis PD dentro do range ADC (max 3.1V).
+  Corrente de fuga: 20V / 52.6kΩ = 0.38mA (desprezável).
+  Resolução: ~7.1mV por step no lado VBUS.
 
 ═══════════════════════════════════════════════════════════════
 ```
@@ -900,11 +1058,11 @@ Mapeamento Potência → Brilho Máximo:
 #include <Arduino.h>
 #include <ESP32-HUB75-MatrixPanel-I2S-DMA.h>
 
-// Pino ADC para medir tensão de entrada (após divisor 100k/22k)
-#define VSENSE_PIN 36  // GPIO36 (ADC1_CH0)
+// Pino ADC para medir tensão de entrada (após divisor 47k/5.6k)
+#define VBUS_SENSE_PIN  33  // IO33 / GPIO33 (ADC1_CH5) via J5
 
-// Divisor de tensão: 22k / (100k + 22k) = 0.18
-#define VOLTAGE_DIVIDER_RATIO 0.18f
+// Divisor de tensão: 5.6k / (47k + 5.6k) = 0.1065 (ratio = 9.39)
+#define VDIV_RATIO  ((47.0f + 5.6f) / 5.6f)  // 9.393
 
 // Thresholds de tensão (com histerese)
 #define THRESH_20V  17.0f   // >17V = 20V PD
@@ -953,15 +1111,15 @@ public:
         // Média de múltiplas leituras para estabilidade
         uint32_t sum = 0;
         for (int i = 0; i < 16; i++) {
-            sum += analogRead(VSENSE_PIN);
+            sum += analogRead(VBUS_SENSE_PIN);
             delayMicroseconds(100);
         }
         float adcValue = sum / 16.0f;
 
         // Converter para tensão real
-        // ADC 12-bit: 0-4095 = 0-3.3V (com atenuação default)
-        float adcVoltage = (adcValue / 4095.0f) * 3.3f;
-        config.inputVoltage = (adcVoltage / VOLTAGE_DIVIDER_RATIO) * adcCalibration;
+        // ADC 12-bit: 0-4095 = 0-3.1V (ESP32 ADC1)
+        float adcVoltage = (adcValue / 4095.0f) * 3.1f;
+        config.inputVoltage = adcVoltage * VDIV_RATIO * adcCalibration;
 
         return config.inputVoltage;
     }
@@ -1140,8 +1298,15 @@ void loop() {
 
 | Ref | Componente | Especificação | Package | Qty | Preço | LCSC | Stock |
 |-----|------------|---------------|---------|-----|-------|------|-------|
-| U10 | IP2721 | USB-C PD Trigger | TSSOP-16 | 1 | €0.40 | C603176 | Extended |
-| Q3 | AO3400A / AO3404A | N-MOSFET 30V ~5A | SOT-23 | 1 | €0.03 | C20917 | Basic |
+| U10 | **CH224K** (WCH) | USB PD 3.0 Sink, 5/9/12/15/20V, PG pin | ESSOP-10 | 1 | €0.30 | **C970725** | Extended |
+| R1 | 1kΩ | VBUS → VDD (alimentação CH224K) | 0603 | 1 | €0.01 | C21190 | Basic |
+| C_VDD | 1µF 10V | Decoupling VDD CH224K | 0402 | 1 | €0.01 | C52923 | Basic |
+| Q_PG | MMBT2222A | NPN para Error LED inverter | SOT-23 | 1 | €0.01 | C8512 | Basic |
+| R_PU | 10kΩ | Pull-up PG | 0402 | 1 | €0.01 | C25744 | Basic |
+| R_BASE | 10kΩ | Base NPN | 0402 | 1 | €0.01 | C25744 | Basic |
+| R_LED | 330Ω | Corrente LED erro (~4mA) | 0402 | 1 | €0.01 | C25104 | Basic |
+| LED_ERR | LED Vermelho | Error LED (sem PD) | 0603 | 1 | €0.02 | C2286 | Basic |
+| — | ~~R_VBUS removido~~ | ~~VBUS detection~~ (pin 8 NC — só PD, sem BC1.2/QC) | — | 0 | — | — | — |
 | U12 | **TPS56838** (TI) | Buck Sync 8A FCCM D-CAP3 | VQFN-HR 10-pin 3x3 | 1 | ~€1.00 | **C37533416** | Extended |
 | L1 | **Bourns SRP1265A-2R2M** | Indutor 2.2µH 22A | 12.5x12.5x6.5mm | 1 | €0.30 | **C2831487** | Extended |
 | | *Alt: CKST0603-2.2uH/M* | *2.2µH 10A* | *6.6x6.6x3mm* | 1 | €0.25 | C3002634 | Extended |
@@ -1152,16 +1317,16 @@ void loop() {
 | C17 | 1µF 50V | VCC Buck bypass | 0603 | 1 | €0.01 | C15849 | Basic |
 | R_FB1 | 22kΩ 1% | Resistor (FB upper) | 0603 | 1 | €0.01 | C31850 | Basic |
 | R_FB2 | 3kΩ 1% | Resistor (FB lower) | 0603 | 1 | €0.01 | C4211 | Basic |
-| R9 | 100kΩ 1% | SEL→VIN (20V max) | 0402 | 1 | €0.01 | C25741 | Basic |
-| R3,R4 | 5.1kΩ | CC1/CC2 resistors | 0402 | 2 | €0.01 | C25905 | Basic |
+| — | ~~R9 100kΩ removido~~ | ~~SEL IP2721~~ (CH224K: CFG1 float = 20V, sem resistência) | — | 0 | — | — | — |
+| — | ~~R3,R4 5.1kΩ removidos~~ | ~~CC1/CC2 pull-downs~~ (CH224K tem Rd internos 5.1kΩ) | — | 0 | — | — | — |
 | **Total PSU** | | | | | **~€2.30** | | |
 
 ### 6.2 Componentes Sensing (ADC)
 
 | Ref | Componente | Especificação | Package | Qty | Preço | LCSC |
 |-----|------------|---------------|---------|-----|-------|------|
-| R_SENSE1 | 100kΩ 1% | Divisor tensão | 0402 | 1 | €0.01 | C25741 |
-| R_SENSE2 | 22kΩ 1% | Divisor tensão | 0402 | 1 | €0.01 | C25768 |
+| R_DIV1 | 47kΩ 1% | Divisor tensão (série) | 0603 | 1 | €0.01 | C25819 | Basic |
+| R_DIV2 | 5.6kΩ 1% | Divisor tensão (GND) | 0603 | 1 | €0.01 | C23189 | Basic |
 | C_FILTER | 100nF 16V | Filtro ADC | 0402 | 1 | €0.01 | C307331 |
 | **Total Sensing** | | | | | **€0.03** | |
 
@@ -1171,7 +1336,7 @@ void loop() {
 |-----|------------|---------------|---------|-----|-------|------|-------|
 | J1 | USB-C Receptacle | GCT USB4105-GF-A 16-pin | SMD | 1 | €0.40 | C3020560 | Extended |
 | F1 | PTC Fuse | ASMD2920-300 3A/30V | 2920 | 1 | €0.05 | C2982291 | Extended |
-| D3 | H7VN10B | TVS USB VBUS | DFN1006-2L | 1 | €0.05 | C20615788 | Extended |
+| D3 | **SMAJ24CA** | TVS VBUS 20V (Vrwm=24V, bidirecional) | SMA(DO-214AC) | 1 | €0.05 | **C134974** | Extended |
 | D4 | SMBJ5.0A | TVS 5V output | SMB | 1 | €0.08 | C113620 | Basic |
 | J3 | Barrier Terminal | KF301-5.0-2P 10A | THT | 1 | €0.10 | C474881 | Extended |
 | J6 | Pin Header 1×3 | J_MODE selector | 2.54mm | 1 | €0.02 | C2337 | Basic |
@@ -1194,18 +1359,19 @@ void loop() {
 
 | Secção | Custo |
 |--------|-------|
-| PSU (U10 IP2721 + Q3 MOSFET + U12 TPS56838 + passivos) | €2.30 |
+| PSU (U10 CH224K + U12 TPS56838 + passivos + LED PG) | €2.10 |
 | Sensing (divisor ADC) | €0.03 |
 | Proteções e Conectores (J1, F1, D3, D4, J3, J6) | €0.70 |
 | Regulador 3.3V | €0.25 |
 | **TOTAL PSU v3** | **~€3.30** |
 
 > **Nota:**
-> - U10 (IP2721) + Q3 (MOSFET): Power-path controlado, soft-start
-> - U12 (TPS56838): Buck de 8A (vs 3-5A anterior)
-> - Melhor compatibilidade de fontes (fallback automático)
-> - Gestão automática de potência
-> - Componentes Extended: U10, L1, J1, F1, D3, J3
+> - U10 (CH224K): PD 3.0 sink, 5 tensões, PG LED, sem MOSFET externo
+> - U12 (TPS56838): Buck de 8A FCCM (vs 3-5A anterior)
+> - Q3 (AO3400A) REMOVIDO — VBUS liga directo ao buck (5V pass-through para flash)
+> - Melhor compatibilidade de fontes (fallback automático, todas as tensões PD)
+> - Gestão automática de potência + LED PG indica PD status
+> - Componentes Extended: U10 (CH224K), L1, J1, F1, D3, J3
 
 ---
 
@@ -1243,7 +1409,7 @@ Layout Buck Converter - Boas Práticas (TPS56838):
      │   [USB-C]                                               │
      │      │                                                  │
      │      ▼                                                  │
-     │   [IP2721]  ◄── Perto do conector USB-C                │
+     │   [CH224K]  ◄── Perto do conector USB-C                │
      │      │                                                  │
      │      │  VOUT (20V)                                      │
      │      ▼                                                  │
@@ -1400,7 +1566,7 @@ Testes de Validação PSU v3:
     └─ Todos os componentes no lugar
 
   □ POWER-ON (com fonte PD 15V)
-    ├─ IP2721 negocia 15V (medir VOUT)
+    ├─ CH224K negocia tensão PD (LED PG acende)
     ├─ TPS56838 arranca (LED PWR acende)
     ├─ VOUT = 5.0V ±2% (medir com multímetro)
     └─ Sem oscilação audível (coil whine)
@@ -1425,15 +1591,16 @@ Testes de Validação PSU v3:
 
   □ FALLBACK 9V
     ├─ Usar fonte PD que só tem 9V
-    ├─ IP2721 negocia 9V
+    ├─ CH224K negocia 9V (fallback)
     ├─ TPS56838 produz 5V
     └─ Firmware detecta e capa brilho a 80%
 
-  □ FALLBACK 5V
-    ├─ Usar carregador básico 5V/3A
-    ├─ IP2721 fica em 5V (via resistências 5.1kΩ)
-    ├─ Buck em bypass (ou tensão mínima de saída)
-    └─ Firmware detecta e capa brilho a 40%
+  □ FALLBACK 5V (flash/programação)
+    ├─ Usar cabo USB do Mac/PC (5V básico, sem PD)
+    ├─ VBUS 5V chega directo ao buck (pass-through)
+    ├─ LED PG OFF (PD não negociado)
+    ├─ ESP32 liga e pode ser flashado
+    └─ Firmware detecta 5V e capa brilho a 40%
 
   □ THERMAL
     ├─ Operação contínua 30 min @ 5A
@@ -1465,8 +1632,8 @@ Evolução da PSU:
   ┌────────────────────────┬─────────────────┬─────────────────┐
   │ Característica         │ v2              │ v3              │
   ├────────────────────────┼─────────────────┼─────────────────┤
-  │ PD Controller          │ IP2721 / CYPD   │ IP2721+AO3400A  │
-  │ Configuração           │ Complexa        │ Simples (1 res) │
+  │ PD Controller          │ IP2721 / CYPD   │ CH224K (WCH)    │
+  │ Configuração           │ Complexa        │ CFG1 float=20V  │
   │                        │                 │                 │
   │ Buck Converter         │ MP1584 (3A)     │ TPS56838 (8A)   │
   │                        │ TPS54531 (5A)   │ FCCM, D-CAP3   │
@@ -1494,27 +1661,128 @@ Evolução da PSU:
 ## 10. Referências
 
 ### Datasheets
-- [IP2721 Datasheet](https://datasheet.lcsc.com/lcsc/2006111335_INJOINIC-IP2721_C603176.pdf) - INJOINIC
+- [CH224K Datasheet](https://www.wch-ic.com/downloads/file/302.html) - WCH (substitui IP2721)
 - [TPS56838 Datasheet (SLVSGM3B)](https://www.ti.com/lit/gpn/TPS56837) - Texas Instruments
 - [TPS5683x Datasheet PDF](https://www.mouser.com/datasheet/2/405/1/tps56838-3395403.pdf) - Mouser mirror
 - [Indutor CKST Series](https://www.coilcraft.com) - Coilcraft
 
 ### Application Notes
-- [IP2721 USB-C PD Application](https://aichiplink.com/blog/IP2721-Datasheet-Specifications-Schematic-Features-Alternative_389)
+- [CH224K USB PD Decoy (wagiminator)](https://github.com/wagiminator/ATtiny814-USB-PD-Adapter) - Referência com esquemático
 - [High Current Buck Design](https://www.ti.com/lit/an/slva477b/slva477b.pdf) - TI
 - [AN-1229 SIMPLE SWITCHER PCB Layout](https://www.ti.com/lit/pdf/snva054) - TI
 - [QFN Thermal Pad Layout](https://www.ti.com/lit/an/sloa122/sloa122.pdf) - TI
 
 ### Projectos de Referência
-- [Hackaday TS100 USB-C](https://cdn.hackaday.io/files/1721877366848608/V1_2%20Schematic_TS100%20-%20USB%20C%20IP2721.pdf)
+- [USB PD Decoy CH224K (Hackaday)](https://hackaday.io/project/194207-usb-power-delivery-decoy-ch224k)
+- [Bringing USB-PD to ESP32 (Hackaday)](https://hackaday.io/project/193475-bringing-usb-pd-to-esp32)
 
 ### Notas de Substituição (SY8368 → TPS56838)
 - SY8368AQQC (Silergy, C207642) descontinuado neste design por coil whine em PFM
 - TPS56838 (TI, C37533416) escolhido: FCCM nativo, D-CAP3, 28V max, sem COMP externo
 - Package mudou de QFN-20 para VQFN-HR 10-pin (mesmo 3×3mm)
 
+### Investigação: Alternativa Silergy Drop-In com Forced PWM (Fev 2026)
+
+**Objectivo**: Verificar se existe um chip Silergy pin-compatible com o SY8368AQQC (QFN3x3-12)
+que suporte forced PWM (FCCM) para eliminar coil whine a light load.
+
+**Análise do SY8368AQQC (QFN3x3-12, pinout confirmado no KiCad)**:
+- Pinos 4, 5, 6: IN (VIN) — 3 pinos de entrada, todos obrigatórios (bond wires paralelos)
+- Pinos 1, 3: GND
+- Pin 2: LX (switch node)
+- Pin 7: BS (bootstrap)
+- Pin 8: VCC (LDO interno 3.3V)
+- Pin 9: FB (feedback)
+- Pin 10: ILMT (current limit: 8A/12A/16A)
+- Pin 11: PG (power good)
+- Pin 12: EN (enable)
+- **Não tem pin MODE** — usa arquitectura "Instant PWM" (COT) que entra automaticamente
+  em pulse-skipping/PFM a light load. Não há forma de forçar CCM contínuo.
+
+**Candidatos Silergy investigados**:
+
+| Chip | Package | VIN | IOUT | MODE/FCCM | Drop-in? | LCSC |
+|------|---------|-----|------|-----------|----------|------|
+| SY8368QNC | QFN3x3-10 | 4-28V | 8A | Não | Não (10 pinos, sem ILMT/PG) | C125897 |
+| SY21228AQQC | QFN3x3-12 | 4-28V | 8A | A confirmar | Provável (mesmo package) | Não encontrado |
+| SY21228LQQC | QFN3x3-12 | 4.5-28V | 8A | A confirmar | Provável (mesmo package) | Não encontrado |
+| SY8388ARHC | QFN2.5x2.5-16 | 4-24V | 8A | **Sim (MODE pin)** | Não (package diferente) | C5110279 |
+| SY21243ARHC | QFN2.5x2.5-16 | 4-24V | 8A | **Sim (MODE pin)** | Não (package diferente) | — |
+| SY8386RHC | QFN2.5x2.5-16 | 4-28V | 6A | Não claro | Não (package diferente, 6A) | — |
+
+**Conclusão**: Não existe alternativa Silergy drop-in confirmada com FCCM no mesmo QFN3x3-12.
+- Os chips Silergy com MODE pin (SY8388A, SY21243A) usam packages QFN2.5x2.5-16 — incompatíveis.
+- O SY21228 (A/L) é o sucessor do SY8368 no mesmo QFN3x3-12, mas: (a) não está no LCSC/JLCPCB,
+  (b) o datasheet não foi acessível para confirmar se tem FCCM.
+- A decisão de migrar para **TPS56838 (TI)** mantém-se como a correcta: FCCM nativo, disponível
+  no JLCPCB (C37533416), e elimina o problema de coil whine sem depender de pin MODE.
+
+**Nota sobre os 3 pinos VIN do SY8368 (layout legacy)**:
+- Os pinos IN (4, 5, 6) são bond wires paralelos ao mesmo die pad interno.
+- Todos os 3 DEVEM ser ligados ao VBUS — não é válido ligar apenas 1.
+- Razões: distribuição de corrente nos bond wires, impedância parasita, e dissipação térmica.
+- Para 2-layer board com GND pour: usar ilha de copper pour local no top layer que una os
+  3 pads, com trace larga única desde Q1:Source. Vias de 20V desnecessárias se routing no top.
+
+### Investigação: SY8388ARHC como Alternativa FCCM (Fev 2026)
+
+**Objectivo**: Documentar ligações pin-a-pin do SY8388ARHC (C5110279) para uso com
+FCCM forçado, optimizado para mínimo ruído a light load, 20V→5V.
+
+**Chip**: SY8388ARHC — Silergy, QFN2.5×2.5-16, 4-24V, 8A, 600kHz, Instant-PWM (COT)
+**⚠️ VIN max 24V** — margem de 20% sobre 20V PD (apertado vs 40% do TPS56838)
+
+**Pinout (top view):**
+```
+     BS ─┤1          16├─ LX
+     IN ─┤2          15├─ LX
+     IN ─┤3          14├─ GND
+     IN ─┤4          13├─ VCC
+     LX ─┤5          12├─ FB
+    GND ─┤6          11├─ ILMT
+     PG ─┤7          10├─ BYP
+   MODE ─┤8           9├─ EN
+          └────────────┘
+               EP (GND)
+```
+
+**Ligações para FCCM low-noise (17 pinos):**
+
+| Pin | Nome | Liga a | Valor | Notas |
+|-----|------|--------|-------|-------|
+| 1 | BS | C_BOOT → LX | 100nF 25V (0402) | Loop curto BS↔LX |
+| 2,3,4 | IN | VBUS + C_VIN + C_HF | 2×22µF 25V (1210) + 100nF 50V (0402) | 3 pinos em copper pour local |
+| 5,15,16 | LX | Indutor L1 | Trace curto | Minimizar área cobre (EMI) |
+| 6,14 | GND | GND pour | Via(s) directas | — |
+| EP | GND | GND pour | 4-6 vias 0.3mm | Pad térmico |
+| 7 | PG | NC ou 100kΩ→VOUT | — | Open-drain, opcional |
+| 8 | MODE | **VCC (HIGH)** | Pull-up ou trace | **FCCM forçado** — elimina PFM/coil whine |
+| 9 | EN | VIN via 100kΩ | 100kΩ (0402) | Não ligar directamente a IN |
+| 10 | BYP | GND | — | Sem fonte externa 3.3V |
+| 11 | ILMT | **GND (LOW)** | 0Ω ou trace | LOW=≥8A (Table 1: 0-20kΩ→GND) |
+| 12 | FB | Divisor → VOUT | R1=22kΩ, R2=3kΩ (0603, 1%) | VOUT=0.6×(1+22k/3k)=5.0V |
+| 13 | VCC | C_VCC → GND | 2.2µF 10V (0402) | LDO interno 3.3V |
+
+**Indutor recomendado para mínimo ruído:**
+
+| Indutor | L | ΔIL (20V→5V@600kHz) | Ripple % | LCSC | Stock |
+|---------|---|---------------------|----------|------|-------|
+| SRP1265A-2R2M | 2.2µH | 2.84A | 36% | C2831487 | — |
+| SRP1265A-3R3M | 3.3µH | 1.89A | 24% | C1329348 | Sem stock |
+| **SRP1265A-4R7M** | **4.7µH** | **1.33A** | **17%** | **C780205** | **897 un.** |
+
+Escolha: **SRP1265A-4R7M (4.7µH, C780205)** — mesmo footprint 12.5×13.5mm,
+13.5A RMS / 28A Isat, menor ripple (17% vs 36%), menos ruído em FCCM.
+
+**Comparação SY8388A vs SY21243A (ruído):**
+- SY8388A: Instant-PWM COT, 600kHz — geração mais antiga
+- SY21243A: COT ripple-based, freq. não confirmada — geração mais recente, menos jitter
+- Ambos eliminam coil whine em FCCM. Diferença marginal em ripple.
+- SY8388A disponível no LCSC (C5110279), SY21243A não encontrado.
+
 ---
 
 *Documento criado: Janeiro 2025*
-*Versão: 3.2 - USB-C PD 30W com TPS56838 FCCM Buck 8A*
+*Versão: 3.5 - USB-C PD 30W com CH224K + TPS56838 FCCM Buck 8A*
 *Baseado em: POWER_SUPPLY_v2.md*
+*Substituição IP2721→CH224K: Fevereiro 2026*

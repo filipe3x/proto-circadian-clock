@@ -69,6 +69,13 @@ Preferences preferences;
 #define MESH_INITIAL_SCAN_MS 65000    // 65s no primeiro scan (> 1 ciclo completo)
 #define MESH_IDLE_TIMEOUT_MS 300000   // 5 min sem peers = desligar mesh
 
+// ============= VBUS SENSING =============
+#define VBUS_SENSE_PIN   33  // IO33 / GPIO33 (ADC1_CH5)
+#define ERROR_LED_PIN    2
+#define VDIV_RATIO       ((47.0f + 5.6f) / 5.6f)  // 9.393
+#define VBUS_20V_MIN     17.0f   // Limiar: 19.7V real → margem para 15V fallback
+#define VBUS_LOG_INTERVAL_MS  30000  // Log a cada 30s
+
 // Estados do mesh (maquina de estados hibrida)
 enum MeshState {
   MESH_OFF,       // WiFi desligado, a poupar energia
@@ -1301,6 +1308,34 @@ DateTime getCurrentTime() {
   }
 }
 
+// ============= VBUS SENSING =============
+
+float readVbusVoltage() {
+  int sum = 0;
+  for (int i = 0; i < 16; i++) sum += analogRead(VBUS_SENSE_PIN);
+  float vadc = (sum / 16.0f) * 3.1f / 4095.0f;
+  return vadc * VDIV_RATIO;
+}
+
+// Verifica tensão VBUS e controla ERROR_LED.
+// bootCheck=true: imprime banner detalhado (só no arranque)
+void checkVbusStatus(bool bootCheck) {
+  float vbus = readVbusVoltage();
+  bool is20V = vbus >= VBUS_20V_MIN;
+
+  digitalWrite(ERROR_LED_PIN, is20V ? LOW : HIGH);
+
+  if (bootCheck) {
+    Serial.println("┌─── VBUS STATUS ───────────────────┐");
+    Serial.printf( "│  Tensão medida : %5.1f V           │\n", vbus);
+    Serial.printf( "│  Threshold 20V : %5.1f V           │\n", VBUS_20V_MIN);
+    Serial.printf( "│  Estado        : %s │\n", is20V ? "✅ 20V PD OK          " : "⚠️  SEM 20V (fallback)");
+    Serial.println("└───────────────────────────────────┘");
+  } else {
+    Serial.printf("[VBUS] %.1fV — %s\n", vbus, is20V ? "OK" : "⚠️ SEM 20V");
+  }
+}
+
 // ============= SETUP =============
 void setup() {
   Serial.begin(115200);
@@ -1346,6 +1381,12 @@ void setup() {
   // O wrapper P10_32x16_QuarterScan expõe interface lógica 32x16
   display = new P10_32x16_QuarterScan(dma_display);
   
+  // VBUS sense — verificação imediata no arranque
+  analogReadResolution(12);
+  pinMode(ERROR_LED_PIN, OUTPUT);
+  digitalWrite(ERROR_LED_PIN, LOW);
+  checkVbusStatus(true);
+
   Serial.println("✅ Display P10 inicializado");
   
   showBootAnimation();
@@ -1641,6 +1682,7 @@ void updateDisplay() {
 void loop() {
   static unsigned long lastUpdate = 0;
   static unsigned long lastSync = 0;
+  static unsigned long lastVbusLog = 0;
 
   // Se estamos em modo configuracao, processar apenas o captive portal
   if (configMode) {
@@ -1684,6 +1726,11 @@ void loop() {
     case STATUS_OFFLINE:      syncInterval = 3600000; break;   // 1h
   }
   
+  if (currentMillis - lastVbusLog >= VBUS_LOG_INTERVAL_MS) {
+    lastVbusLog = currentMillis;
+    checkVbusStatus(false);
+  }
+
   if (currentMillis - lastSync >= syncInterval) {
     lastSync = currentMillis;
     Serial.println("\n[SYNC] Re-sincronização periódica...");
