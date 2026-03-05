@@ -520,39 +520,73 @@ ESP32, CH340C, USB-C, ESD, LDO, UMH3N, TVS, Terminal, Buzzer, Botões, Battery H
 
 ---
 
-## PSU Components (Sub-board / Secção PSU)
+## PSU Components (Secção PSU) — Design Final v4.0
 
-Componentes específicos da secção de alimentação. BOM detalhado em `POWER_SUPPLY_v3.md` e `PSU_20V_SCHEMA_DESIGN.md`.
+Componentes específicos da secção de alimentação. BOM detalhado em `POWER_SUPPLY.md`.
 
-### Buck Converter - TPS56838 (substitui SY8368AQQC)
+### PD Sink Controller - CH224K (substitui IP2721 + AO3404A MOSFET)
 
 | Ref | Componente | LCSC | Tipo | Nota |
 |-----|------------|------|------|------|
-| U12 | **TPS56838** (TI) - Buck 8A FCCM | **C37533416** | Extended | D-CAP3, 28V, VQFN-HR 10-pin 3×3mm |
+| U5 | **CH224K** (WCH) - PD 3.0 Sink | **C970725** | Extended | ESSOP-10, pede 20V (CFG1 NC), PG pin, Rd interno |
+| R1 | 1kΩ (VBUS→VDD) | C4410 | **Basic** | Alimentação CH224K |
+| C_VDD | 1µF 50V (0603) | C15849 | **Basic** | Bypass VDD |
+
+**Porquê CH224K em vez de IP2721 (C603176)?**
+- IP2721 só suporta 3 tensões: 5V, 15V, 20V (sem 9V e 12V!)
+- CH224K suporta **todas as 5 tensões PD**: 5V, 9V, 12V, 15V, 20V
+- CH224K tem **PG (Power Good)** open-drain — LED de status hardware
+- **Sem MOSFET externo** (Q3 removido) — VBUS liga directo ao buck
+- **Rd internos 5.1kΩ** — não precisa R externas nos CC1/CC2
+- Mais barato: ~$0.32 vs ~$0.40 (IP2721) + $0.03 (MOSFET) + $0.02 (R's)
+
+### Buck Converter - SY8388ARHC (substitui TPS56838)
+
+| Ref | Componente | LCSC | Tipo | Nota |
+|-----|------------|------|------|------|
+| U12 | **SY8388ARHC** (Silergy) - Buck 8A | **C5110279** | Extended | QFN-16-EP 2.5×2.5mm, 24V in, 500kHz, compensação interna |
 | L1 | Bourns SRP1265A-2R2M (2.2µH 22A) | C2831487 | Extended | Shielded, Zone Keepout obrigatório! |
 | C_VIN1,2 | 22µF 25V MLCC (1210) | C52306 | **Basic** | Input caps |
 | C_OUT1-3 | 22µF 10V MLCC (1206) | C12891 | **Basic** | Output caps |
 | C_BOOT | 100nF 25V (0402) | C307331 | **Basic** | Bootstrap |
 | C_HF | 100nF 50V (0402) | C307331 | **Basic** | HF bypass VIN→PGND |
-| C_FF | **22pF 50V (0402)** | **C1555** | **Basic** | Feedforward (// R_FB1). OBRIGATÓRIO! |
+| C_FF | 22pF 50V (0402) | C1555 | **Basic** | Feedforward (// R_FB1) |
 | R_FB1 | 22kΩ 1% (0603) | C31850 | **Basic** | Feedback upper |
 | R_FB2 | 3kΩ 1% (0603) | C4211 | **Basic** | Feedback lower |
 
-**Porquê TPS56838 em vez de SY8368AQQC (C207642)?**
-- SY8368 entra em pulse-skipping (PFM) a light load → coil whine audível
-- SY8368 não tem pin MODE para forçar PWM contínuo
-- TPS56838: FCCM nativo, D-CAP3 (sem compensação externa), 4.5-28V
-- Trade-off: Extended (+$3 taxa) mas elimina problema de ruído
+**Porquê SY8388ARHC em vez de TPS56838 (C37533416)?**
+- **Custo**: ~$0.53 vs ~$1.00+ (quase metade do preço!)
+- **Sem coil whine**: PWM contínuo a 500kHz (vs SY8368 que fazia PFM a light load)
+- **Compensação interna**: sem rede RC externa (simplifica layout)
+- **QFN-16 compacto**: 2.5×2.5mm com thermal pad generoso
+- 8A contínuo, 24V max — mesmas specs funcionais que TPS56838
 
-### PD Trigger
+### Proteção e Error LED
 
 | Ref | Componente | LCSC | Tipo | Nota |
 |-----|------------|------|------|------|
-| U10 | IP2721 PD Trigger | C603176 | Extended | USB-C PD 2.0/3.0 |
-| Q3 | AO3404A N-MOSFET | C20917 | **Basic** | Power path switch |
+| D3 | SMAJ24CA (TVS bidirecional) | C19077558 | Extended | Vrwm=24V para proteção VBUS 20V |
+| F1 | PTC Fuse 3A/30V | C2982291 | Extended | Protecção overcurrent |
+| C_IN | 10µF 50V (1206) | C13585 | **Basic** | Filtro entrada VBUS |
+| Q_NPN | MMBT2222A (NPN) | C916372 | **Basic** | Inverter para Error LED |
+| D_LED | LED Vermelho 0603 | C2286 | **Basic** | Error LED (sem PD) |
+| R_PU | 10kΩ (PG pull-up) | C25744 | **Basic** | Pull-up PG |
+| R_BASE | 10kΩ (NPN base) | C25744 | **Basic** | Base NPN |
+| R_LED | 330Ω (LED) | C25104 | **Basic** | Corrente LED |
+
+### Resumo Custos PSU
+
+| Bloco | Taxa Extended | Nota |
+|-------|---------------|------|
+| CH224K | $3 | PD Sink |
+| SY8388ARHC | $3 | Buck |
+| L1 (Bourns) | $3 | Indutor |
+| D3 (TVS) | $3 | Proteção |
+| F1 (PTC) | $3 | Fuse |
+| **Total PSU Extended** | **$15** | 5 tipos Extended |
 
 ---
 
-*Documento atualizado: Janeiro 2026*
+*Documento atualizado: Março 2026*
 *Análise de custos Basic/Extended incluída*
-*PSU: TPS56838 (FCCM) substitui SY8368 (PFM coil whine)*
+*PSU v4.0: CH224K (PD 20V) + SY8388ARHC (Buck 8A) — substitui IP2721 + TPS56838*
