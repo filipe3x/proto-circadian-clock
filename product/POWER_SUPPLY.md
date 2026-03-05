@@ -1,7 +1,7 @@
 # Power Supply - Circadian Clock PCB
 
 **Data:** Março 2026
-**Versão:** 4.1 - CH224K + SY8388ARHC (Bulletproof)
+**Versão:** 4.2 - CH224K + SY8388ARHC (Bulletproof, BUCK1 removido)
 **Esquemático KiCad:** `product/kicad/clockv7/psu.kicad_sch`
 
 ---
@@ -12,6 +12,7 @@
 |------|--------|------------|
 | Mar 2026 | 4.0 | **Design final**: CH224K (PD 20V) + SY8388ARHC (Buck 8A). Documento único — substitui POWER_SUPPLY v1/v2/v3 e PSU_20V_SCHEMA_DESIGN. |
 | Mar 2026 | 4.1 | **Bulletproof**: Worst-case VOUT analysis, correcção TVS D6 (SMBJ24CA), specs protecção SY8388ARHC, alinhamento BOM↔KiCad (caps 1206/C12891). |
+| Mar 2026 | 4.2 | **BUCK1 removido**: Removido BUCK1 (L1=2.2µH) — PFM noise. Só BUCK2 (L2=4.7µH) montado. Ripple recalculado. |
 
 ---
 
@@ -325,7 +326,7 @@ Para pedir **20V fixo**, usa-se o modo resistência com CFG1 floating:
 | 1 | BS | C_BOOT 100nF → LX | Bootstrap high-side driver |
 | 2,3,4 | IN | VBUS + C_VIN | Entrada 5-20V |
 | 5,6,7 | PGND | GND (power) | Power ground |
-| 8,9 | LX | L1 (2.2µH) | Switch node — minimizar cobre! |
+| 8,9 | LX | L2 (4.7µH) | Switch node — minimizar cobre! |
 | 10 | PG | NC ou ESP32 GPIO | Power-good (open-drain) |
 | 11 | COMP | NC | Compensação interna |
 | 12 | FB | Divisor R_FB3/R_FB4 | Feedback (0.6V ref) |
@@ -394,7 +395,7 @@ Cálculo:
                       │                                          │
                      GND                     ┌───────────────────┘
                                              │
-                                             │  L1 (2.2µH)
+                                             │  L2 (4.7µH)
                                             ═╪═ ~~~~~ ═╪═
                                              │         │
                                              │         ├─── VOUT (5V)
@@ -425,13 +426,13 @@ Regras de layout para SY8388ARHC:
 ═══════════════════════════════════
 
 1. LOOP DE ALTA CORRENTE (minimizar):
-   VIN → C_VIN → IC(IN→LX) → L1 → C_OUT → GND
+   VIN → C_VIN → IC(IN→LX) → L2 → C_OUT → GND
    C_HF (100nF) junto a IN e PGND para HF bypass
 
 2. PLACEMENT:
    C_VIN + C_HF: Imediatamente junto aos pinos IN (2,3,4) e PGND (5,6,7)
-   L1: Adjacente aos pinos LX (8,9), ≤2mm
-   C_OUT: Distribuídos após L1
+   L2: Adjacente aos pinos LX (8,9), ≤2mm
+   C_OUT: Distribuídos após L2
    C_BOOT: Entre pino BS (1) e LX (8)
 
 3. GROUND:
@@ -439,9 +440,9 @@ Regras de layout para SY8388ARHC:
    - 4-6 vias (0.3mm) no thermal pad, sem thermal relief
    - Minimizar impedância do return path
 
-4. ⚠️ ZONE KEEPOUT SOB L1:
-   - SEM copper pour (top NEM bottom) sob L1
-   - SEM vias na zona sob L1
+4. ⚠️ ZONE KEEPOUT SOB L2:
+   - SEM copper pour (top NEM bottom) sob L2
+   - SEM vias na zona sob L2
    - Evita correntes de eddy e acoplamento magnético
 
 5. ⚠️ MINIMIZAR COBRE NO NÓ LX:
@@ -493,7 +494,6 @@ O rail VBUS (até 20V) é protegido por TVS bidirecional:
 
 | Ref | Componente | Valor | LCSC | Tipo | Footprint |
 |-----|------------|-------|------|------|-----------|
-| L1 | Bourns SRP1265A-2R2M | 2.2µH 22A | **C2831487** | Extended | 12.5x6.5mm |
 | L2 | Bourns SRP1265A-4R7M | 4.7µH 16A | **C780205** | Extended | 12.5x6.5mm |
 
 ### 6.3 Condensadores
@@ -542,7 +542,7 @@ O rail VBUS (até 20V) é protegido por TVS bidirecional:
 | Bloco | Componentes | Custo estimado |
 |-------|-------------|----------------|
 | PD Trigger (CH224K + passivos) | 5 | ~€0.45 |
-| Buck (SY8388ARHC + L1 + caps + FB) | 12 | ~€1.10 |
+| Buck (SY8388ARHC + L2 + caps + FB) | 11 | ~€0.95 |
 | Proteção (TVS + PTC) | 2 | ~€0.10 |
 | Error LED (NPN + R + LED) | 3 | ~€0.05 |
 | **Total PSU** | **~22** | **~€1.70** |
@@ -553,7 +553,7 @@ O rail VBUS (até 20V) é protegido por TVS bidirecional:
 |------------|------|
 | CH224K (C970725) | $3 |
 | SY8388ARHC (C5110279) | $3 |
-| L1 SRP1265A-2R2M (C2831487) | $3 |
+| L2 SRP1265A-4R7M (C780205) | $3 |
 | D6 SMBJ24CA (C19077558) | $3 |
 | F1 PTC (C2982291) | $3 |
 | **Total taxa Extended PSU** | **$15** |
@@ -647,33 +647,33 @@ Pior caso: 20V → 5V @ 8A (40W output, ~93% eficiência)
   Recomendação: Garantir 4-6 vias térmicas 0.3mm no exposed pad
   e copper pour generoso em ambas as faces do PCB.
 
-  L1 (SRP1265A-2R2M):
-    P_L1 ≈ I²×DCR = 8²×0.0047 = 0.3W (DCR=4.7mΩ)
-    ΔT ≈ 20°C (com airflow natural)
-    ✓ Isat = 22A >> 8A — sem risco de saturação
+  L2 (SRP1265A-4R7M):
+    P_L2 ≈ I²×DCR = 8²×0.0074 = 0.47W (DCR=7.4mΩ)
+    ΔT ≈ 25°C (com airflow natural)
+    ✓ Isat = 16A >> 8A — sem risco de saturação
 ```
 
 ### 8.4 Ripple de Saída
 
 ```
   f_sw = 600kHz
-  L = 2.2µH
+  L = 4.7µH (L2 — BUCK1 removido, só BUCK2 montado)
   VIN = 20V, VOUT = 5V, IOUT = 8A
 
   Duty cycle: D = VOUT/VIN = 5/20 = 0.25
   ΔI_L = (VIN - VOUT) × D / (f_sw × L)
-       = (20 - 5) × 0.25 / (600k × 2.2µ)
-       = 15 × 0.25 / 1.32 = 2.84A p-p
+       = (20 - 5) × 0.25 / (600k × 4.7µ)
+       = 3.75 / 2.82 = 1.33A p-p
 
   Ripple voltage (ESR-dominated, 4×22µF em paralelo):
     ESR_total ≈ 3mΩ / 4 = 0.75mΩ
-    V_ripple ≈ ΔI_L × ESR_total = 2.84 × 0.75m = 2.1mV
+    V_ripple ≈ ΔI_L × ESR_total = 1.33 × 0.75m = 1.0mV
 
   Ripple voltage (capacitivo):
     V_ripple_cap = ΔI_L / (8 × f_sw × C_total)
-                 = 2.84 / (8 × 600k × 88µ) = 6.7mV
+                 = 1.33 / (8 × 600k × 88µ) = 3.1mV
 
-  Total ripple ≈ √(2.1² + 6.7²) ≈ 7mV p-p ✓ (< 20mV target)
+  Total ripple ≈ √(1.0² + 3.1²) ≈ 3.3mV p-p ✓✓ (< 20mV target, excelente)
 ```
 
 ### 8.5 Capacitor Derating
@@ -726,7 +726,7 @@ esquemático KiCad (`psu.kicad_sch`), que é a **source of truth** (PCB encomend
 | Caps C_VIN/C_OUT | ~~C52306 (1210)~~ → **C12891 (1206)** | ✅ Alinhado |
 | Q_NPN Ref + LCSC | ~~Q_NPN/C916372~~ → **Q2/C8512** | ✅ Alinhado |
 | L2 (4.7µH) | Adicionado ao BOM (C780205) | ✅ Documentado |
-| **L1 (2.2µH)** | **Doc diz L1=2.2µH, KiCad só tem L2=4.7µH** | ⚠️ **VERIFICAR!** |
+| L1 (2.2µH) | **Removido** — BUCK1 eliminado (PFM noise). Só L2=4.7µH montado. | ✅ Resolvido |
 | VBUS divider (R_DIV1/R_DIV2) | Adicionado ao BOM | ✅ Documentado |
 | Cap refs | Alinhados com KiCad (C24/C25, C_BOOT3, C_FIL1, C_FF2, C14, C26, C27) | ✅ |
 | Resistor refs | Alinhados com KiCad (R14, R_PU1, R_BASE1, R_ERR1) | ✅ |

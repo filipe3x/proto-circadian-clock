@@ -349,7 +349,7 @@ Quando USB desliga, bateria alimenta RTC através de D4 (~2.3V após drop).
 
 | Categoria | Componentes Extended | Custo |
 |-----------|---------------------|-------|
-| PSU | CH224K, SY8388ARHC, L1, D6 TVS, F1 PTC | $15 |
+| PSU | CH224K, SY8388ARHC, L2, D6 TVS, F1 PTC | $15 |
 
 ### **TOTAL Extended: 10 tipos = $30**
 
@@ -565,7 +565,7 @@ Componentes específicos da secção de alimentação. BOM detalhado em `POWER_S
 | Ref | Componente | LCSC | Tipo | Nota |
 |-----|------------|------|------|------|
 | U1 | **SY8388ARHC** (Silergy) - Buck 8A | **C5110279** | Extended | QFN-16-EP 2.5×2.5mm, 24V in, 600kHz, compensação interna |
-| L1 | Bourns SRP1265A-2R2M (2.2µH 22A) | C2831487 | Extended | Shielded, Zone Keepout obrigatório! |
+| L2 | Bourns SRP1265A-4R7M (4.7µH 16A) | C780205 | Extended | Shielded, Zone Keepout obrigatório! |
 | C24,C25 | 22µF 25V MLCC (1206) | C12891 | **Basic** | Input caps |
 | C_OUT5-8 | 22µF 25V MLCC ×4 (1206) | C12891 | **Basic** | Output caps (88µF total, baixo ESR) |
 | C_BOOT3 | 100nF 50V (0402) | C307331 | **Basic** | Bootstrap |
@@ -600,7 +600,7 @@ Componentes específicos da secção de alimentação. BOM detalhado em `POWER_S
 |-------|---------------|------|
 | CH224K | $3 | PD Sink |
 | SY8388ARHC | $3 | Buck |
-| L1 (Bourns) | $3 | Indutor |
+| L2 (Bourns) | $3 | Indutor |
 | D6 (TVS) | $3 | Proteção |
 | F1 (PTC) | $3 | Fuse |
 | **Total PSU Extended** | **$15** | 5 tipos Extended |
