@@ -529,8 +529,8 @@ Componentes específicos da secção de alimentação. BOM detalhado em `POWER_S
 | Ref | Componente | LCSC | Tipo | Nota |
 |-----|------------|------|------|------|
 | U5 | **CH224K** (WCH) - PD 3.0 Sink | **C970725** | Extended | ESSOP-10, pede 20V (CFG1 NC), PG pin, Rd interno |
-| R1 | 1kΩ (VBUS→VDD) | C4410 | **Basic** | Alimentação CH224K |
-| C_VDD | 1µF 50V (0603) | C15849 | **Basic** | Bypass VDD |
+| R14 | 1kΩ (VBUS→VDD) | C4410 | **Basic** | Alimentação CH224K |
+| C14 | 1µF 50V (0603) | C15849 | **Basic** | Bypass VDD |
 
 **Porquê CH224K em vez de IP2721 (C603176)?**
 - IP2721 só suporta 3 tensões: 5V, 15V, 20V (sem 9V e 12V!)
@@ -544,13 +544,13 @@ Componentes específicos da secção de alimentação. BOM detalhado em `POWER_S
 
 | Ref | Componente | LCSC | Tipo | Nota |
 |-----|------------|------|------|------|
-| U12 | **SY8388ARHC** (Silergy) - Buck 8A | **C5110279** | Extended | QFN-16-EP 2.5×2.5mm, 24V in, 600kHz, compensação interna |
+| U1 | **SY8388ARHC** (Silergy) - Buck 8A | **C5110279** | Extended | QFN-16-EP 2.5×2.5mm, 24V in, 600kHz, compensação interna |
 | L1 | Bourns SRP1265A-2R2M (2.2µH 22A) | C2831487 | Extended | Shielded, Zone Keepout obrigatório! |
-| C_VIN1,2 | 22µF 25V MLCC (1206) | C12891 | **Basic** | Input caps |
+| C24,C25 | 22µF 25V MLCC (1206) | C12891 | **Basic** | Input caps |
 | C_OUT5-8 | 22µF 25V MLCC ×4 (1206) | C12891 | **Basic** | Output caps (88µF total, baixo ESR) |
-| C_BOOT | 100nF 25V (0402) | C307331 | **Basic** | Bootstrap |
-| C_HF | 100nF 50V (0402) | C307331 | **Basic** | HF bypass VIN→PGND |
-| C_FF | 22pF 50V (0402) | C1555 | **Basic** | Feedforward (// R_FB3) |
+| C_BOOT3 | 100nF 50V (0402) | C307331 | **Basic** | Bootstrap |
+| C_FIL1 | 100nF 50V (0402) | C307331 | **Basic** | HF bypass VIN→PGND |
+| C_FF2 | 22pF 50V (0402) | C1555 | **Basic** | Feedforward (// R_FB3) |
 | R_FB3 | 22kΩ 1% (0603) | C31850 | **Basic** | Feedback upper |
 | R_FB4 | 3kΩ 1% (0603) | C4211 | **Basic** | Feedback lower |
 
@@ -567,12 +567,12 @@ Componentes específicos da secção de alimentação. BOM detalhado em `POWER_S
 |-----|------------|------|------|------|
 | D6 | SMBJ24CA (TVS bidirecional) | C19077558 | Extended | Vrwm=24V, 600W pk, SMB pkg — proteção VBUS 20V |
 | F1 | PTC Fuse 3A/30V | C2982291 | Extended | Protecção overcurrent |
-| C_IN | 10µF 50V (1206) | C13585 | **Basic** | Filtro entrada VBUS |
-| Q_NPN | MMBT2222A (NPN) | C916372 | **Basic** | Inverter para Error LED |
-| D_LED | LED Vermelho 0603 | C2286 | **Basic** | Error LED (sem PD) |
-| R_PU | 10kΩ (PG pull-up) | C25744 | **Basic** | Pull-up PG |
-| R_BASE | 10kΩ (NPN base) | C25744 | **Basic** | Base NPN |
-| R_LED | 330Ω (LED) | C25104 | **Basic** | Corrente LED |
+| C26 | 10µF 50V (1206) | C13585 | **Basic** | Filtro entrada VBUS |
+| Q2 | MMBT2222A (NPN) | C8512 | **Basic** | Inverter para Error LED |
+| D1 | LED Vermelho 0603 | C2286 | **Basic** | Error LED (sem PD) |
+| R_PU1 | 10kΩ (PG pull-up) | C25744 | **Basic** | Pull-up PG |
+| R_BASE1 | 10kΩ (NPN base) | C25744 | **Basic** | Base NPN |
+| R_ERR1 | 330Ω (LED) | C25104 | **Basic** | Corrente LED |
 
 ### Resumo Custos PSU
 

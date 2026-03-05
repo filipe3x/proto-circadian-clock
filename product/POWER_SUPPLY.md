@@ -241,7 +241,7 @@ Para pedir **20V fixo**, usa-se o modo resistência com CFG1 floating:
   VBUS ──┬──────────────────────────────► SY8388ARHC VIN
          │ (DIRECTO, sem MOSFET)
          │
-      [D3 TVS]  SMBJ24CA (Vrwm=24V, bidirecional)
+      [D6 TVS]  SMBJ24CA (Vrwm=24V, bidirecional)
          │
         GND
 ```
@@ -278,7 +278,7 @@ Para pedir **20V fixo**, usa-se o modo resistência com CFG1 floating:
 
 ---
 
-## 4. Circuito SY8388ARHC (U12) — Buck Converter
+## 4. Circuito SY8388ARHC (U1) — Buck Converter
 
 ### 4.1 Especificações
 
@@ -459,7 +459,7 @@ Regras de layout para SY8388ARHC:
 
 ## 5. Proteção VBUS
 
-### 5.1 TVS Diode (D3)
+### 5.1 TVS Diode (D6)
 
 O rail VBUS (até 20V) é protegido por TVS bidirecional:
 
@@ -476,7 +476,7 @@ O rail VBUS (até 20V) é protegido por TVS bidirecional:
 ### 5.2 Duas Camadas de Proteção
 
 1. **C_VIN (2×22µF 25V)** — absorvem spikes lentos (µs), proteção primária
-2. **D3 TVS (SMBJ24CA)** — clamp rápido de ESD e spikes ns
+2. **D6 TVS (SMBJ24CA)** — clamp rápido de ESD e spikes ns
 
 ---
 
@@ -487,25 +487,27 @@ O rail VBUS (até 20V) é protegido por TVS bidirecional:
 | Ref | Componente | Valor | LCSC | Tipo | Footprint |
 |-----|------------|-------|------|------|-----------|
 | U5 | CH224K (WCH) | PD 3.0 Sink | **C970725** | Extended | ESSOP-10-1EP |
-| U12 | SY8388ARHC (Silergy) | Buck 8A 24V | **C5110279** | Extended | QFN-16-EP 2.5x2.5mm |
+| U1 | SY8388ARHC (Silergy) | Buck 8A 24V | **C5110279** | Extended | QFN-16-EP 2.5x2.5mm |
 
 ### 6.2 Indutor
 
 | Ref | Componente | Valor | LCSC | Tipo | Footprint |
 |-----|------------|-------|------|------|-----------|
 | L1 | Bourns SRP1265A-2R2M | 2.2µH 22A | **C2831487** | Extended | 12.5x6.5mm |
+| L2 | Bourns SRP1265A-4R7M | 4.7µH 16A | **C780205** | Extended | 12.5x6.5mm |
 
 ### 6.3 Condensadores
 
 | Ref | Componente | Valor | LCSC | Tipo | Footprint |
 |-----|------------|-------|------|------|-----------|
-| C_VIN1, C_VIN2 | MLCC | 22µF 25V | **C12891** | Basic | 1206 |
-| C_OUT5-8 | MLCC (×4) | 22µF 25V | **C12891** | Basic | 1206 |
-| C_BOOT | MLCC | 100nF 25V | **C307331** | Basic | 0402 |
-| C_HF | MLCC | 100nF 50V | **C307331** | Basic | 0402 |
-| C_FF | MLCC | 22pF 50V | **C1555** | Basic | 0402 |
-| C_VDD | MLCC | 1µF 50V | **C15849** | Basic | 0603 |
-| C_IN | MLCC | 10µF 50V | **C13585** | Basic | 1206 |
+| C24, C25 | MLCC (VIN) | 22µF 25V | **C12891** | Basic | 1206 |
+| C_OUT5-8 | MLCC (×4, VOUT) | 22µF 25V | **C12891** | Basic | 1206 |
+| C_BOOT3 | MLCC (bootstrap) | 100nF 50V | **C307331** | Basic | 0402 |
+| C_FIL1 | MLCC (HF bypass) | 100nF 50V | **C307331** | Basic | 0402 |
+| C_FF2 | MLCC (feedforward) | 22pF 50V | **C1555** | Basic | 0402 |
+| C14 | MLCC (CH224K VDD) | 1µF 50V | **C15849** | Basic | 0603 |
+| C27 | MLCC (bypass) | 1µF 50V | **C15849** | Basic | 0603 |
+| C26 | MLCC (VBUS filter) | 10µF 50V | **C13585** | Basic | 1206 |
 
 ### 6.4 Resistências
 
@@ -513,24 +515,27 @@ O rail VBUS (até 20V) é protegido por TVS bidirecional:
 |-----|------------|-------|------|------|-----------|
 | R_FB3 | Feedback upper | 22kΩ 1% | **C31850** | Basic | 0603 |
 | R_FB4 | Feedback lower | 3kΩ 1% | **C4211** | Basic | 0603 |
-| R1 | VBUS→VDD CH224K | 1kΩ | **C4410** | Basic | 1206 |
-| R_PU | PG pull-up | 10kΩ | **C25744** | Basic | 0402 |
-| R_BASE | NPN base | 10kΩ | **C25744** | Basic | 0402 |
-| R_LED | Error LED | 330Ω | **C25104** | Basic | 0402 |
+| R14 | VBUS→VDD CH224K | 1kΩ | **C4410** | Basic | 1206 |
+| R_PU1 | PG pull-up | 10kΩ | **C25744** | Basic | 0402 |
+| R_BASE1 | NPN base | 10kΩ | **C25744** | Basic | 0402 |
+| R_ERR1 | Error LED | 330Ω | **C25104** | Basic | 0402 |
+| R_DIV1 | VBUS divider upper | 47kΩ | **C25792** | Basic | 0402 |
+| R_DIV2 | VBUS divider lower | 5.6kΩ | **C23189** | Basic | 0603 |
+| R_VBUS1 | VBUS sense pull-down | 10kΩ | **C25744** | Basic | 0402 |
 
 ### 6.5 Díodos e TVS
 
 | Ref | Componente | Valor | LCSC | Tipo | Footprint |
 |-----|------------|-------|------|------|-----------|
 | D6 | SMBJ24CA (TVS bidirecional) | Vrwm=24V, 600W | **C19077558** | Extended | SMB (DO-214AA) |
-| D_LED | LED Vermelho (Error) | — | **C2286** | Basic | 0603 |
+| D1 | LED Vermelho (Error) | — | **C2286** | Basic | 0603 |
 
 ### 6.6 Outros
 
 | Ref | Componente | Valor | LCSC | Tipo | Footprint |
 |-----|------------|-------|------|------|-----------|
 | F1 | PTC Fuse | 3A 30V | **C2982291** | Extended | 2920 |
-| Q_NPN | MMBT2222A | NPN transistor | **C916372** | Basic | SOT-23 |
+| Q2 | MMBT2222A | NPN transistor | **C8512** | Basic | SOT-23 |
 
 ### 6.7 Resumo de Custos
 
@@ -549,7 +554,7 @@ O rail VBUS (até 20V) é protegido por TVS bidirecional:
 | CH224K (C970725) | $3 |
 | SY8388ARHC (C5110279) | $3 |
 | L1 SRP1265A-2R2M (C2831487) | $3 |
-| D3 SMBJ24CA (C19077558) | $3 |
+| D6 SMBJ24CA (C19077558) | $3 |
 | F1 PTC (C2982291) | $3 |
 | **Total taxa Extended PSU** | **$15** |
 
@@ -708,20 +713,23 @@ Pior caso: 20V → 5V @ 8A (40W output, ~93% eficiência)
 
 ---
 
-## 9. Discrepâncias KiCad ↔ Documentação
+## 9. Alinhamento KiCad ↔ Documentação (v4.1)
 
-| Item | KiCad (psu.kicad_sch) | Documento | Status |
-|------|----------------------|-----------|--------|
-| SY8388ARHC Ref | U1 | U12 | ⚠️ Naming — KiCad ref é U1 |
-| TVS Ref | D6 | D3 (secção 5.1) | ⚠️ KiCad ref é D6, não D3 |
-| TVS Value | ~~SMBJ5.0A~~ → SMBJ24CA (corrigido v4.1) | SMBJ24CA | ✅ Alinhado |
-| Caps C_VIN/C_OUT | C12891 (22µF 25V 1206) | ~~C52306 (1210)~~ → C12891 (corrigido v4.1) | ✅ Alinhado |
-| Q_NPN LCSC | C8512 | C916372 | ⚠️ Ambos MMBT2222A, LCSC diferente |
-| L2 (4.7µH) | Presente no KiCad (C780205) | Não documentado | ⚠️ Indutor extra para output filter? |
-| D3 (USB data TVS) | C20615788, footprint D_SOD-123 | Não na secção PSU | ℹ️ Protecção dados USB, secção diferente |
+Todas as referências, LCSC codes e footprints neste documento correspondem ao
+esquemático KiCad (`psu.kicad_sch`), que é a **source of truth** (PCB encomendado na JLCPCB).
 
-> **Nota:** As referências (U1 vs U12, D6 vs D3) são apenas labels no KiCad.
-> O importante é que os **LCSC codes** estejam correctos para encomenda JLCPCB.
+| Item | Correcção v4.1 | Status |
+|------|----------------|--------|
+| SY8388ARHC Ref | ~~U12~~ → **U1** | ✅ Alinhado |
+| TVS Ref | ~~D3~~ → **D6** | ✅ Alinhado |
+| TVS Value | ~~SMBJ5.0A~~ → **SMBJ24CA** | ✅ Alinhado |
+| Caps C_VIN/C_OUT | ~~C52306 (1210)~~ → **C12891 (1206)** | ✅ Alinhado |
+| Q_NPN Ref + LCSC | ~~Q_NPN/C916372~~ → **Q2/C8512** | ✅ Alinhado |
+| L2 (4.7µH) | Adicionado ao BOM (C780205) | ✅ Documentado |
+| VBUS divider (R_DIV1/R_DIV2) | Adicionado ao BOM | ✅ Documentado |
+| Cap refs | Alinhados com KiCad (C24/C25, C_BOOT3, C_FIL1, C_FF2, C14, C26, C27) | ✅ |
+| Resistor refs | Alinhados com KiCad (R14, R_PU1, R_BASE1, R_ERR1) | ✅ |
+| D3 (USB data TVS) | C20615788, footprint D_SOD-123 | ℹ️ Protecção dados USB, não PSU |
 
 ---
 
