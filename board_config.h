@@ -212,6 +212,35 @@
 #endif
 
 // ============================================================
+// CLICK WHEEL (Encoder Quadratura + Botão Central)
+// ============================================================
+// H1: Encoder quadratura EC11/EC12 (2 canais A+B, 90° desfasados)
+// H2: Hall Effect + anel magnético (mesmo pinout, lógica idêntica)
+// H3: Encoder óptico IR (mesmo pinout, lógica idêntica)
+//
+// Rotação CW  → brilho aumenta
+// Rotação CCW → brilho diminui
+// Click central → cicla modo: AUTO_SOLAR → THERAPY_RED → OFF
+//
+#if BOARD_MATRIXPORTAL_S3
+  // Matrix Portal S3 - GPIOs livres no conector de expansão
+  #define ENCODER_A_PIN    9   // Canal A do encoder (interrupt)
+  #define ENCODER_B_PIN   10   // Canal B do encoder (interrupt)
+  #define CENTER_BTN_PIN  11   // Botão central click wheel (interrupt)
+#else
+  // ESP32 Dev Module - ADC1 input-only, todos suportam interrupts
+  #define ENCODER_A_PIN   32   // Canal A (ADC1_CH4, interrupt)
+  #define ENCODER_B_PIN   35   // Canal B (input-only, interrupt ok)
+  #define CENTER_BTN_PIN  34   // Botão central (input-only, interrupt ok)
+#endif
+
+// Parâmetros da click wheel
+#define ENCODER_TICKS_PER_CLICK   1    // 1 tick = 1 detent do encoder
+#define BRIGHTNESS_STEP           10   // Variação de brilho por tick (0-255)
+#define BRIGHTNESS_MIN            10   // Mínimo para painel não apagar totalmente
+#define CENTER_DEBOUNCE_MS        200  // Debounce do botão central (ms)
+
+// ============================================================
 // MACROS ÚTEIS
 // ============================================================
 
