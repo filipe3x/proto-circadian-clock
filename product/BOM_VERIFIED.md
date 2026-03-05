@@ -547,12 +547,12 @@ Componentes específicos da secção de alimentação. BOM detalhado em `POWER_S
 | U12 | **SY8388ARHC** (Silergy) - Buck 8A | **C5110279** | Extended | QFN-16-EP 2.5×2.5mm, 24V in, 500kHz, compensação interna |
 | L1 | Bourns SRP1265A-2R2M (2.2µH 22A) | C2831487 | Extended | Shielded, Zone Keepout obrigatório! |
 | C_VIN1,2 | 22µF 25V MLCC (1210) | C52306 | **Basic** | Input caps |
-| C_OUT1-3 | 22µF 10V MLCC (1206) | C12891 | **Basic** | Output caps |
+| C_OUT5-8 | 22µF 25V MLCC ×4 (1210) | C52306 | **Basic** | Output caps (88µF total, baixo ESR) |
 | C_BOOT | 100nF 25V (0402) | C307331 | **Basic** | Bootstrap |
 | C_HF | 100nF 50V (0402) | C307331 | **Basic** | HF bypass VIN→PGND |
-| C_FF | 22pF 50V (0402) | C1555 | **Basic** | Feedforward (// R_FB1) |
-| R_FB1 | 22kΩ 1% (0603) | C31850 | **Basic** | Feedback upper |
-| R_FB2 | 3kΩ 1% (0603) | C4211 | **Basic** | Feedback lower |
+| C_FF | 22pF 50V (0402) | C1555 | **Basic** | Feedforward (// R_FB3) |
+| R_FB3 | 22kΩ 1% (0603) | C31850 | **Basic** | Feedback upper |
+| R_FB4 | 3kΩ 1% (0603) | C4211 | **Basic** | Feedback lower |
 
 **Porquê SY8388ARHC em vez de TPS56838 (C37533416)?**
 - **Custo**: ~$0.53 vs ~$1.00+ (quase metade do preço!)

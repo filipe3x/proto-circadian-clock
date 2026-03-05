@@ -327,26 +327,34 @@ Para pedir **20V fixo**, usa-se o modo resistência com CFG1 floating:
 | 8,9 | LX | L1 (2.2µH) | Switch node — minimizar cobre! |
 | 10 | PG | NC ou ESP32 GPIO | Power-good (open-drain) |
 | 11 | COMP | NC | Compensação interna |
-| 12 | FB | Divisor R_FB1/R_FB2 | Feedback (0.6V ref) |
+| 12 | FB | Divisor R_FB3/R_FB4 | Feedback (0.6V ref) |
 | 13 | SS | C_SS ou float | Soft-start |
 | 14 | EN | VIN (float = always-on) | Enable |
 | 15,16 | NC | — | Não usados |
 | PAD | PGND | GND via vias térmicas | 4-6 vias 0.3mm |
 
-### 4.4 Rede de Feedback (5.0V)
+### 4.4 Rede de Feedback — R_FB3 (22kΩ) e R_FB4 (3kΩ)
+
+O SY8388ARHC tem uma referência interna de **0.6V** no pino FB. O divisor
+resistivo reduz a tensão de saída (5V) para 0.6V, permitindo ao IC regular:
+
+- Se VOUT sobe acima de 5V → FB > 0.6V → IC reduz duty cycle
+- Se VOUT desce abaixo de 5V → FB < 0.6V → IC aumenta duty cycle
 
 ```
                     VOUT = 5V
                         │
-                   [R_FB1] 22kΩ (1%)
+                   [R_FB3] 22kΩ (1%)   ← "upper" (LCSC: C31850)
                         │
-                        ├────────────► FB (pin 12)
+                        ├────────────► FB (pin 12 SY8388ARHC)
                         │
-                   [R_FB2] 3kΩ (1%)
+                   [R_FB4] 3kΩ (1%)    ← "lower" (LCSC: C4211)
                         │
                        GND
 
-Cálculo: VOUT = 0.6V × (1 + R_FB1/R_FB2) = 0.6 × (1 + 22/3) = 5.0V ✓
+Cálculo:
+  V_FB = VOUT × R_FB4 / (R_FB3 + R_FB4) = 5 × 3k / 25k = 0.6V ✓
+  VOUT = 0.6V × (1 + R_FB3/R_FB4) = 0.6 × (1 + 22/3) = 5.0V ✓
 ```
 
 ### 4.5 Circuito de Aplicação Completo
@@ -375,7 +383,7 @@ Cálculo: VOUT = 0.6V × (1 + R_FB1/R_FB2) = 0.6 × (1 + 22/3) = 5.0V ✓
                       │   │                                  │  │
                       │   │ BS (1) ──[C_BOOT 100nF]── LX     │  │
                       │   │                                  │  │
-                      │   │ FB (12) ◄── divisor FB            │  │
+                      │   │ FB (12) ◄── divisor R_FB3/R_FB4    │  │
                       │   │                                  │  │
                       │   │ PG (10) ─○ (opcional)            │  │
                       │   │                                  │  │
@@ -390,14 +398,23 @@ Cálculo: VOUT = 0.6V × (1 + R_FB1/R_FB2) = 0.6 × (1 + 22/3) = 5.0V ✓
                                              │         │
                                              │         ├─── VOUT (5V)
                                              │         │
-                                        ┌────┴────┐    │
-                                        │         │    │
-                                       ═╧═       ═╧═  ═╧═
-                                    C_OUT1     C_OUT2  C_OUT3
-                                   22µF/10V   22µF/10V 22µF/10V
-                                    (1206)     (1206)   (1206)
-                                        │         │    │
-                                       GND       GND  GND
+                                   ┌────┴────┬────┬────┐
+                                   │         │    │    │
+                                  ═╧═       ═╧═  ═╧═  ═╧═
+                               C_OUT5    C_OUT6 C_OUT7 C_OUT8
+                              22µF/25V  22µF   22µF   22µF
+                               (1210)   (1210) (1210) (1210)
+                                   │         │    │    │
+                                  GND       GND  GND  GND
+
+  C_OUT (4× 22µF 25V em paralelo = 88µF total):
+  ───────────────────────────────────────────────
+  • Filtrar ripple de 500kHz → <20mV na saída
+  • Resposta transitória: fornecem corrente instantânea quando o
+    painel HUB75 muda de linha (picos 0→2A em µs), enquanto o
+    loop de feedback do SY8388ARHC reage
+  • 4 em paralelo → ESR total ~1mΩ (4× menor que 1 cap sozinho)
+  • Sem capacitância suficiente → voltage sag → flickering/reset ESP32
 ```
 
 ### 4.6 Layout PCB
@@ -481,7 +498,7 @@ O rail VBUS (até 20V) é protegido por TVS bidirecional:
 | Ref | Componente | Valor | LCSC | Tipo | Footprint |
 |-----|------------|-------|------|------|-----------|
 | C_VIN1, C_VIN2 | MLCC | 22µF 25V | **C52306** | Basic | 1210 |
-| C_OUT1-3 | MLCC | 22µF 10V | **C12891** | Basic | 1206 |
+| C_OUT5-8 | MLCC (×4) | 22µF 25V | **C52306** | Basic | 1210 |
 | C_BOOT | MLCC | 100nF 25V | **C307331** | Basic | 0402 |
 | C_HF | MLCC | 100nF 50V | **C307331** | Basic | 0402 |
 | C_FF | MLCC | 22pF 50V | **C1555** | Basic | 0402 |
@@ -492,8 +509,8 @@ O rail VBUS (até 20V) é protegido por TVS bidirecional:
 
 | Ref | Componente | Valor | LCSC | Tipo | Footprint |
 |-----|------------|-------|------|------|-----------|
-| R_FB1 | Feedback upper | 22kΩ 1% | **C31850** | Basic | 0603 |
-| R_FB2 | Feedback lower | 3kΩ 1% | **C4211** | Basic | 0603 |
+| R_FB3 | Feedback upper | 22kΩ 1% | **C31850** | Basic | 0603 |
+| R_FB4 | Feedback lower | 3kΩ 1% | **C4211** | Basic | 0603 |
 | R1 | VBUS→VDD CH224K | 1kΩ | **C4410** | Basic | 1206 |
 | R_PU | PG pull-up | 10kΩ | **C25744** | Basic | 0402 |
 | R_BASE | NPN base | 10kΩ | **C25744** | Basic | 0402 |
