@@ -520,7 +520,7 @@ ESP32, CH340C, USB-C, ESD, LDO, UMH3N, TVS, Terminal, Buzzer, Botões, Battery H
 
 ---
 
-## PSU Components (Secção PSU) — Design Final v4.0
+## PSU Components (Secção PSU) — Design Final v4.1 (Bulletproof)
 
 Componentes específicos da secção de alimentação. BOM detalhado em `POWER_SUPPLY.md`.
 
@@ -544,10 +544,10 @@ Componentes específicos da secção de alimentação. BOM detalhado em `POWER_S
 
 | Ref | Componente | LCSC | Tipo | Nota |
 |-----|------------|------|------|------|
-| U12 | **SY8388ARHC** (Silergy) - Buck 8A | **C5110279** | Extended | QFN-16-EP 2.5×2.5mm, 24V in, 500kHz, compensação interna |
+| U12 | **SY8388ARHC** (Silergy) - Buck 8A | **C5110279** | Extended | QFN-16-EP 2.5×2.5mm, 24V in, 600kHz, compensação interna |
 | L1 | Bourns SRP1265A-2R2M (2.2µH 22A) | C2831487 | Extended | Shielded, Zone Keepout obrigatório! |
-| C_VIN1,2 | 22µF 25V MLCC (1210) | C52306 | **Basic** | Input caps |
-| C_OUT5-8 | 22µF 25V MLCC ×4 (1210) | C52306 | **Basic** | Output caps (88µF total, baixo ESR) |
+| C_VIN1,2 | 22µF 25V MLCC (1206) | C12891 | **Basic** | Input caps |
+| C_OUT5-8 | 22µF 25V MLCC ×4 (1206) | C12891 | **Basic** | Output caps (88µF total, baixo ESR) |
 | C_BOOT | 100nF 25V (0402) | C307331 | **Basic** | Bootstrap |
 | C_HF | 100nF 50V (0402) | C307331 | **Basic** | HF bypass VIN→PGND |
 | C_FF | 22pF 50V (0402) | C1555 | **Basic** | Feedforward (// R_FB3) |
@@ -556,7 +556,7 @@ Componentes específicos da secção de alimentação. BOM detalhado em `POWER_S
 
 **Porquê SY8388ARHC em vez de TPS56838 (C37533416)?**
 - **Custo**: ~$0.53 vs ~$1.00+ (quase metade do preço!)
-- **Sem coil whine**: PWM contínuo a 500kHz (vs SY8368 que fazia PFM a light load)
+- **Sem coil whine**: PWM contínuo a 600kHz (vs SY8368 que fazia PFM a light load)
 - **Compensação interna**: sem rede RC externa (simplifica layout)
 - **QFN-16 compacto**: 2.5×2.5mm com thermal pad generoso
 - 8A contínuo, 24V max — mesmas specs funcionais que TPS56838
@@ -565,7 +565,7 @@ Componentes específicos da secção de alimentação. BOM detalhado em `POWER_S
 
 | Ref | Componente | LCSC | Tipo | Nota |
 |-----|------------|------|------|------|
-| D3 | SMAJ24CA (TVS bidirecional) | C19077558 | Extended | Vrwm=24V para proteção VBUS 20V |
+| D6 | SMBJ24CA (TVS bidirecional) | C19077558 | Extended | Vrwm=24V, 600W pk, SMB pkg — proteção VBUS 20V |
 | F1 | PTC Fuse 3A/30V | C2982291 | Extended | Protecção overcurrent |
 | C_IN | 10µF 50V (1206) | C13585 | **Basic** | Filtro entrada VBUS |
 | Q_NPN | MMBT2222A (NPN) | C916372 | **Basic** | Inverter para Error LED |
@@ -581,7 +581,7 @@ Componentes específicos da secção de alimentação. BOM detalhado em `POWER_S
 | CH224K | $3 | PD Sink |
 | SY8388ARHC | $3 | Buck |
 | L1 (Bourns) | $3 | Indutor |
-| D3 (TVS) | $3 | Proteção |
+| D6 (TVS) | $3 | Proteção |
 | F1 (PTC) | $3 | Fuse |
 | **Total PSU Extended** | **$15** | 5 tipos Extended |
 
@@ -589,4 +589,4 @@ Componentes específicos da secção de alimentação. BOM detalhado em `POWER_S
 
 *Documento atualizado: Março 2026*
 *Análise de custos Basic/Extended incluída*
-*PSU v4.0: CH224K (PD 20V) + SY8388ARHC (Buck 8A) — substitui IP2721 + TPS56838*
+*PSU v4.1 Bulletproof: CH224K (PD 20V) + SY8388ARHC (Buck 8A) — worst-case analysis, caps/TVS aligned with KiCad*

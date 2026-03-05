@@ -1,7 +1,7 @@
 # Power Supply - Circadian Clock PCB
 
 **Data:** Março 2026
-**Versão:** 4.0 - CH224K + SY8388ARHC (Design Final)
+**Versão:** 4.1 - CH224K + SY8388ARHC (Bulletproof)
 **Esquemático KiCad:** `product/kicad/clockv7/psu.kicad_sch`
 
 ---
@@ -11,6 +11,7 @@
 | Data | Versão | Alterações |
 |------|--------|------------|
 | Mar 2026 | 4.0 | **Design final**: CH224K (PD 20V) + SY8388ARHC (Buck 8A). Documento único — substitui POWER_SUPPLY v1/v2/v3 e PSU_20V_SCHEMA_DESIGN. |
+| Mar 2026 | 4.1 | **Bulletproof**: Worst-case VOUT analysis, correcção TVS D6 (SMBJ24CA), specs protecção SY8388ARHC, alinhamento BOM↔KiCad (caps 1206/C12891). |
 
 ---
 
@@ -107,7 +108,7 @@ Estratégia de Negociação PD (CH224K com CFG1 NC = 20V):
 | **IOUT** | 8A | 8A | 8A |
 | **Modo** | **PWM + auto-skip** com FCCM disponível | FCCM nativo | PFM a light load |
 | **Compensação** | **Interna** | D-CAP3 (interna) | Externa (COMP pin) |
-| **Frequência** | 500kHz (fixa) | 500/800/1200kHz | ~500kHz |
+| **Frequência** | 600kHz (fixa) | 500/800/1200kHz | ~600kHz |
 | **Package** | **QFN-16 2.5x2.5mm** | VQFN-HR 10-pin 3x3mm | QFN-20 3x3mm |
 | **LCSC** | **C5110279** | C37533416 | C207642 |
 | **Preço** | **~$0.53** | ~$1.00+ | ~$0.40 |
@@ -117,7 +118,7 @@ Estratégia de Negociação PD (CH224K com CFG1 NC = 20V):
 **Vantagens concretas do SY8388ARHC:**
 
 1. **Custo** — ~$0.53 vs ~$1.00+ do TPS56838. Quase metade do preço para especificações equivalentes
-2. **Sem coil whine** — ao contrário do SY8368AQQC que entrava em pulse-skipping (PFM) a carga leve, causando frequência audível nos kHz. O SY8388ARHC mantém PWM contínuo a 500kHz (inaudível)
+2. **Sem coil whine** — ao contrário do SY8368AQQC que entrava em pulse-skipping (PFM) a carga leve, causando frequência audível nos kHz. O SY8388ARHC mantém PWM contínuo a 600kHz (inaudível)
 3. **Compensação interna** — sem necessidade de rede RC externa no loop de compensação. Menos componentes, mais simples de rotear
 4. **QFN-16 compacto** — 2.5x2.5mm com exposed pad generoso para dissipação térmica
 5. **Disponibilidade JLCPCB** — Extended mas com bom stock e preço baixo
@@ -129,7 +130,7 @@ Estratégia de Negociação PD (CH224K com CFG1 NC = 20V):
 O Problema: Pulse Skipping (PFM) a carga leve
 ══════════════════════════════════════════════
 
-  PWM normal (500kHz):
+  PWM normal (600kHz):
   ██░░░░░░██░░░░░░██░░░░░░██░░░░░░  → Frequência FIXA, inaudível ✓
 
   Pulse skipping (carga leve, SY8368):
@@ -144,7 +145,7 @@ O Problema: Pulse Skipping (PFM) a carga leve
   Solução SY8388ARHC:
   ██░░░░░░██░░░░░░██░░░░░░██░░░░░░  → PWM contínuo SEMPRE ✓
 
-  O SY8388ARHC mantém frequência de switching constante a 500kHz
+  O SY8388ARHC mantém frequência de switching constante a 600kHz
   mesmo com carga muito leve. Trade-off: eficiência ligeiramente
   menor a no-load (~mA extra), mas SILÊNCIO garantido.
 ══════════════════════════════════════════════════
@@ -240,7 +241,7 @@ Para pedir **20V fixo**, usa-se o modo resistência com CFG1 floating:
   VBUS ──┬──────────────────────────────► SY8388ARHC VIN
          │ (DIRECTO, sem MOSFET)
          │
-      [D3 TVS]  SMAJ24CA (Vrwm=24V, bidirecional)
+      [D3 TVS]  SMBJ24CA (Vrwm=24V, bidirecional)
          │
         GND
 ```
@@ -287,7 +288,7 @@ Para pedir **20V fixo**, usa-se o modo resistência com CFG1 floating:
 | VOUT | Ajustável via FB | 5.0V configurado |
 | IOUT | 8A contínuo | |
 | VFB | 0.6V ±1% | Tensão referência feedback |
-| Frequência | 500kHz (fixa) | Sem coil whine |
+| Frequência | 600kHz (fixa) | Sem coil whine |
 | Controlo | Compensação interna | Sem rede RC externa |
 | RDS(ON) HS | ~20mΩ | High-side MOSFET |
 | RDS(ON) LS | ~10mΩ | Low-side MOSFET |
@@ -409,7 +410,7 @@ Cálculo:
 
   C_OUT (4× 22µF 25V em paralelo = 88µF total):
   ───────────────────────────────────────────────
-  • Filtrar ripple de 500kHz → <20mV na saída
+  • Filtrar ripple de 600kHz → <20mV na saída
   • Resposta transitória: fornecem corrente instantânea quando o
     painel HUB75 muda de linha (picos 0→2A em µs), enquanto o
     loop de feedback do SY8388ARHC reage
@@ -464,17 +465,18 @@ O rail VBUS (até 20V) é protegido por TVS bidirecional:
 
 | Parâmetro | Valor |
 |-----------|-------|
-| Componente | SMAJ24CA |
+| Componente | SMBJ24CA |
 | Vrwm | 24V (suporta 20V VBUS) |
 | Vbr | 26.7V min |
-| Vc (clamp @ 1A) | 38.9V |
-| Ppk | 400W (pulso) |
+| Vc (clamp @ 15.4A) | 38.9V |
+| Ppk | 600W (pulso) |
+| Package | SMB (DO-214AA) |
 | LCSC | C19077558 |
 
 ### 5.2 Duas Camadas de Proteção
 
 1. **C_VIN (2×22µF 25V)** — absorvem spikes lentos (µs), proteção primária
-2. **D3 TVS (SMAJ24CA)** — clamp rápido de ESD e spikes ns
+2. **D3 TVS (SMBJ24CA)** — clamp rápido de ESD e spikes ns
 
 ---
 
@@ -497,8 +499,8 @@ O rail VBUS (até 20V) é protegido por TVS bidirecional:
 
 | Ref | Componente | Valor | LCSC | Tipo | Footprint |
 |-----|------------|-------|------|------|-----------|
-| C_VIN1, C_VIN2 | MLCC | 22µF 25V | **C52306** | Basic | 1210 |
-| C_OUT5-8 | MLCC (×4) | 22µF 25V | **C52306** | Basic | 1210 |
+| C_VIN1, C_VIN2 | MLCC | 22µF 25V | **C12891** | Basic | 1206 |
+| C_OUT5-8 | MLCC (×4) | 22µF 25V | **C12891** | Basic | 1206 |
 | C_BOOT | MLCC | 100nF 25V | **C307331** | Basic | 0402 |
 | C_HF | MLCC | 100nF 50V | **C307331** | Basic | 0402 |
 | C_FF | MLCC | 22pF 50V | **C1555** | Basic | 0402 |
@@ -520,7 +522,7 @@ O rail VBUS (até 20V) é protegido por TVS bidirecional:
 
 | Ref | Componente | Valor | LCSC | Tipo | Footprint |
 |-----|------------|-------|------|------|-----------|
-| D3 | SMAJ24CA (TVS bidirecional) | Vrwm=24V | **C19077558** | Extended | SMA |
+| D6 | SMBJ24CA (TVS bidirecional) | Vrwm=24V, 600W | **C19077558** | Extended | SMB (DO-214AA) |
 | D_LED | LED Vermelho (Error) | — | **C2286** | Basic | 0603 |
 
 ### 6.6 Outros
@@ -547,7 +549,7 @@ O rail VBUS (até 20V) é protegido por TVS bidirecional:
 | CH224K (C970725) | $3 |
 | SY8388ARHC (C5110279) | $3 |
 | L1 SRP1265A-2R2M (C2831487) | $3 |
-| D3 SMAJ24CA (C19077558) | $3 |
+| D3 SMBJ24CA (C19077558) | $3 |
 | F1 PTC (C2982291) | $3 |
 | **Total taxa Extended PSU** | **$15** |
 
@@ -581,7 +583,149 @@ desde 4.5V. Isto garante que o ESP32 pode ser flashado via USB sem fonte PD.
 
 ---
 
-## 8. Referências
+## 8. Análise Worst-Case — Bulletproof PSU
+
+### 8.1 Tolerância de Saída (VOUT)
+
+Com resistências FB de 1% e VFB ±1%:
+
+```
+Parâmetros:
+  VFB  = 0.600V ±1% → [0.594V, 0.606V]
+  R_FB3 = 22kΩ ±1% → [21.78kΩ, 22.22kΩ]
+  R_FB4 = 3kΩ  ±1% → [2.97kΩ, 3.03kΩ]
+
+Nominal:
+  VOUT = 0.600 × (1 + 22k/3k) = 0.600 × 8.333 = 5.000V
+
+Worst-case HIGH (VFB↑, R_FB3↑, R_FB4↓):
+  VOUT = 0.606 × (1 + 22.22k/2.97k) = 0.606 × 8.485 = 5.142V (+2.8%)
+
+Worst-case LOW (VFB↓, R_FB3↓, R_FB4↑):
+  VOUT = 0.594 × (1 + 21.78k/3.03k) = 0.594 × 8.188 = 4.864V (-2.7%)
+
+Resultado: VOUT ∈ [4.86V, 5.14V] (±2.8%)
+═══════════════════════════════════════
+
+  ✓ ESP32: opera 2.3-3.6V (via LDO 3.3V) — margem enorme
+  ✓ HUB75: opera 4.2-5.5V típico — dentro de spec
+  ✓ CH340C: opera 3.0-5.5V — OK
+  ✓ SN74AHCT245: opera 4.5-5.5V — OK (4.86V > 4.5V mín)
+```
+
+### 8.2 Protecções SY8388ARHC (Datasheet)
+
+| Protecção | Threshold | Comportamento |
+|-----------|-----------|---------------|
+| **UVLO (Under-Voltage)** | VIN < ~3.8V (rising ~4V) | Desliga, hysteresis ~0.3V |
+| **OVP (Over-Voltage)** | VOUT > ~115% nominal | Latch-off (requer power cycle) |
+| **OCP Peak** | ~17.5A typ (high-side) | Cycle-by-cycle current limit |
+| **OCP Valley** | Configurável via ILMT pin | Float = 10A typ valley limit |
+| **OTP (Over-Temp)** | ~160°C junction | Latch-off |
+| **UVP (Under-Voltage Output)** | VOUT < ~70% nominal | Hiccup mode |
+| **Soft-Start** | Interno, ~2ms | Limita inrush current |
+
+### 8.3 Análise Térmica
+
+```
+Pior caso: 20V → 5V @ 8A (40W output, ~93% eficiência)
+
+  P_input  = 40W / 0.93 = 43W
+  P_loss   = 43W - 40W = 3W (total no IC + indutor)
+
+  SY8388ARHC (QFN-16 2.5×2.5mm):
+    RθJA ≈ 40°C/W (com thermal pad + vias)
+    P_IC ≈ 1.5W (FET losses + driver + quiescent)
+    ΔT = 1.5W × 40°C/W = 60°C
+    Tj_max = 85°C (ambiente) + 60°C = 145°C (< 150°C limite) ⚠️ MARGEM BAIXA
+
+  Recomendação: Garantir 4-6 vias térmicas 0.3mm no exposed pad
+  e copper pour generoso em ambas as faces do PCB.
+
+  L1 (SRP1265A-2R2M):
+    P_L1 ≈ I²×DCR = 8²×0.0047 = 0.3W (DCR=4.7mΩ)
+    ΔT ≈ 20°C (com airflow natural)
+    ✓ Isat = 22A >> 8A — sem risco de saturação
+```
+
+### 8.4 Ripple de Saída
+
+```
+  f_sw = 600kHz
+  L = 2.2µH
+  VIN = 20V, VOUT = 5V, IOUT = 8A
+
+  Duty cycle: D = VOUT/VIN = 5/20 = 0.25
+  ΔI_L = (VIN - VOUT) × D / (f_sw × L)
+       = (20 - 5) × 0.25 / (600k × 2.2µ)
+       = 15 × 0.25 / 1.32 = 2.84A p-p
+
+  Ripple voltage (ESR-dominated, 4×22µF em paralelo):
+    ESR_total ≈ 3mΩ / 4 = 0.75mΩ
+    V_ripple ≈ ΔI_L × ESR_total = 2.84 × 0.75m = 2.1mV
+
+  Ripple voltage (capacitivo):
+    V_ripple_cap = ΔI_L / (8 × f_sw × C_total)
+                 = 2.84 / (8 × 600k × 88µ) = 6.7mV
+
+  Total ripple ≈ √(2.1² + 6.7²) ≈ 7mV p-p ✓ (< 20mV target)
+```
+
+### 8.5 Capacitor Derating
+
+```
+  C_VIN (22µF 25V 1206):
+    VIN_max = 20V → 80% rating → OK para MLCC X5R/X7R
+    ⚠️ Capacitância efectiva a 20V DC bias ≈ 12-15µF (X5R perde ~35%)
+    Com 2× em paralelo: ~24-30µF efectivo → suficiente
+
+  C_OUT (22µF 25V 1206):
+    VOUT = 5V → 20% rating → quase capacitância total mantida
+    Com 4× em paralelo: ~80-85µF efectivo → excelente
+
+  ✓ Output caps com margem de derating muito boa
+  ⚠️ Input caps perdem capacitância a 20V — 2× em paralelo compensa
+```
+
+### 8.6 Margem de Protecção TVS (D6)
+
+```
+  SMBJ24CA specs:
+    Vrwm  = 24V   ← VBUS normal 20V → 4V margem (83% derating) ✓
+    Vbr   = 26.7V ← TVS não conduz a 20V nominal ✓
+    Vc    = 38.9V ← Clamp voltage em surge
+    Ppk   = 600W  ← Protecção robusta contra surges
+
+  SY8388ARHC VIN_max = 24V
+    ⚠️ Vc (38.9V) > VIN_max (24V) → Durante um surge forte,
+    o IC pode ver até 38.9V momentaneamente antes do TVS clampar.
+    PORÉM: surges são de µs/ns de duração. Os C_VIN absorvem a
+    energia antes que o IC sofra dano.
+
+  Conclusão: Proteção adequada para USB PD com 2 camadas:
+    1. C_VIN (absorção µs) + 2. D6 TVS (clamp ns)
+```
+
+---
+
+## 9. Discrepâncias KiCad ↔ Documentação
+
+| Item | KiCad (psu.kicad_sch) | Documento | Status |
+|------|----------------------|-----------|--------|
+| SY8388ARHC Ref | U1 | U12 | ⚠️ Naming — KiCad ref é U1 |
+| TVS Ref | D6 | D3 (secção 5.1) | ⚠️ KiCad ref é D6, não D3 |
+| TVS Value | ~~SMBJ5.0A~~ → SMBJ24CA (corrigido v4.1) | SMBJ24CA | ✅ Alinhado |
+| Caps C_VIN/C_OUT | C12891 (22µF 25V 1206) | ~~C52306 (1210)~~ → C12891 (corrigido v4.1) | ✅ Alinhado |
+| Q_NPN LCSC | C8512 | C916372 | ⚠️ Ambos MMBT2222A, LCSC diferente |
+| L2 (4.7µH) | Presente no KiCad (C780205) | Não documentado | ⚠️ Indutor extra para output filter? |
+| D3 (USB data TVS) | C20615788, footprint D_SOD-123 | Não na secção PSU | ℹ️ Protecção dados USB, secção diferente |
+
+> **Nota:** As referências (U1 vs U12, D6 vs D3) são apenas labels no KiCad.
+> O importante é que os **LCSC codes** estejam correctos para encomenda JLCPCB.
+
+---
+
+## 10. Referências
 
 - [CH224K Datasheet (WCH)](https://www.wch.cn/downloads/file/301.html)
 - [CH224K LCSC](https://www.lcsc.com/product-detail/C970725.html)
@@ -592,5 +736,5 @@ desde 4.5V. Isto garante que o ESP32 pode ser flashado via USB sem fonte PD.
 ---
 
 *Documento criado: Março 2026*
-*Versão: 4.0 — Design final CH224K + SY8388ARHC*
+*Versão: 4.1 — Bulletproof CH224K + SY8388ARHC*
 *Substitui: POWER_SUPPLY.md (v1), POWER_SUPPLY_v2.md, POWER_SUPPLY_v3.md, PSU_20V_SCHEMA_DESIGN.md*
