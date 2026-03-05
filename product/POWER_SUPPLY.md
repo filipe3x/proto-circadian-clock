@@ -726,6 +726,7 @@ esquemático KiCad (`psu.kicad_sch`), que é a **source of truth** (PCB encomend
 | Caps C_VIN/C_OUT | ~~C52306 (1210)~~ → **C12891 (1206)** | ✅ Alinhado |
 | Q_NPN Ref + LCSC | ~~Q_NPN/C916372~~ → **Q2/C8512** | ✅ Alinhado |
 | L2 (4.7µH) | Adicionado ao BOM (C780205) | ✅ Documentado |
+| **L1 (2.2µH)** | **Doc diz L1=2.2µH, KiCad só tem L2=4.7µH** | ⚠️ **VERIFICAR!** |
 | VBUS divider (R_DIV1/R_DIV2) | Adicionado ao BOM | ✅ Documentado |
 | Cap refs | Alinhados com KiCad (C24/C25, C_BOOT3, C_FIL1, C_FF2, C14, C26, C27) | ✅ |
 | Resistor refs | Alinhados com KiCad (R14, R_PU1, R_BASE1, R_ERR1) | ✅ |
