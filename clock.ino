@@ -185,18 +185,29 @@ volatile int encoderTicks    = 0;  // Acumulador: + = CW, - = CCW
 volatile int lastEncoderA    = HIGH;
 
 // ISR do encoder - executada em qualquer flanco de A e B para maior resolução
+//
+// Sensor óptico (H3) — polaridade do sinal com pull-up:
+//   Dente (reflecte): fototransístor conduz → GPIO = LOW
+//   Gap  (absorve):  fototransístor ao corte → GPIO = HIGH
+//   → mesmo comportamento eléctrico do encoder mecânico com pull-up (EC11)
+//   → ISR idêntica para H1, H2, H3
+//
+// Se a direcção ficar trocada: ENCODER_INVERT_DIR 1 em board_config.h
+//
 void IRAM_ATTR encoderISR() {
   int a = digitalRead(ENCODER_A_PIN);
   int b = digitalRead(ENCODER_B_PIN);
-  // Detectar flanco: só actuar quando A mudou de estado
   if (a != lastEncoderA) {
-    // Se A subiu: B decide a direcção (quadratura)
-    // Se A desceu: lógica inversa (também usada em encoders de maior resolução)
+    int dir;
     if (a == HIGH) {
-      encoderTicks += (b == LOW)  ? +1 : -1;  // CW ou CCW
+      dir = (b == LOW)  ? +1 : -1;
     } else {
-      encoderTicks += (b == HIGH) ? +1 : -1;
+      dir = (b == HIGH) ? +1 : -1;
     }
+    #if ENCODER_INVERT_DIR
+      dir = -dir;
+    #endif
+    encoderTicks += dir;
     lastEncoderA = a;
   }
 }

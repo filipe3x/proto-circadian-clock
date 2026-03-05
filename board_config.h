@@ -240,6 +240,15 @@
 #define BRIGHTNESS_MIN            10   // Mínimo para painel não apagar totalmente
 #define CENTER_DEBOUNCE_MS        200  // Debounce do botão central (ms)
 
+// Sensor óptico IR (H3): comportamento do sinal
+//   O fototransístor com pull-up produz:
+//     LOW  quando dente reflecte a luz (fototransístor conduz)
+//     HIGH quando gap absorve a luz   (fototransístor ao corte)
+//   Se o disco tiver as cores invertidas (dente escuro, gap reflectivo),
+//   ou se os sensores estiverem trocados, a direcção fica invertida.
+//   Basta mudar este define de 0 para 1 — sem re-soldar nada.
+#define ENCODER_INVERT_DIR        0    // 1 = inverter CW/CCW (ex: disco montado pelo lado oposto)
+
 // ============================================================
 // MACROS ÚTEIS
 // ============================================================
