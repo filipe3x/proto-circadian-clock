@@ -1,7 +1,7 @@
 # BOM Verificado - Circadian Clock PCB
 
 **Data:** Janeiro 2026
-**Versão:** 3.0 - Componentes Otimizados
+**Versão:** 4.1 - Componentes Alinhados com KiCad + PSU Bulletproof
 **Fonte:** JLCPCB BOM Detection + Verificação Manual
 **Total:** 24 componentes
 
@@ -11,6 +11,7 @@
 
 | Versão | Data | Alterações |
 |--------|------|------------|
+| 4.1 | Mar 2026 | **Alinhamento KiCad**: Remover componentes PSU obsoletos, alinhar refs/LCSC com KiCad. PSU v4.1 Bulletproof. |
 | 3.0 | Jan 2026 | Substituição de Extended por Basic: D1→MMBD4148SE, R6→1206, U1→PCF8563T, U6→AMS1117, U2/U7→SN74AHCT245PWR |
 | 2.0 | Jan 2026 | Análise completa Basic vs Extended |
 | 1.0 | Jan 2026 | BOM inicial |
@@ -52,18 +53,20 @@ Alguns componentes não têm alternativa Basic viável:
 
 | Componente | Razão |
 |------------|-------|
-| **ESP32-WROOM-32E** | MCU principal, sem alternativa |
-| **CH340C** | USB-Serial, AMS1117 é Basic mas CH340C é necessário |
-| **DS3231SN** | RTC de precisão com TCXO integrado |
-| **USB4105-GF-A** | Conector USB-C específico para o footprint |
+| **ESP32-WROOM-32E** (U3) | MCU principal, sem alternativa |
+| **CH340C** (U4) | USB-Serial necessário |
+| **CH224K** (U5) | PD Sink — ver secção PSU |
+| **SY8388ARHC** (U1) | Buck converter — ver secção PSU |
 
-### Componentes Extended Substituíveis
+### Substituições já Aplicadas (v4.1)
 
-| Atual (Extended) | Alternativa | Economia | Nota |
-|------------------|-------------|----------|------|
-| DS3231SN (Extended) | **PCF8563T (Preferred) + Cristal (Basic)** | **~$5** | Ambos sem taxa! |
-| ME6211C33M5G-N (SOT-23-5) | AMS1117-3.3 (SOT-223) | $3 | Requer mudança de footprint |
-| TMB12A05 (THT) | - | - | Sem alternativa Basic THT |
+| Anterior (Extended) | Atual | Economia | Nota |
+|---------------------|-------|----------|------|
+| DS3231SN → **PCF8563T** (U6) | Preferred + Cristal Basic | **~$5** | ✅ Aplicado |
+| ME6211 → **AMS1117-3.3** (U8) | Basic (SOT-223) | **$3** | ✅ Aplicado |
+| IP2721 → **CH224K** (U5) | Extended mas mais barato | **$0.13** | ✅ Aplicado (PSU v4.1) |
+| UMH3N → **MMBT2222A** (Q1) | Basic | **$3** | ✅ Aplicado |
+| R3,R4 (5.1kΩ CC) | **Removidos** (CH224K Rd interno) | **-2 componentes** | ✅ Aplicado |
 
 ---
 
@@ -204,74 +207,85 @@ Quando USB desliga, bateria alimenta RTC através de D4 (~2.3V após drop).
 
 ### ICs
 
-| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
-|-----|------------|------|------|-------------------|------|
-| U4 | CH340C | **C84681** | Extended | - | USB-Serial necessário |
-| U5 | D3V3XA4B10LP-7 (ESD) | **C1980462** | Extended | USBLC6-2SC6 (C7519) | Mesmo footprint UDFN |
-| U6 | ME6211C33M5G-N (LDO) | **C82942** | Extended | AMS1117-3.3 (C6186) | Requer mudar para SOT-223 |
+| Ref | Componente | LCSC | Tipo | Nota |
+|-----|------------|------|------|------|
+| U4 | CH340C | **C84681** | Extended | USB-Serial |
+| U8 | AMS1117-3.3 (LDO) | **C6186** | Basic | SOT-223, 3.3V regulador |
 
-**Custo Extended:** +$9 (ou +$6 se substituir LDO)
+**Custo Extended:** +$3
 
-**Recomendação U6:** O ME6211 tem dropout muito baixo (120mV) e quiescent current de 60µA, ideal para bateria. O AMS1117 tem dropout de 1.1V e 5mA quiescent - **manter ME6211** se eficiência for importante.
+> **U5** (anteriormente D3V3XA4B10LP-7 ESD) → Substituído por **CH224K** (PD Sink). Ver secção PSU.
 
 ### Transistores
 
-| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
-|-----|------------|------|------|-------------------|------|
-| Q1 | UMH3N | **C62892** | Extended | 2N7002 + resistências discretas | Complexifica o design |
-| Q2 | MMBT2222A | **C916372** | Basic | - | Já é Basic! |
+| Ref | Componente | LCSC | Tipo | Nota |
+|-----|------------|------|------|------|
+| Q1 | MMBT2222A | **C8512** | Basic | Buzzer driver (sound.kicad_sch) |
+| Q4 | MMBT2222A | **C8512** | Basic | UART DTR (uart.kicad_sch) |
+| Q5 | MMBT2222A | **C8512** | Basic | UART RTS (uart.kicad_sch) |
 
-**Custo Extended:** +$3
+**Custo Extended:** $0 — Todos Basic!
+
+> **Q2** (MMBT2222A, Error LED NPN) → Ver secção PSU.
+> **Q1** alterado: UMH3N (C62892) → **MMBT2222A (C8512)** — simplificação do driver do buzzer.
 
 ### Díodos e LEDs
 
-| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
-|-----|------------|------|------|-------------------|------|
-| D1 | 1N4148TR | **C84410** | Basic | - | Já é Basic |
-| D2 | KT-0603R (LED) | **C2286** | Basic | - | Já é Basic |
-| D3 | SMF9.0CA (TVS) | **C123799** | Extended | SMBJ5.0A (C35597) | Verificar specs |
+| Ref | Componente | LCSC | Tipo | Nota |
+|-----|------------|------|------|------|
+| D2 | KT-0603R (LED Wifi Status) | **C2286** | Basic | clockv7.kicad_sch |
+| D4 | MMBD4148SE (RTC backup) | **C17179590** | Basic | RTC.kicad_sch |
+| D5 | MMBD4148SE (buzzer flyback) | **C17179590** | Basic | sound.kicad_sch |
 
-**Custo Extended:** +$3
+**Custo Extended:** $0 — Todos Basic!
 
-### Condensadores
+> **D1** (anteriormente 1N4148TR) → Agora **LED_ERR** (C2286). Ver secção PSU.
+> **D3** (anteriormente SMF9.0CA) → Agora **H7VN10B** (C20615788, USB data TVS). Ver secção PSU.
+> **D6** (SMBJ24CA, VBUS TVS 24V) → Ver secção PSU.
 
-| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
-|-----|------------|------|------|-------------------|------|
-| C3 | CL31A226KAHNNNE (22µF 1206) | **C12891** | Basic | - | Já é Basic |
-| C4,C6,C8 | CL05B104KB54PNC (100nF 0402) | **C307331** | Basic | - | Já é Basic |
-| C5 | CL10A106KP8NNNC (10µF 0603) | **C19702** | Basic | - | Já é Basic |
+### Condensadores (Não-PSU)
 
-**Custo Extended:** $0 - Todos Basic!
+| Ref | Componente | LCSC | Tipo | Nota |
+|-----|------------|------|------|------|
+| C2 | 10µF 0603 | **C19702** | Basic | ESP32 bypass (clockv7) |
+| C3 | 22µF 1206 | **C12891** | Basic | LDO output (clockv7) |
+| C4,C6,C8,C11,C12,C13,C18,C19 | 100nF 0402 | **C307331** | Basic | Bypass caps (vários) |
+| C5 | 22µF | **C59461** | Basic | Level shifter (clockv7) |
+
+**Custo Extended:** $0 — Todos Basic!
+
+> Condensadores PSU (C24, C25, C_OUT5-8, C_BOOT3, C_FIL1, C_FF2, C14, C26, C27) → Ver secção PSU.
 
 ### Resistências
 
-| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
-|-----|------------|------|------|-------------------|------|
-| R1 | 330Ω 0402 | **C25104** | Basic | - | Já é Basic |
-| R2 | 100Ω 0402 | **C106232** | Basic | - | Já é Basic |
-| R3,R4 | 5.1kΩ 0402 | **C25905** | Basic | - | Já é Basic |
-| R5 | 10kΩ 0402 | **C25744** | Basic | - | Já é Basic |
-| R6 | 1kΩ 0402 | **C106235** | Basic | - | Já é Basic |
+| Ref | Componente | LCSC | Tipo | Nota |
+|-----|------------|------|------|------|
+| R1 | 330Ω 0402 | **C25104** | Basic | LED D2 (clockv7) |
+| R2 | 100Ω 0402 | **C25076** | Basic | USB (clockv7) |
+| R5 | 10kΩ 0402 | **C25744** | Basic | ESP32 pull-up (clockv7) |
+| R6 | 1kΩ 1206 | **C4410** | Basic | Buzzer (sound) |
+| R10 | 10kΩ 0402 | **C25744** | Basic | UART DTR (uart) |
+| R11 | 10kΩ 0402 | **C25744** | Basic | UART RTS (uart) |
 
-**Custo Extended:** $0 - Todos Basic!
+**Custo Extended:** $0 — Todos Basic!
+
+> **R3,R4** (5.1kΩ CC pull-downs) → **REMOVIDOS**. CH224K tem Rd internos 5.1kΩ.
+> Resistências PSU (R14, R_FB3, R_FB4, R_PU1, R_BASE1, R_ERR1, R_DIV1, R_DIV2, R_VBUS1) → Ver secção PSU.
 
 ### Fusível
 
-| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
-|-----|------------|------|------|-------------------|------|
-| F1 | SMD1206P050TF/15 (500mA) | **C106264** | Basic | - | Já é Basic |
-
-**Custo Extended:** $0
+> **F1** (anteriormente SMD1206P050TF/15 500mA) → Substituído por **ASMD2920-300-30V 3A** (C2982291). Ver secção PSU.
 
 ### Conectores
 
-| Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
-|-----|------------|------|------|-------------------|------|
-| J1 | USB4105-GF-A | **C3020560** | Extended | TYPE-C-31-M-12 (C165948) | Verificar pinout |
-| J2 | 2.54-2*8P Header | **C68234** | Basic | - | Já é Basic |
-| J3 | KF301-5.0-2P | **C474881** | Extended | - | Terminal block THT |
+| Ref | Componente | LCSC | Tipo | Nota |
+|-----|------------|------|------|------|
+| J2 | 2.54-2*8P Header (GPIO +5V) | **C30734** | Basic | clockv7.kicad_sch |
 
-**Custo Extended:** +$6
+**Custo Extended:** $0
+
+> **USBC1** (TYPE-C-31-M-12, C165948) → Ver secção PSU.
+> Conectores PSU adicionais (J3, J4, J7, P1, CN1) → Ver secção PSU / KiCad.
 
 ### Buzzer
 
@@ -318,34 +332,28 @@ Quando USB desliga, bateria alimenta RTC através de D4 (~2.3V após drop).
 
 ---
 
-## Resumo de Custos Extended
+## Resumo de Custos Extended (v4.1 atualizado)
+
+### Componentes Não-PSU Extended
 
 | Categoria | Componentes Extended | Custo |
 |-----------|---------------------|-------|
-| Microcontrolador | ESP32 | $3 |
-| ICs | CH340C, ESD, LDO | $9 |
-| Transistores | UMH3N | $3 |
-| Díodos | TVS | $3 |
-| Conectores | USB-C, Terminal | $6 |
-| Buzzer | TMB12A05 | $3 |
-| Botões | TS-1088 | $3 |
-| RTC | DS3231, Battery Holder | $6 |
-| **TOTAL** | **11 tipos Extended** | **$33** |
+| Microcontrolador | ESP32 (U3) | $3 |
+| ICs | CH340C (U4) | $3 |
+| Buzzer | TMB12A05 (BZ1) | $3 |
+| Botões | TS-1088 (SW1,SW2) | $3 |
+| RTC | Battery Holder (BT1) | $3 |
+| **Subtotal Não-PSU** | **5 tipos** | **$15** |
 
-### Potencial de Poupança
+### Componentes PSU Extended
 
-Se substituirmos componentes Extended por Basic onde viável:
+| Categoria | Componentes Extended | Custo |
+|-----------|---------------------|-------|
+| PSU | CH224K, SY8388ARHC, L2, D6 TVS, F1 PTC | $15 |
 
-| Substituição | Poupança | Viabilidade | Nota |
-|--------------|----------|-------------|------|
-| **DS3231 → PCF8563 + Cristal** | **~$5** | **Alta** | PCF8563 Preferred + Cristal Basic = $0 taxas! |
-| ME6211 → AMS1117 | $3 | Média | Mudar footprint SOT-23-5 → SOT-223 |
-| UMH3N → discreto | $3 | Baixa | Complexifica o design |
-| TVS → Basic | $3 | Média | Verificar specs de proteção |
+### **TOTAL Extended: 10 tipos = $30**
 
-**Poupança máxima realista:** ~$8-11 por lote
-
-**Melhor oportunidade:** O cristal 32.768kHz (**C32346**) é **Basic** e o PCF8563T é **Preferred Extended** - ambos sem taxa de carregamento! Poupança de ~$5/lote.
+> **Poupanças já aplicadas vs v3.0:** DS3231→PCF8563 ($5), ME6211→AMS1117 ($3), UMH3N→MMBT2222A ($3), ESD IC removido ($3) = **~$14 poupados**
 
 ---
 
@@ -429,130 +437,176 @@ LCSC correto: C3020560 (GCT USB4105-GF-A)
 
 ---
 
-## Resumo de Códigos LCSC - v3.0 OTIMIZADO
+## Resumo de Códigos LCSC - v4.1
 
 ```
+# ══════════════════════════════════════
+# COMPONENTES NÃO-PSU (clockv7 + uart + RTC + sound)
+# ══════════════════════════════════════
+
 # Microcontrolador
 U3  = C701342   (ESP32-WROOM-32E-N8)     [Extended]
 
 # ICs
 U4  = C84681    (CH340C)                  [Extended]
-U5  = C1980462  (D3V3XA4B10LP-7)         [Extended]
-U6  = C6186     (AMS1117-3.3) SOT-223    [Basic] ← ALTERADO v3.0
+U8  = C6186     (AMS1117-3.3) SOT-223    [Basic]
 
-# Level Shifters (KiCad: SN74LVC245APW - mesmo footprint)
-U2,U7 = C10910  (SN74AHCT245PWR)         [Extended] ← NOVO v3.0
+# Level Shifters (KiCad: SN74LVC245APW footprint, encomendar AHCT)
+U2,U7 = C10910  (SN74AHCT245PWR)         [Extended]
 
 # Transistores
-Q1  = C62892    (UMH3N)                   [Extended]
-Q2  = C916372   (MMBT2222A)              [Basic]
+Q1  = C8512     (MMBT2222A) — buzzer     [Basic]
+Q4  = C8512     (MMBT2222A) — UART DTR   [Basic]
+Q5  = C8512     (MMBT2222A) — UART RTS   [Basic]
 
 # Díodos
-D1  = C17179590 (MMBD4148SE) SOT-23      [Basic] ← ALTERADO v3.0
-D2  = C2286     (KT-0603R)               [Basic]
-D3  = C20615788 (H7VN10B TVS) DFN1006-2L [Extended] ← USB VBUS protection
-D4  = C17179590 (MMBD4148SE) SOT-23      [Basic] ← NOVO v3.0 (RTC battery backup)
+D2  = C2286     (KT-0603R LED Wifi)      [Basic]
+D4  = C17179590 (MMBD4148SE RTC backup)  [Basic]
+D5  = C17179590 (MMBD4148SE buzzer)      [Basic]
 
-# Condensadores - TODOS BASIC!
-C3  = C12891    (22µF 1206)              [Extended] ← CORRIGIDO!
-C4,C6,C8 = C307331 (100nF 0402)          [Basic]
-C5  = C19702    (10µF 0603)              [Basic]
+# Condensadores
+C2  = C19702    (10µF 0603)              [Basic]
+C3  = C12891    (22µF 1206, LDO out)     [Basic]
+C4,C6,C8,C11,C12,C13,C18,C19 = C307331 (100nF 0402) [Basic]
+C5  = C59461    (22µF, level shifter)    [Basic]
 
-# Resistências - TODAS BASIC!
-R1  = C25104    (330Ω)                   [Basic]
-R2  = C106232   (100Ω)                   [Basic]
-R3,R4 = C25905  (5.1kΩ)                  [Basic]
-R5  = C25744    (10kΩ)                   [Basic]
-R6  = C4410     (1kΩ 1206)               [Basic] ← ALTERADO v3.0
+# Resistências
+R1  = C25104    (330Ω LED)               [Basic]
+R2  = C25076    (100Ω USB)               [Basic]
+R5  = C25744    (10kΩ ESP32)             [Basic]
+R6  = C4410     (1kΩ 1206 buzzer)        [Basic]
+R10 = C25744    (10kΩ UART DTR)          [Basic]
+R11 = C25744    (10kΩ UART RTS)          [Basic]
 
-# Outros
-F1  = C106264   (PTC 500mA 1206)         [Basic]
-J1  = C3020560  (USB4105-GF-A)           [Extended]
-J2  = C68234    (2x8 Header)             [Basic]
-J3  = C474881   (KF301-5.0-2P)           [Extended]
-BZ1 = C96093    (TMB12A05)               [Extended]
+# Conectores
+J2  = C30734    (2x8 Header GPIO)        [Basic]
+
+# Buzzer
+BZ1 = C252948   (TMB12A05)               [Extended]
+
+# Botões
 SW1,SW2 = C720477 (TS-1088)              [Extended]
 
-# RTC Module - OTIMIZADO v3.0
-U1  = C7440     (PCF8563T) SOIC-8        [Preferred] ← ALTERADO v3.0
-Y1  = C32346    (32.768kHz Crystal)      [Basic] ← NOVO v3.0
+# RTC Module
+U6  = C722469   (PCF8563T) SOIC-8        [Preferred]
+Y1  = C32346    (32.768kHz Crystal)      [Basic]
 R7,R8 = C25900  (4.7kΩ I2C pull-up)      [Basic]
-C9  = C307331   (100nF RTC bypass)       [Basic]
+C1  = C307331   (100nF RTC bypass)       [Basic]
+C9  = C12891    (22µF RTC bulk)          [Basic]
 BT1 = C70377    (CR2032 Holder)          [Extended]
+
+# ══════════════════════════════════════
+# COMPONENTES PSU — Ver secção PSU v4.1
+# ══════════════════════════════════════
+# U5  = C970725   (CH224K PD Sink)        [Extended]
+# U1  = C5110279  (SY8388ARHC Buck 8A)    [Extended]
+# USBC1 = C165948 (TYPE-C-31-M-12)        [Extended]
+# D6  = C19077558 (SMBJ24CA TVS 24V)      [Extended]
+# D3  = C20615788 (H7VN10B USB data TVS)  [Extended]
+# D1  = C2286     (LED_ERR)               [Basic]
+# F1  = C2982291  (PTC 3A 2920)           [Extended]
+# L2  = C780205   (SRP1265A-4R7M 4.7µH)   [Extended]
+# Q2  = C8512     (MMBT2222A Error LED)    [Basic]
+# + Caps, resistors — ver POWER_SUPPLY.md secção 6
 ```
 
 ---
 
-## Conclusão: Estratégia de Custos
+## Conclusão: Estado Atual (v4.1)
 
-Para a **segunda fase de desenvolvimento**, recomendo:
+### Componentes Extended Finais (10 tipos = $30)
 
-### Análise: DS3231 vs PCF8563
+| # | Componente | Ref | Secção |
+|---|-----------|-----|--------|
+| 1 | ESP32-WROOM-32E | U3 | Main |
+| 2 | CH340C | U4 | UART |
+| 3 | SN74AHCT245PWR ×2 | U2,U7 | Main |
+| 4 | TMB12A05 (Buzzer) | BZ1 | Sound |
+| 5 | TS-1088 (Botões) ×2 | SW1,SW2 | Main |
+| 6 | CR2032 Holder | BT1 | RTC |
+| 7 | CH224K (PD Sink) | U5 | PSU |
+| 8 | SY8388ARHC (Buck) | U1 | PSU |
+| 9 | SMBJ24CA (TVS) | D6 | PSU |
+| 10 | ASMD2920 (PTC Fuse) | F1 | PSU |
 
-| Opção | Custo Componente | Taxa Extended | Total/lote | Complexidade |
-|-------|------------------|---------------|------------|--------------|
-| **DS3231SN** | $2.37 | $3 | **$5.37** | Simples (TCXO integrado) |
-| **PCF8563T + Cristal** | $0.45 | **$0** | **$0.45** | +1 componente, footprint SOIC-8 |
-
-**RECOMENDAÇÃO:** Substituir por **PCF8563T + Cristal C32346**:
-- Poupança: **~$5/lote** ($2 componente + $3 taxa)
-- Cristal C32346 é **Basic** (sem taxa!)
-- PCF8563T é **Preferred Extended** (sem taxa!)
-- Para 50 lotes: **$250 de poupança!**
-- Único trabalho: mudar footprint SOIC-16W → SOIC-8
-
-### Componentes Extended (após otimização)
-ESP32, CH340C, USB-C, ESD, LDO, UMH3N, TVS, Terminal, Buzzer, Botões, Battery Holder
-
-### Resumo de Custos
-
-| Cenário | Taxa Extended | Nota |
-|---------|---------------|------|
-| BOM atual (DS3231) | $33 | 11 Extended |
-| **Com PCF8563 + Cristal** | **$30** | **10 Extended** (-1 RTC) |
+> **Nota:** L2 (indutor) e D3 (USB data TVS) são também Extended (+$6), totalizando **12 tipos = $36**.
 
 **Custo total estimado por lote de 5 PCBs:**
-- Componentes: ~$13-17 (com PCF8563)
+- Componentes: ~$15-20
 - PCB: ~$5-10
 - Assembly: ~$15-20
-- Taxa Extended: ~$30
-- **Total: ~$65-75** (ou ~$13-15 por placa)
+- Taxa Extended: ~$36 (12 tipos)
+- **Total: ~$75-85** (ou ~$15-17 por placa)
 
 ---
 
-## PSU Components (Sub-board / Secção PSU)
+## PSU Components (Secção PSU) — Design Final v4.1 (Bulletproof)
 
-Componentes específicos da secção de alimentação. BOM detalhado em `POWER_SUPPLY_v3.md` e `PSU_20V_SCHEMA_DESIGN.md`.
+Componentes específicos da secção de alimentação. BOM detalhado em `POWER_SUPPLY.md`.
 
-### Buck Converter - TPS56838 (substitui SY8368AQQC)
-
-| Ref | Componente | LCSC | Tipo | Nota |
-|-----|------------|------|------|------|
-| U12 | **TPS56838** (TI) - Buck 8A FCCM | **C37533416** | Extended | D-CAP3, 28V, VQFN-HR 10-pin 3×3mm |
-| L1 | Bourns SRP1265A-2R2M (2.2µH 22A) | C2831487 | Extended | Shielded, Zone Keepout obrigatório! |
-| C_VIN1,2 | 22µF 25V MLCC (1210) | C52306 | **Basic** | Input caps |
-| C_OUT1-3 | 22µF 10V MLCC (1206) | C12891 | **Basic** | Output caps |
-| C_BOOT | 100nF 25V (0402) | C307331 | **Basic** | Bootstrap |
-| C_HF | 100nF 50V (0402) | C307331 | **Basic** | HF bypass VIN→PGND |
-| C_FF | **22pF 50V (0402)** | **C1555** | **Basic** | Feedforward (// R_FB1). OBRIGATÓRIO! |
-| R_FB1 | 22kΩ 1% (0603) | C31850 | **Basic** | Feedback upper |
-| R_FB2 | 3kΩ 1% (0603) | C4211 | **Basic** | Feedback lower |
-
-**Porquê TPS56838 em vez de SY8368AQQC (C207642)?**
-- SY8368 entra em pulse-skipping (PFM) a light load → coil whine audível
-- SY8368 não tem pin MODE para forçar PWM contínuo
-- TPS56838: FCCM nativo, D-CAP3 (sem compensação externa), 4.5-28V
-- Trade-off: Extended (+$3 taxa) mas elimina problema de ruído
-
-### PD Trigger
+### PD Sink Controller - CH224K (substitui IP2721 + AO3404A MOSFET)
 
 | Ref | Componente | LCSC | Tipo | Nota |
 |-----|------------|------|------|------|
-| U10 | IP2721 PD Trigger | C603176 | Extended | USB-C PD 2.0/3.0 |
-| Q3 | AO3404A N-MOSFET | C20917 | **Basic** | Power path switch |
+| U5 | **CH224K** (WCH) - PD 3.0 Sink | **C970725** | Extended | ESSOP-10, pede 20V (CFG1 NC), PG pin, Rd interno |
+| R14 | 1kΩ (VBUS→VDD) | C4410 | **Basic** | Alimentação CH224K |
+| C14 | 1µF 50V (0603) | C15849 | **Basic** | Bypass VDD |
+
+**Porquê CH224K em vez de IP2721 (C603176)?**
+- IP2721 só suporta 3 tensões: 5V, 15V, 20V (sem 9V e 12V!)
+- CH224K suporta **todas as 5 tensões PD**: 5V, 9V, 12V, 15V, 20V
+- CH224K tem **PG (Power Good)** open-drain — LED de status hardware
+- **Sem MOSFET externo** (Q3 removido) — VBUS liga directo ao buck
+- **Rd internos 5.1kΩ** — não precisa R externas nos CC1/CC2
+- Mais barato: ~$0.32 vs ~$0.40 (IP2721) + $0.03 (MOSFET) + $0.02 (R's)
+
+### Buck Converter - SY8388ARHC (substitui TPS56838)
+
+| Ref | Componente | LCSC | Tipo | Nota |
+|-----|------------|------|------|------|
+| U1 | **SY8388ARHC** (Silergy) - Buck 8A | **C5110279** | Extended | QFN-16-EP 2.5×2.5mm, 24V in, 600kHz, compensação interna |
+| L2 | Bourns SRP1265A-4R7M (4.7µH 16A) | C780205 | Extended | Shielded, Zone Keepout obrigatório! |
+| C24,C25 | 22µF 25V MLCC (1206) | C12891 | **Basic** | Input caps |
+| C_OUT5-8 | 22µF 25V MLCC ×4 (1206) | C12891 | **Basic** | Output caps (88µF total, baixo ESR) |
+| C_BOOT3 | 100nF 50V (0402) | C307331 | **Basic** | Bootstrap |
+| C_FIL1 | 100nF 50V (0402) | C307331 | **Basic** | HF bypass VIN→PGND |
+| C_FF2 | 22pF 50V (0402) | C1555 | **Basic** | Feedforward (// R_FB3) |
+| R_FB3 | 22kΩ 1% (0603) | C31850 | **Basic** | Feedback upper |
+| R_FB4 | 3kΩ 1% (0603) | C4211 | **Basic** | Feedback lower |
+
+**Porquê SY8388ARHC em vez de TPS56838 (C37533416)?**
+- **Custo**: ~$0.53 vs ~$1.00+ (quase metade do preço!)
+- **Sem coil whine**: PWM contínuo a 600kHz (vs SY8368 que fazia PFM a light load)
+- **Compensação interna**: sem rede RC externa (simplifica layout)
+- **QFN-16 compacto**: 2.5×2.5mm com thermal pad generoso
+- 8A contínuo, 24V max — mesmas specs funcionais que TPS56838
+
+### Proteção e Error LED
+
+| Ref | Componente | LCSC | Tipo | Nota |
+|-----|------------|------|------|------|
+| D6 | SMBJ24CA (TVS bidirecional) | C19077558 | Extended | Vrwm=24V, 600W pk, SMB pkg — proteção VBUS 20V |
+| F1 | PTC Fuse 3A/30V | C2982291 | Extended | Protecção overcurrent |
+| C26 | 10µF 50V (1206) | C13585 | **Basic** | Filtro entrada VBUS |
+| Q2 | MMBT2222A (NPN) | C8512 | **Basic** | Inverter para Error LED |
+| D1 | LED Vermelho 0603 | C2286 | **Basic** | Error LED (sem PD) |
+| R_PU1 | 10kΩ (PG pull-up) | C25744 | **Basic** | Pull-up PG |
+| R_BASE1 | 10kΩ (NPN base) | C25744 | **Basic** | Base NPN |
+| R_ERR1 | 330Ω (LED) | C25104 | **Basic** | Corrente LED |
+
+### Resumo Custos PSU
+
+| Bloco | Taxa Extended | Nota |
+|-------|---------------|------|
+| CH224K | $3 | PD Sink |
+| SY8388ARHC | $3 | Buck |
+| L2 (Bourns) | $3 | Indutor |
+| D6 (TVS) | $3 | Proteção |
+| F1 (PTC) | $3 | Fuse |
+| **Total PSU Extended** | **$15** | 5 tipos Extended |
 
 ---
 
-*Documento atualizado: Janeiro 2026*
+*Documento atualizado: Março 2026*
 *Análise de custos Basic/Extended incluída*
-*PSU: TPS56838 (FCCM) substitui SY8368 (PFM coil whine)*
+*PSU v4.1 Bulletproof: CH224K (PD 20V) + SY8388ARHC (Buck 8A) — worst-case analysis, caps/TVS aligned with KiCad*
