@@ -168,64 +168,6 @@ void IRAM_ATTR buttonISR() {
   buttonPressed = true;
 }
 
-// ============= CLICK WHEEL =============
-// Encoder quadratura (EC11 / Hall Effect / Óptico - mesmo pinout)
-//
-// Princípio de funcionamento (Hipótese H1/H2/H3):
-//   Canal A gera pulsos. Canal B está 90° desfasado.
-//   No flanco ascendente de A:
-//     B=HIGH → rotação CW  (sentido horário)  → brilho +
-//     B=LOW  → rotação CCW (anti-horário)     → brilho -
-//
-// Equivalente ao "crankshaft position sensor":
-//   cada "dente" que passa pelo sensor = 1 tick = 1 interrupt em A.
-//   B determina a direcção como um segundo sensor offset de meio-dente.
-//
-volatile int encoderTicks    = 0;  // Acumulador: + = CW, - = CCW
-volatile int lastEncoderA    = HIGH;
-
-// ISR do encoder - executada em qualquer flanco de A e B para maior resolução
-//
-// Sensor óptico (H3) — polaridade do sinal com pull-up:
-//   Dente (reflecte): fototransístor conduz → GPIO = LOW
-//   Gap  (absorve):  fototransístor ao corte → GPIO = HIGH
-//   → mesmo comportamento eléctrico do encoder mecânico com pull-up (EC11)
-//   → ISR idêntica para H1, H2, H3
-//
-// Se a direcção ficar trocada: ENCODER_INVERT_DIR 1 em board_config.h
-//
-void IRAM_ATTR encoderISR() {
-  int a = digitalRead(ENCODER_A_PIN);
-  int b = digitalRead(ENCODER_B_PIN);
-  if (a != lastEncoderA) {
-    int dir;
-    if (a == HIGH) {
-      dir = (b == LOW)  ? +1 : -1;
-    } else {
-      dir = (b == HIGH) ? +1 : -1;
-    }
-    #if ENCODER_INVERT_DIR
-      dir = -dir;
-    #endif
-    encoderTicks += dir;
-    lastEncoderA = a;
-  }
-}
-
-// Botão central da click wheel
-// Cicla: AUTO_SOLAR → THERAPY_RED → OFF → AUTO_SOLAR
-volatile bool centerBtnPressed = false;
-volatile unsigned long centerBtnLastMs = 0;
-
-void IRAM_ATTR centerBtnISR() {
-  unsigned long now = millis();
-  // Debounce em ISR: ignorar eventos < CENTER_DEBOUNCE_MS após o último
-  if ((now - centerBtnLastMs) >= CENTER_DEBOUNCE_MS) {
-    centerBtnPressed  = true;
-    centerBtnLastMs   = now;
-  }
-}
-
 // ============= MODOS =============
 enum Mode {
   AUTO_SOLAR,
@@ -1480,9 +1422,6 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
   Serial.println("✅ Botão UP configurado");
 
-  // Click Wheel (encoder quadratura + botão central)
-  setupClickWheel();
-
   currentMode = AUTO_SOLAR;
   updateBootStatus(display->color565(50, 0, 0), 20);
   
@@ -1657,82 +1596,6 @@ void displayOff() {
   fillPanel(color);
 }
 
-// ============= CLICK WHEEL: SETUP =============
-void setupClickWheel() {
-  // Canal A: pull-up interno, interrupt em qualquer flanco (CHANGE)
-  pinMode(ENCODER_A_PIN, INPUT_PULLUP);
-  // Canal B: pull-up interno, lido dentro da ISR de A (não precisa de interrupt próprio)
-  // Mas para encoders de maior resolução (4x), também pode ter interrupt em CHANGE:
-  pinMode(ENCODER_B_PIN, INPUT_PULLUP);
-  // Botão central: pull-up interno, interrupt no flanco descendente (FALLING = press)
-  pinMode(CENTER_BTN_PIN, INPUT_PULLUP);
-
-  lastEncoderA = digitalRead(ENCODER_A_PIN);
-
-  attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN),  encoderISR,   CHANGE);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_B_PIN),  encoderISR,   CHANGE);
-  attachInterrupt(digitalPinToInterrupt(CENTER_BTN_PIN), centerBtnISR, FALLING);
-
-  Serial.printf("✅ Click Wheel: A=GPIO%d  B=GPIO%d  Centro=GPIO%d\n",
-                ENCODER_A_PIN, ENCODER_B_PIN, CENTER_BTN_PIN);
-  Serial.printf("   Brilho step: ±%d  |  Min: %d  |  Max: %d (cap PSU)\n",
-                BRIGHTNESS_STEP, BRIGHTNESS_MIN, MAX_BRIGHTNESS_CAP);
-}
-
-// ============= CLICK WHEEL: HANDLER (chamar no loop) =============
-void handleClickWheel() {
-  // --- Rotação: ajuste de brilho ---
-  // Ler e zerar atomicamente (noInterrupts garante consistência)
-  int ticks = 0;
-  noInterrupts();
-    ticks        = encoderTicks;
-    encoderTicks = 0;
-  interrupts();
-
-  if (ticks != 0) {
-    int delta = ticks * BRIGHTNESS_STEP;
-    int newBrightness = constrain(configBrightness + delta, BRIGHTNESS_MIN, MAX_BRIGHTNESS_CAP);
-
-    if (newBrightness != configBrightness) {
-      configBrightness = newBrightness;
-      setSafeBrightness(configBrightness);
-
-      // Feedback visual: barra de brilho na linha inferior (2px)
-      // Verde → Laranja → Vermelho conforme aproxima do cap
-      int barWidth  = map(configBrightness, BRIGHTNESS_MIN, MAX_BRIGHTNESS_CAP, 0, 32);
-      uint16_t barColor;
-      if (configBrightness < MAX_BRIGHTNESS_CAP / 2) {
-        barColor = display->color565(0, 200, 80);   // Verde
-      } else if (configBrightness < MAX_BRIGHTNESS_CAP * 3 / 4) {
-        barColor = display->color565(251, 191, 36); // Amber
-      } else {
-        barColor = display->color565(255, 60, 20);  // Laranja-vermelho (perto do cap)
-      }
-      display->fillRect(0, 14, 32, 2, display->color565(0, 0, 0));  // Limpar linha
-      display->fillRect(0, 14, barWidth, 2, barColor);
-
-      Serial.printf("[WHEEL] Brilho: %d/%d (ticks=%+d)\n",
-                    configBrightness, MAX_BRIGHTNESS_CAP, ticks);
-    }
-  }
-
-  // --- Botão central: ciclar modo ---
-  if (centerBtnPressed) {
-    centerBtnPressed = false;
-
-    currentMode = (Mode)((currentMode + 1) % 3);
-    const char* modeNames[] = {"AUTO_SOLAR", "THERAPY_RED", "OFF"};
-    Serial.printf("\n>>> [CLICK CENTRAL] MODO: %s <<<\n\n", modeNames[currentMode]);
-
-    // Sincronizar com peers (mesh)
-    broadcastModeChange();
-
-    // Feedback visual e actualizar display
-    showModeFeedback(currentMode);
-    updateDisplay();
-  }
-}
-
 // ============= GESTAO DE BOTAO =============
 void handleButton() {
   static unsigned long buttonPressStart = 0;
@@ -1852,7 +1715,6 @@ void loop() {
   }
 
   handleButton();
-  handleClickWheel();
 
   // Atualizar mesh sync
   updateMeshSync();
