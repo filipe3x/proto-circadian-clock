@@ -86,21 +86,26 @@ Alguns componentes não têm alternativa Basic viável:
 
 **Nota:** MMBD4148SE é a versão SMD oficial da família 1N4148. Equivalência elétrica confirmada.
 
-### D3: TVS para USB VBUS ✅ APROVADO
+### D3: TVS para linhas D+/D− ⚠️ DNP (reservado, não montado)
 
-| Parâmetro | C20615788 (H7VN10B) | Status |
-|-----------|---------------------|--------|
+| Parâmetro | C20615788 (H7VN10B) | Notas |
+|-----------|---------------------|-------|
 | **LCSC** | C20615788 | ✅ |
-| **Fabricante** | hongjiacheng | ✅ |
-| **Package** | DFN1006-2L | ✅ Compacto |
-| **Vbr** | 9V | ✅ |
-| **Vc (clamp)** | 9.6V | ✅ |
-| **Ipp** | 6A @ 8/20µs | ✅ |
-| **Ppk** | 80W | ✅ |
+| **Fabricante** | hongjiacheng | |
+| **Package** | DFN1006-2L | Compacto |
+| **Vrwm** | ~7.5V | ✅ adequado para D+/D− (0–3.3V) |
+| **Vbr** | 9V | |
+| **Vc (clamp)** | 9.6V | |
+| **Ipp** | 6A @ 8/20µs | |
+| **Ppk** | 80W | |
 | **ESD** | IEC 61000-4-2 | ✅ |
-| **Tipo** | Extended | - |
+| **Tipo** | Extended | +$3 quando montado |
 
-**Nota:** Proteção TVS bidireccional para USB VBUS. U5 (D3V3XA4B10LP) protege linhas de dados D+/D-.
+**Função:** Protecção ESD nas linhas USB D+ e D−. Um TVS por linha, em paralelo entre a linha e GND.
+
+**Estado: DNP — não montado nesta revisão.** O footprint está reservado no PCB para instalação futura caso seja necessária protecção ESD nas linhas de dados USB.
+
+> ⚠️ **Não confundir com D6 (SMBJ24CA):** D3 é para D+/D− (Vrwm~7.5V, linhas de sinal 3.3V). D6 é para VBUS (Vrwm=24V, rail de potência até 20V). Um **não** substitui o outro.
 
 ### R6: 1kΩ 0402 → 1kΩ 1206 ✅ APROVADO
 
@@ -502,7 +507,7 @@ BT1 = C70377    (CR2032 Holder)          [Extended]
 # U1  = C5110279  (SY8388ARHC Buck 8A)    [Extended]
 # USBC1 = C165948 (TYPE-C-31-M-12)        [Extended]
 # D6  = C19077558 (SMBJ24CA TVS 24V)      [Extended]
-# D3  = C20615788 (H7VN10B USB data TVS)  [Extended]
+# D3  = C20615788 (H7VN10B D+/D- TVS)     [Extended] ← DNP, não montado
 # D1  = C2286     (LED_ERR)               [Basic]
 # F1  = C2982291  (PTC 3A 2920)           [Extended]
 # L2  = C780205   (SRP1265A-4R7M 4.7µH)   [Extended]
@@ -529,7 +534,7 @@ BT1 = C70377    (CR2032 Holder)          [Extended]
 | 9 | SMBJ24CA (TVS) | D6 | PSU |
 | 10 | ASMD2920 (PTC Fuse) | F1 | PSU |
 
-> **Nota:** L2 (indutor) e D3 (USB data TVS) são também Extended (+$6), totalizando **12 tipos = $36**.
+> **Nota:** L2 (indutor) é também Extended (+$3), totalizando **11 tipos = $33**. D3 (H7VN10B, TVS D+/D−) está **DNP** — não montado nesta revisão, não conta para a taxa Extended.
 
 **Custo total estimado por lote de 5 PCBs:**
 - Componentes: ~$15-20

@@ -730,7 +730,7 @@ esquemático KiCad (`psu.kicad_sch`), que é a **source of truth** (PCB encomend
 | VBUS divider (R_DIV1/R_DIV2) | Adicionado ao BOM | ✅ Documentado |
 | Cap refs | Alinhados com KiCad (C24/C25, C_BOOT3, C_FIL1, C_FF2, C14, C26, C27) | ✅ |
 | Resistor refs | Alinhados com KiCad (R14, R_PU1, R_BASE1, R_ERR1) | ✅ |
-| D3 (USB data TVS) | C20615788, footprint D_SOD-123 | ℹ️ Protecção dados USB, não PSU |
+| D3 (USB data TVS) | C20615788 (H7VN10B), footprint D_SOD-123 | ⚠️ **DNP** — protecção D+/D−, não montado nesta revisão |
 
 ---
 
