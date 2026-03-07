@@ -460,7 +460,7 @@ Regras de layout para SY8388ARHC:
 
 ## 5. Proteção VBUS
 
-### 5.1 TVS Diode (D6)
+### 5.1 TVS Diode D6 — Rail VBUS
 
 O rail VBUS (até 20V) é protegido por TVS bidirecional:
 
@@ -474,10 +474,46 @@ O rail VBUS (até 20V) é protegido por TVS bidirecional:
 | Package | SMB (DO-214AA) |
 | LCSC | C19077558 |
 
-### 5.2 Duas Camadas de Proteção
+### 5.2 TVS Diode D7 — Rail 5V (NOVO)
 
-1. **C_VIN (2×22µF 25V)** — absorvem spikes lentos (µs), proteção primária
-2. **D6 TVS (SMBJ24CA)** — clamp rápido de ESD e spikes ns
+O rail 5V (exposto no header J2) é protegido por TVS bidirecional:
+
+| Parâmetro | Valor | Notas |
+|-----------|-------|-------|
+| Componente | **SMBJ5.0CA** | Mesma família/footprint que D6 |
+| **Vrwm** | **5.0V** | Não conduz a 5V nominal |
+| **Vbr** | 5.25–6.50V | Margem sobre 5V |
+| **Vc (clamp @ 30.4A)** | **9.2V** | Transientes ESD ns/µs |
+| Ppk | 600W | |
+| Package | **SMB (DO-214AA)** | Mesmo footprint que D6 — zero mudança KiCad |
+| LCSC | Pesquisar "SMBJ5.0CA" | Verificar com parâmetros abaixo |
+
+**Como pesquisar no LCSC — parâmetros por ordem de importância:**
+
+1. **Vrwm (Reverse Stand-Off Voltage)** = **5.0V** — o mais importante. Deve ser ≥ 5V para não conduzir durante operação normal. Não usar < 5V.
+2. **Package** = **SMB / DO-214AA** — mantém o mesmo footprint que D6 no KiCad
+3. **Ppk** ≥ 400W — 600W preferido (mesmo que D6)
+4. **Tipo** = CA (bidirecional) — indicado para rails DC
+
+> **Vc (Clamping Voltage) não precisa de ser ≤ 5.5V.** Parece contra-intuitivo, mas é correcto: o TVS só actua durante transientes de nanosegundos — os ICs downstream (CH340C Vmax=5.5V, SN74AHCT245 Vmax=5.5V) suportam picos momentâneos muito acima do seu Vmax contínuo. A função do TVS é absorver a energia do surge, não limitar a tensão a 5.5V exactos. Para sobretensão sustentada, o OVP do SY8388ARHC (~5.75V) é a primeira linha de defesa.
+
+**Ligação D7:**
+```
+Saída SY8388ARHC (5V rail)
+        │
+        ├──────────────────────── J2 (header +5V/GPIO)
+        │
+   [D7 SMBJ5.0CA]   ← paralelo, bidirecional (CA)
+        │
+       GND
+```
+Colocar D7 **junto ao J2**, no lado do rail 5V, para interceptar ESD antes de se propagar.
+
+### 5.3 Três Camadas de Proteção
+
+1. **F1 PTC (ASMD2920, 3A)** — série em VBUS, protecção overcurrent
+2. **D6 TVS (SMBJ24CA, VBUS)** — clamp VBUS, ESD e surges
+3. **D7 TVS (SMBJ5.0CA, 5V)** — clamp 5V rail exposto em J2
 
 ---
 
@@ -528,6 +564,7 @@ O rail VBUS (até 20V) é protegido por TVS bidirecional:
 | Ref | Componente | Valor | LCSC | Tipo | Footprint |
 |-----|------------|-------|------|------|-----------|
 | D6 | SMBJ24CA (TVS bidirecional) | Vrwm=24V, 600W | **C19077558** | Extended | SMB (DO-214AA) |
+| D7 | SMBJ5.0CA (TVS 5V rail) | Vrwm=5V, 600W | Pesquisar LCSC | Extended | SMB (DO-214AA) |
 | D1 | LED Vermelho (Error) | — | **C2286** | Basic | 0603 |
 
 ### 6.6 Outros

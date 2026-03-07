@@ -107,6 +107,44 @@ Alguns componentes não têm alternativa Basic viável:
 
 > ⚠️ **Não confundir com D6 (SMBJ24CA):** D3 é para D+/D− (Vrwm~7.5V, linhas de sinal 3.3V). D6 é para VBUS (Vrwm=24V, rail de potência até 20V). Um **não** substitui o outro.
 
+### D7: TVS para rail 5V ✅ NOVO (substitui C20615801 H3V3HD3U)
+
+| Parâmetro | C20615801 H3V3HD3U (descartado) | SMBJ5.0CA (novo D7) | Notas |
+|-----------|----------------------------------|---------------------|-------|
+| **Vrwm** | 3.3V ❌ (conduziria em 5V) | **5.0V** ✅ | Não conduz a 5V nominal |
+| **Vbr** | ~3.5V | 5.25–6.50V | |
+| **Vc (clamp)** | ~5V | 9.2V @ 30.4A | Transientes ns/µs |
+| **Ppk** | 80W | **600W** | 7.5× mais robusto |
+| **Package** | DFN1006-2L | **SMB (DO-214AA)** | Mesmo footprint que D6! |
+| **Tipo** | — | Extended | +$3 (partilha feeder com D6) |
+
+**Função:** Protecção ESD/surge no rail 5V exposto no header J2 (GPIO +5V). Liga em paralelo entre o rail 5V e GND, junto ao conector J2.
+
+**Porquê descartado o H3V3HD3U (C20615801):**
+- Vrwm=3.3V → conduziria continuamente num rail de 5V → destruído imediatamente
+- Sem local adequado no design actual para 3.3V exposto externamente
+
+**Porquê SMBJ5.0CA:**
+- Mesma família e footprint que D6 (SMBJ24CA) → zero mudança de footprint no KiCad
+- Vrwm=5.0V → não conduz durante operação normal a 5V
+- 600W de capacidade de absorção de surges
+- Protege CH340C (Vmax=5.5V), SN74AHCT245 (Vmax=5.5V) contra ESD via J2
+
+**Ligação:**
+```
+5V rail (saída SY8388ARHC)
+     │
+     ├──────────────────────── J2 (header +5V/GPIO)
+     │
+ [D7 SMBJ5.0CA]   ← em paralelo, bidirecional (CA)
+     │
+    GND
+```
+
+**LCSC:** Pesquisar "SMBJ5.0CA" em lcsc.com — mesma família que D6 (SMBJ24CA C19077558).
+
+> ⚠️ **Nota de clamping:** Vc=9.2V excede Vmax=5.5V de CH340C e SN74AHCT245. Isto é normal — o TVS actua em transientes de ns; a energia ESD é absorvida pelo TVS antes de danificar os ICs. Para protecção de sobretensão sustentada, o OVP do SY8388ARHC (~5.75V) é a primeira linha de defesa.
+
 ### R6: 1kΩ 0402 → 1kΩ 1206 ✅ APROVADO
 
 | Parâmetro | Original | Novo | Status |
@@ -241,6 +279,7 @@ Quando USB desliga, bateria alimenta RTC através de D4 (~2.3V após drop).
 | D2 | KT-0603R (LED Wifi Status) | **C2286** | Basic | clockv7.kicad_sch |
 | D4 | MMBD4148SE (RTC backup) | **C17179590** | Basic | RTC.kicad_sch |
 | D5 | MMBD4148SE (buzzer flyback) | **C17179590** | Basic | sound.kicad_sch |
+| D7 | SMBJ5.0CA (TVS 5V rail) | Pesquisar LCSC | Extended | PSU — junto a J2 |
 
 **Custo Extended:** $0 — Todos Basic!
 
@@ -508,6 +547,7 @@ BT1 = C70377    (CR2032 Holder)          [Extended]
 # USBC1 = C165948 (TYPE-C-31-M-12)        [Extended]
 # D6  = C19077558 (SMBJ24CA TVS 24V)      [Extended]
 # D3  = C20615788 (H7VN10B D+/D- TVS)     [Extended] ← DNP, não montado
+# D7  = SMBJ5.0CA (TVS 5V rail)           [Extended] ← parallel 5V→GND, junto a J2
 # D1  = C2286     (LED_ERR)               [Basic]
 # F1  = C2982291  (PTC 3A 2920)           [Extended]
 # L2  = C780205   (SRP1265A-4R7M 4.7µH)   [Extended]
@@ -531,8 +571,9 @@ BT1 = C70377    (CR2032 Holder)          [Extended]
 | 6 | CR2032 Holder | BT1 | RTC |
 | 7 | CH224K (PD Sink) | U5 | PSU |
 | 8 | SY8388ARHC (Buck) | U1 | PSU |
-| 9 | SMBJ24CA (TVS) | D6 | PSU |
+| 9 | SMBJ24CA (TVS VBUS) | D6 | PSU |
 | 10 | ASMD2920 (PTC Fuse) | F1 | PSU |
+| 11 | SMBJ5.0CA (TVS 5V) | D7 | PSU |
 
 > **Nota:** L2 (indutor) é também Extended (+$3), totalizando **11 tipos = $33**. D3 (H7VN10B, TVS D+/D−) está **DNP** — não montado nesta revisão, não conta para a taxa Extended.
 
