@@ -338,13 +338,28 @@ CH340C Pin 2 (TXD) → ESP32 RX (GPIO3)
 CH340C Pin 3 (RXD) → ESP32 TX (GPIO1)
 CH340C Pin 13 (DTR) → UMH3N Pin 1 (B1)
 CH340C Pin 12 (RTS) → UMH3N Pin 2 (B2)
-CH340C Pin 1, Pin 4 (GND, V3) → GND
+CH340C Pin 1 (GND)  → GND
+CH340C Pin 4 (V3)   → 3.3V  ← ⚠️ MODO 3.3V: V3 liga a VCC, NÃO a GND
 CH340C Pin 16 (VCC) → 3.3V
-CH340C Pin 5 (UD+) → USB-C D+
-CH340C Pin 6 (UD-) → USB-C D-
+CH340C Pin 5 (UD+)  → USB-C D+
+CH340C Pin 6 (UD-)  → USB-C D-
 
 Bypass capacitor:
 C16 (100nF) entre VCC (pin 16) e GND (pin 1)
+
+Modo de operação — porquê 3.3V e não 5V:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+O CH340C suporta VCC = 5V ou 3.3V. O comportamento do pino V3 muda:
+
+  VCC = 5V  → V3 = saída do LDO interno (3.3V) → ligar 100nF → GND
+              TXD emite 5V → ❌ destrói ESP32 RX (GPIO3 não é 5V-tolerant)
+
+  VCC = 3.3V → V3 = VCC = 3.3V (bypassa o LDO interno)
+               TXD emite 3.3V → ✓ compatível com ESP32 directamente
+
+  V3 em modo 3.3V deve ir a VCC (3.3V), nunca a GND.
+  Se V3 for a GND com VCC=3.3V: o LDO tenta regular 3.3V→3.3V com
+  saída em curto → comportamento indefinido, possível instabilidade.
 ```
 
 #### Diagrama de Blocos USB-UART
