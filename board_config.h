@@ -212,6 +212,23 @@
 #endif
 
 // ============================================================
+// BUZZER (BZ1 - Piezo Passivo via Q1 MMBT2222A)
+// ============================================================
+// Esquemático clockv7: BUZZER global label → GPIO18
+// Circuito: GPIO → R6 (1kΩ) → Q1 Base → BZ1 (TMB12A05/C252948)
+// Freq. ressonância: 4-5 kHz | Alimentação: 5V_OUT via Q1 Collector
+#if BOARD_MATRIXPORTAL_S3
+  // Matrix Portal S3: GPIO18 é TX debug — usar GPIO1 (disponível)
+  #define BUZZER_PIN          1
+#else
+  // ESP32 custom PCB (clockv7): GPIO18 conforme esquemático
+  #define BUZZER_PIN          18
+#endif
+#define BUZZER_LEDC_CHANNEL   0   // LEDC channel 0 para geração de tom
+#define BUZZER_LEDC_TIMER     0   // LEDC timer 0
+#define BUZZER_LEDC_BITS      8   // Resolução 8-bit (duty 0-255)
+
+// ============================================================
 // MACROS ÚTEIS
 // ============================================================
 

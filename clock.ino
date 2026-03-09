@@ -10,6 +10,7 @@
 #include "board_config.h"     // Configuração de placa (DEVE vir antes dos outros headers)
 #include "captive_portal.h"   // Modulo do captive portal
 #include "auto_solar.h"       // Modulo de calculo solar
+#include "sound.h"            // Motor chiptune LSDJ-inspirado
 
 // ============= PINOUT =============
 // Agora definido em board_config.h com compilação condicional
@@ -1349,13 +1350,20 @@ void checkVbusStatus(bool bootCheck) {
 // ============= SETUP =============
 void setup() {
   Serial.begin(115200);
-  delay(1000);
+  delay(100);
+
+  // Motor de som (LEDC + timer ISR a 512 Hz)
+  snd_init();
+  delay(50);
   
   Serial.println("\n\n");
   Serial.println("╔═══════════════════════════════════╗");
   Serial.println("║     RELÓGIO SOLAR LED v3.1        ║");
   Serial.println("║   Multi-WiFi + Mesh Sync          ║");
   Serial.println("╚═══════════════════════════════════╝");
+
+  // Melodia de arranque chiptune (escala pentatónica + arpejo final)
+  snd_play_startup();
   Serial.printf("Placa: %s\n", BOARD_INFO_STRING);
   #if BOARD_MATRIXPORTAL_S3
     Serial.println("Modo: Matrix Portal S3");
