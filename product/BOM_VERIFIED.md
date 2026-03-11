@@ -331,6 +331,17 @@ Quando USB desliga, bateria alimenta RTC através de D4 (~2.3V após drop).
 > **USBC1** (TYPE-C-31-M-12, C165948) → Ver secção PSU.
 > Conectores PSU adicionais (J3, J4, J7, P1, CN1) → Ver secção PSU / KiCad.
 
+### Amplificador I2S (DNP — reservado para clockv8)
+
+| Ref | Componente | LCSC | Tipo | Nota |
+|-----|------------|------|------|------|
+| U9 | MAX98357AEWL+T | **C2682619** | Extended | **DNP** — footprint reservado para clockv8; não montar, não conta no BOM |
+
+**Footprint:** `Maxim_WLP-9_1.595x1.415_Layout3x3_P0.4mm_Ball0.27mm_Pad0.25mm_NSMD` (KiCad default)
+**Estado:** DNP (`exclude_from_bom yes`, `dnp yes` no KiCad). Traces pré-roteadas IO32/IO33/IO2 + 3V3 + GND. Ver SPEAKER.md para pinout completo.
+
+---
+
 ### Buzzer
 
 | Ref | Componente | LCSC | Tipo | Alternativa Basic | Nota |
@@ -527,6 +538,9 @@ J2  = C30734    (2x8 Header GPIO)        [Basic]
 
 # Buzzer
 BZ1 = C252948   (TMB12A05)               [Extended]
+
+# I2S Amp — DNP (clockv8 placeholder, não montar, não conta no BOM)
+# U9 = C2682619  (MAX98357AEWL+T)         [Extended] ← DNP
 
 # Botões
 SW1,SW2 = C720477 (TS-1088)              [Extended]

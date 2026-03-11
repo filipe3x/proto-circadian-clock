@@ -58,13 +58,19 @@ Song → Chain[] → Pattern[] → Step {note, cmd, val, inst}
 
 O piezo passivo tem limitações severas de qualidade sonora. Para o alarme circadiano gradual funcionar como pretendido (aurora suave), é necessário um speaker real com amplificador I2S.
 
-### Módulo: MAX98357A
+### Módulo: MAX98357AEWL+T
 
 - Amplificador I2S digital Class D, mono, 3 W @ 4 Ω
 - Alimentação: 3.3 V–5 V (directo do 3V3 do ESP32 ou 5V_OUT)
 - Interface: I2S digital (sem DA externo necessário)
-- Custo: ~1–2 € (módulo breakout GY-MAX98357A ou equivalente)
-- Footprint: 16 mm × 11 mm
+- LCSC: **C2682619**
+- Package: WLP-9 (3×3, 0.4mm pitch) — 1.595mm × 1.415mm
+- **Footprint KiCad:** `Maxim_WLP-9_1.595x1.415_Layout3x3_P0.4mm_Ball0.27mm_Pad0.25mm_NSMD`
+  - ✅ Usar este default do KiCad — dimensões exactas do datasheet Maxim
+  - ❌ Não usar `WLP-9_1.468x1.448mm` (genérico, ligeiramente pequeno)
+  - ❌ Não usar o easyeda2kicad `WLP-9_L1.4-W1.3-P0.40-R3-C3-BR` (1.4×1.3mm, pequeno)
+
+**Estado no clockv7:** U9 presente no esquemático e PCB como **DNP** (`exclude_from_bom yes`). Footprint e traces pré-roteadas para facilitar clockv8. Não consta no BOM nem na montagem JLCPCB.
 
 ### Pinout I2S no ESP32 custom PCB (clockv8)
 
