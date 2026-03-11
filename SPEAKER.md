@@ -75,22 +75,22 @@ O piezo passivo tem limitações severas de qualidade sonora. Para o alarme circ
 ### Pinout completo MAX98357AEWL+T (WLP-9, 3×3 grid, 0.4mm pitch)
 
 ```
-        Col 1      Col 2    Col 3
-Row A:  SD_MODE    VDD      GAIN_SLOT
-Row B:  OUT-       GND/EP   OUT+
-Row C:  BCLK       DIN      LRCLK
+        Col 1      Col 2        Col 3
+Row A:  SD_MODE    VDD          OUT+ (OUTP)
+Row B:  DIN        GAIN_SLOT    OUT- (OUTN)
+Row C:  BCLK       GND/EP       LRCLK
 ```
 
 | Pin | Nome | Tipo | Ligação clockv7 (DNP) | Ligação clockv8 |
 |-----|------|------|----------------------|-----------------|
 | A1  | SD_MODE | Shutdown / ch. select | 3V3 (always ON, L ch.) | 3V3 (always ON, L ch.) |
 | A2  | VDD | Alimentação | 3V3 | 3V3 |
-| A3  | GAIN_SLOT | Ganho analógico | GND (15 dB) | GND (15 dB) |
-| B1  | OUT- | Saída BTL − | Pad speaker | Speaker − |
-| B2  | GND / EP | GND + thermal pad | GND + vias térmicas | GND + vias térmicas |
-| B3  | OUT+ | Saída BTL + | Pad speaker | Speaker + |
+| A3  | OUT+ (OUTP) | Saída BTL + | Pad speaker | Speaker + |
+| B1  | DIN | I2S data in | IO32 | IO32 |
+| B2  | GAIN_SLOT | Ganho analógico | GND (15 dB) | GND (15 dB) |
+| B3  | OUT− (OUTN) | Saída BTL − | Pad speaker | Speaker − |
 | C1  | BCLK | I2S bit clock | IO33 | IO33 |
-| C2  | DIN | I2S data in | IO32 | IO32 |
+| C2  | GND / EP | GND + thermal pad | GND + vias térmicas | GND + vias térmicas |
 | C3  | LRCLK | I2S word select | IO2 | IO2 |
 
 **Notas por pino:**
@@ -102,16 +102,16 @@ Row C:  BCLK       DIN      LRCLK
   - 100kΩ → GND → canal direito
   - 1.5MΩ → VDD → mono mix (L+R)/2
   - GPIO opcional: permite shutdown por software (poupa corrente em standby)
-- **VDD (A2):** 2.5V–5.5V. Usar 3V3 (disponível no clockv7). Decoupling: 100nF + 10µF o mais próximo possível.
-- **GAIN_SLOT (A3):** Programação de ganho por resistor ou ligação directa:
+- **VDD (A2):** 2.5V–5.5V. Usar 3V3. Decoupling: 100nF + 10µF o mais próximo possível.
+- **OUT+ (A3) / OUT− (B3):** Saída BTL (bridge-tied load). Ligar directamente ao speaker (4Ω ou 8Ω). **Não ligar ao GND.** Sem capacitor de acoplamento necessário (BTL).
+- **DIN (B1):** I2S data. → IO32 (livre no clockv7).
+- **GAIN_SLOT (B2):** Programação de ganho por resistor ou ligação directa:
   - GND directo → **15 dB** ← usar isto
   - Float (pull-up interno) → 12 dB
   - VDD → 9 dB
   - Resistores específicos → 6 / 3 / 0 dB
-- **OUT− (B1) / OUT+ (B3):** Saída BTL (bridge-tied load). Ligar directamente ao speaker (4Ω ou 8Ω). **Não ligar ao GND.** Sem capacitor de acoplamento necessário (BTL).
-- **GND/EP (B2):** Pad térmico central. Ligar a GND com **mínimo 4 vias térmicas** (0.3mm drill). Crítico para dissipar calor (3W @ 4Ω).
+- **GND/EP (C2):** Pad térmico central. Ligar a GND com **mínimo 4 vias térmicas** (0.3mm drill). Crítico para dissipar calor (3W @ 4Ω).
 - **BCLK (C1):** I2S bit clock. → IO33 (libertar de VBUS_SENSE → mover para IO36 no clockv8).
-- **DIN (C2):** I2S data. → IO32 (livre no clockv7).
 - **LRCLK (C3):** Word select (44.1kHz ou 22.05kHz). → IO2 (liberto em clockv8, sem LED físico na PCB custom).
 
 ### Pinout I2S no ESP32 custom PCB (clockv8)
@@ -174,15 +174,15 @@ Ajuste na PCB: redirigir o divisor resistivo (47kΩ + 5.6kΩ) de IO33 para IO36.
 ```
 ESP32          MAX98357A (U9)
 ------         ---------------
-IO32  ───────► DIN   (C2)
-IO33  ───────► BCLK  (C1)
-IO2   ───────► LRCLK (C3)
-3V3   ───────► VDD   (A2)   + 100nF || 10µF ao GND
+IO32  ───────► DIN    (B1)
+IO33  ───────► BCLK   (C1)
+IO2   ───────► LRCLK  (C3)
+3V3   ───────► VDD    (A2)  + 100nF || 10µF ao GND
 3V3   ─────── SD_MODE (A1)  → always ON, canal esquerdo
-GND   ───────► GND/EP (B2) + vias térmicas (≥4×)
-GND   ─────── GAIN_SLOT (A3)   → 15 dB
-         OUT+ (B3) ──► speaker+ (4Ω ou 8Ω)
-         OUT- (B1) ──► speaker-
+GND   ───────► GND/EP (C2)  + vias térmicas (≥4×)
+GND   ─────── GAIN_SLOT (B2)   → 15 dB
+         OUT+ (A3) ──► speaker+  (4Ω ou 8Ω)
+         OUT- (B3) ──► speaker-
 ```
 
 ---
