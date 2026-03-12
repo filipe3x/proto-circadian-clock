@@ -169,12 +169,10 @@ void IRAM_ATTR buttonISR() {
   buttonPressed = true;
 }
 
-// ============= CLICK WHEEL (Encoder + Botão Central) =============
+// ============= CLICK WHEEL (Encoder — rotação controla brilho) =============
 #if CLICK_WHEEL_ENABLED
-volatile int     encoderTicks      = 0;
-volatile int     lastEncoderA      = HIGH;
-volatile bool    centerBtnPressed  = false;
-volatile unsigned long centerBtnLastMs = 0;
+volatile int  encoderTicks  = 0;
+volatile int  lastEncoderA  = HIGH;
 
 void IRAM_ATTR encoderISR() {
   int a = digitalRead(ENCODER_A_PIN);
@@ -187,14 +185,6 @@ void IRAM_ATTR encoderISR() {
     #endif
     encoderTicks += dir;
     lastEncoderA = a;
-  }
-}
-
-void IRAM_ATTR centerBtnISR() {
-  unsigned long now = millis();
-  if ((now - centerBtnLastMs) >= CENTER_DEBOUNCE_MS) {
-    centerBtnPressed = true;
-    centerBtnLastMs  = now;
   }
 }
 #endif // CLICK_WHEEL_ENABLED
@@ -1643,13 +1633,6 @@ void displayOff() {
 }
 
 // ============= GESTAO DE BOTAO =============
-// Quando click wheel activa, o botão central substitui BUTTON_PIN
-#if CLICK_WHEEL_ENABLED
-  #define ACTIVE_BTN_PIN CENTER_BTN_PIN
-#else
-  #define ACTIVE_BTN_PIN BUTTON_PIN
-#endif
-
 void handleButton() {
   static unsigned long buttonPressStart = 0;
   static bool longPressTriggered = false;
@@ -1659,7 +1642,7 @@ void handleButton() {
     buttonPressed = false;
     delay(20);
 
-    if (digitalRead(ACTIVE_BTN_PIN) == LOW) {
+    if (digitalRead(BUTTON_PIN) == LOW) {
       // Botao acabou de ser pressionado
       buttonPressStart = millis();
       longPressTriggered = false;
@@ -1668,7 +1651,7 @@ void handleButton() {
   }
 
   // Se o botao esta pressionado, verificar duracao
-  if (digitalRead(ACTIVE_BTN_PIN) == LOW && buttonPressStart > 0) {
+  if (digitalRead(BUTTON_PIN) == LOW && buttonPressStart > 0) {
     unsigned long pressDuration = millis() - buttonPressStart;
 
     // Mostrar progresso visual apos 1 segundo
@@ -1754,21 +1737,19 @@ void updateDisplay() {
 // ============= CLICK WHEEL SETUP & HANDLER =============
 #if CLICK_WHEEL_ENABLED
 void setupClickWheel() {
-  pinMode(ENCODER_A_PIN,  INPUT_PULLUP);
-  pinMode(ENCODER_B_PIN,  INPUT_PULLUP);
-  pinMode(CENTER_BTN_PIN, INPUT_PULLUP);
+  // GPIO 34/35 são input-only sem pullup interno — usar INPUT (pullup externo 10kΩ)
+  pinMode(ENCODER_A_PIN, INPUT);
+  pinMode(ENCODER_B_PIN, INPUT);
 
   lastEncoderA = digitalRead(ENCODER_A_PIN);
 
-  attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN),  encoderISR,   CHANGE);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_B_PIN),  encoderISR,   CHANGE);
-  attachInterrupt(digitalPinToInterrupt(CENTER_BTN_PIN), centerBtnISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN), encoderISR, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_B_PIN), encoderISR, CHANGE);
 
-  Serial.println("✅ Click wheel configurada (encoder + botão central)");
+  Serial.println("[WHEEL] Encoder configurado (brilho via rotação)");
 }
 
 void handleClickWheel() {
-  // --- Rotação: ajuste de brilho ---
   int ticks = 0;
   noInterrupts();
     ticks        = encoderTicks;
@@ -1798,13 +1779,6 @@ void handleClickWheel() {
 
       Serial.printf("[WHEEL] Brilho: %d/%d\n", configBrightness, MAX_BRIGHTNESS_CAP);
     }
-  }
-
-  // --- Botão central: mesma lógica que handleButton ---
-  if (centerBtnPressed) {
-    centerBtnPressed = false;
-    // Simular buttonPressed para reutilizar handleButton()
-    buttonPressed = true;
   }
 }
 #endif // CLICK_WHEEL_ENABLED
