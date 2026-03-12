@@ -111,6 +111,27 @@
 #endif
 
 // ============================================================
+// CLICK WHEEL (Encoder Quadratura + Botão Central)
+// ============================================================
+// Substitui o botão BOOT: rotação = brilho, press = change mode
+// Compatível com EC11 mecânico, Hall Effect ou óptico (ITR8307)
+#if BOARD_MATRIXPORTAL_S3
+  #define ENCODER_A_PIN    9
+  #define ENCODER_B_PIN   10
+  #define CENTER_BTN_PIN  11
+#else
+  #define ENCODER_A_PIN   32
+  #define ENCODER_B_PIN   35
+  #define CENTER_BTN_PIN  34   // input-only, interrupt ok
+#endif
+
+#define CLICK_WHEEL_ENABLED    1    // 1 = click wheel activa, 0 = botão BOOT original
+#define ENCODER_INVERT_DIR     0    // 1 = inverter CW/CCW
+#define BRIGHTNESS_STEP        10   // Incremento por tick do encoder
+#define BRIGHTNESS_MIN         10   // Brilho mínimo
+#define CENTER_DEBOUNCE_MS     200  // Debounce do botão central
+
+// ============================================================
 // NEOPIXEL / LED DE STATUS
 // ============================================================
 #if BOARD_MATRIXPORTAL_S3

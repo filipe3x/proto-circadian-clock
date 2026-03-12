@@ -169,6 +169,36 @@ void IRAM_ATTR buttonISR() {
   buttonPressed = true;
 }
 
+// ============= CLICK WHEEL (Encoder + Botão Central) =============
+#if CLICK_WHEEL_ENABLED
+volatile int     encoderTicks      = 0;
+volatile int     lastEncoderA      = HIGH;
+volatile bool    centerBtnPressed  = false;
+volatile unsigned long centerBtnLastMs = 0;
+
+void IRAM_ATTR encoderISR() {
+  int a = digitalRead(ENCODER_A_PIN);
+  int b = digitalRead(ENCODER_B_PIN);
+  if (a != lastEncoderA) {
+    int dir = (a == HIGH) ? ((b == LOW) ? +1 : -1)
+                          : ((b == HIGH) ? +1 : -1);
+    #if ENCODER_INVERT_DIR
+      dir = -dir;
+    #endif
+    encoderTicks += dir;
+    lastEncoderA = a;
+  }
+}
+
+void IRAM_ATTR centerBtnISR() {
+  unsigned long now = millis();
+  if ((now - centerBtnLastMs) >= CENTER_DEBOUNCE_MS) {
+    centerBtnPressed = true;
+    centerBtnLastMs  = now;
+  }
+}
+#endif // CLICK_WHEEL_ENABLED
+
 // ============= MODOS =============
 enum Mode {
   AUTO_SOLAR,
@@ -196,6 +226,10 @@ void displayTherapyRed();
 void displayOff();
 void handleButton();
 void updateDisplay();
+#if CLICK_WHEEL_ENABLED
+void setupClickWheel();
+void handleClickWheel();
+#endif
 uint16_t getStatusColor(SystemStatus status);
 const char* getStatusName(SystemStatus status);
 
@@ -1430,6 +1464,10 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
   Serial.println("✅ Botão UP configurado");
 
+  #if CLICK_WHEEL_ENABLED
+    setupClickWheel();
+  #endif
+
   currentMode = AUTO_SOLAR;
   updateBootStatus(display->color565(50, 0, 0), 20);
   
@@ -1605,6 +1643,13 @@ void displayOff() {
 }
 
 // ============= GESTAO DE BOTAO =============
+// Quando click wheel activa, o botão central substitui BUTTON_PIN
+#if CLICK_WHEEL_ENABLED
+  #define ACTIVE_BTN_PIN CENTER_BTN_PIN
+#else
+  #define ACTIVE_BTN_PIN BUTTON_PIN
+#endif
+
 void handleButton() {
   static unsigned long buttonPressStart = 0;
   static bool longPressTriggered = false;
@@ -1614,7 +1659,7 @@ void handleButton() {
     buttonPressed = false;
     delay(20);
 
-    if (digitalRead(BUTTON_PIN) == LOW) {
+    if (digitalRead(ACTIVE_BTN_PIN) == LOW) {
       // Botao acabou de ser pressionado
       buttonPressStart = millis();
       longPressTriggered = false;
@@ -1623,7 +1668,7 @@ void handleButton() {
   }
 
   // Se o botao esta pressionado, verificar duracao
-  if (digitalRead(BUTTON_PIN) == LOW && buttonPressStart > 0) {
+  if (digitalRead(ACTIVE_BTN_PIN) == LOW && buttonPressStart > 0) {
     unsigned long pressDuration = millis() - buttonPressStart;
 
     // Mostrar progresso visual apos 1 segundo
@@ -1706,6 +1751,64 @@ void updateDisplay() {
   }
 }
 
+// ============= CLICK WHEEL SETUP & HANDLER =============
+#if CLICK_WHEEL_ENABLED
+void setupClickWheel() {
+  pinMode(ENCODER_A_PIN,  INPUT_PULLUP);
+  pinMode(ENCODER_B_PIN,  INPUT_PULLUP);
+  pinMode(CENTER_BTN_PIN, INPUT_PULLUP);
+
+  lastEncoderA = digitalRead(ENCODER_A_PIN);
+
+  attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN),  encoderISR,   CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_B_PIN),  encoderISR,   CHANGE);
+  attachInterrupt(digitalPinToInterrupt(CENTER_BTN_PIN), centerBtnISR, FALLING);
+
+  Serial.println("✅ Click wheel configurada (encoder + botão central)");
+}
+
+void handleClickWheel() {
+  // --- Rotação: ajuste de brilho ---
+  int ticks = 0;
+  noInterrupts();
+    ticks        = encoderTicks;
+    encoderTicks = 0;
+  interrupts();
+
+  if (ticks != 0) {
+    int delta = ticks * BRIGHTNESS_STEP;
+    int newBrightness = constrain(configBrightness + delta, BRIGHTNESS_MIN, MAX_BRIGHTNESS_CAP);
+
+    if (newBrightness != configBrightness) {
+      configBrightness = newBrightness;
+      setSafeBrightness(configBrightness);
+
+      // Feedback visual: barra nas 2 linhas inferiores
+      int barWidth = map(configBrightness, BRIGHTNESS_MIN, MAX_BRIGHTNESS_CAP, 0, 32);
+      uint16_t barColor;
+      if (configBrightness < MAX_BRIGHTNESS_CAP / 2) {
+        barColor = display->color565(0, 200, 80);       // Verde
+      } else if (configBrightness < MAX_BRIGHTNESS_CAP * 3 / 4) {
+        barColor = display->color565(251, 191, 36);      // Amber
+      } else {
+        barColor = display->color565(255, 60, 20);       // Laranja/vermelho
+      }
+      display->fillRect(0, 14, 32, 2, display->color565(0, 0, 0));
+      display->fillRect(0, 14, barWidth, 2, barColor);
+
+      Serial.printf("[WHEEL] Brilho: %d/%d\n", configBrightness, MAX_BRIGHTNESS_CAP);
+    }
+  }
+
+  // --- Botão central: mesma lógica que handleButton ---
+  if (centerBtnPressed) {
+    centerBtnPressed = false;
+    // Simular buttonPressed para reutilizar handleButton()
+    buttonPressed = true;
+  }
+}
+#endif // CLICK_WHEEL_ENABLED
+
 // ============= LOOP =============
 void loop() {
   static unsigned long lastUpdate = 0;
@@ -1723,6 +1826,10 @@ void loop() {
   }
 
   handleButton();
+
+  #if CLICK_WHEEL_ENABLED
+    handleClickWheel();
+  #endif
 
   // Atualizar mesh sync
   updateMeshSync();
