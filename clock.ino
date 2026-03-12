@@ -169,10 +169,12 @@ void IRAM_ATTR buttonISR() {
   buttonPressed = true;
 }
 
-// ============= CLICK WHEEL (Encoder — rotação controla brilho) =============
+// ============= CLICK WHEEL (Encoder + Botão Central) =============
 #if CLICK_WHEEL_ENABLED
-volatile int  encoderTicks  = 0;
-volatile int  lastEncoderA  = HIGH;
+volatile int           encoderTicks     = 0;
+volatile int           lastEncoderA     = HIGH;
+volatile bool          encoderBtnPressed = false;
+volatile unsigned long encoderBtnLastMs  = 0;
 
 void IRAM_ATTR encoderISR() {
   int a = digitalRead(ENCODER_A_PIN);
@@ -185,6 +187,14 @@ void IRAM_ATTR encoderISR() {
     #endif
     encoderTicks += dir;
     lastEncoderA = a;
+  }
+}
+
+void IRAM_ATTR encoderBtnISR() {
+  unsigned long now = millis();
+  if ((now - encoderBtnLastMs) >= ENCODER_BTN_DEBOUNCE_MS) {
+    encoderBtnPressed = true;
+    encoderBtnLastMs  = now;
   }
 }
 #endif // CLICK_WHEEL_ENABLED
@@ -1737,19 +1747,22 @@ void updateDisplay() {
 // ============= CLICK WHEEL SETUP & HANDLER =============
 #if CLICK_WHEEL_ENABLED
 void setupClickWheel() {
-  // GPIO 34/35 são input-only sem pullup interno — usar INPUT (pullup externo 10kΩ)
-  pinMode(ENCODER_A_PIN, INPUT);
-  pinMode(ENCODER_B_PIN, INPUT);
+  // GPIO 34/35/39 são input-only sem pullup interno — pullup externo 10kΩ a 3.3V
+  pinMode(ENCODER_A_PIN,   INPUT);
+  pinMode(ENCODER_B_PIN,   INPUT);
+  pinMode(ENCODER_BTN_PIN, INPUT);
 
   lastEncoderA = digitalRead(ENCODER_A_PIN);
 
-  attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN), encoderISR, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_B_PIN), encoderISR, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN),   encoderISR,    CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_B_PIN),   encoderISR,    CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_BTN_PIN), encoderBtnISR, FALLING);
 
-  Serial.println("[WHEEL] Encoder configurado (brilho via rotação)");
+  Serial.println("[WHEEL] Click wheel configurada (encoder + click GPIO39)");
 }
 
 void handleClickWheel() {
+  // --- Rotação: ajuste de brilho ---
   int ticks = 0;
   noInterrupts();
     ticks        = encoderTicks;
@@ -1779,6 +1792,12 @@ void handleClickWheel() {
 
       Serial.printf("[WHEEL] Brilho: %d/%d\n", configBrightness, MAX_BRIGHTNESS_CAP);
     }
+  }
+
+  // --- Click central: change mode (reutiliza handleButton via flag) ---
+  if (encoderBtnPressed) {
+    encoderBtnPressed = false;
+    buttonPressed = true;  // Dispara handleButton() no próximo ciclo
   }
 }
 #endif // CLICK_WHEEL_ENABLED
