@@ -15,22 +15,54 @@
 
 ## Project Overview
 
-ESP32-based LED clock that simulates the natural solar light cycle for circadian rhythm regulation. Uses a P10 32×16 RGB LED panel to display colors ranging from warm red (sunrise/sunset) to cool white (midday), calculated from astronomical solar elevation.
+Uma única PCB com dupla função:
+
+1. **Produto — Proto Circadian Clock:** Relógio LED que simula o ciclo solar natural para regulação do ritmo circadiano. Usa painel P10 32×16 RGB (HUB75) com cores calculadas a partir da elevação solar astronómica (1500K–6500K).
+
+2. **DevKit — Arduino Development Board:** A mesma placa funciona como kit de desenvolvimento ESP32 com ecrã OLED 128×64 (SSD1306, I2C), 4 botões táteis (A/B/L/R), buzzer e painel RGB — tudo acessível via Arduino framework.
+
+### Input Mode — Partilha de GPIOs
+
+Os GPIOs 34, 35 e 39 são partilhados entre dois modos de input, selecionados por flag de compilação:
+
+```cpp
+#define INPUT_MODE 0  // INPUT_CLICK_WHEEL  — encoder óptico (brilho + modo)
+#define INPUT_MODE 1  // INPUT_DEVKIT_BUTTONS — 4 botões táteis (A/B/L/R)
+```
+
+| GPIO | `INPUT_CLICK_WHEEL` (0) | `INPUT_DEVKIT_BUTTONS` (1) |
+|------|-------------------------|----------------------------|
+| 34   | ENCODER_A               | BTN_A (confirmar)          |
+| 35   | ENCODER_B               | BTN_B (cancelar)           |
+| 36   | _(livre — btn extra)_   | BTN_L (esquerda)           |
+| 39   | ENCODER_BTN (click)     | BTN_R (direita)            |
+
+Circuito elétrico idêntico (pull-up 10kΩ + active LOW) — mesmos pads, mesmas resistências. Ver `DEVKIT_DISPLAY_BUTTONS.md` e `product/CLICK_WHEEL.md`.
 
 ## Tech Stack
 
 - **Platform:** ESP32 Dev Module (Arduino framework)
-- **Display:** P10 32×16 RGB LED panel (HUB75 interface, 1/4 scan)
-- **RTC:** DS3231 (optional, I2C)
+- **Display (produto):** P10 32×16 RGB LED panel (HUB75 interface, 1/4 scan)
+- **Display (devkit):** SSD1306 0.96" 128×64 OLED (I2C, endereço 0x3C)
+- **RTC:** DS3231 (optional, I2C, endereço 0x68)
+- **Input:** Click wheel óptico OU 4 botões táteis (seleção por `INPUT_MODE`)
+- **Audio:** Buzzer piezo passivo (GPIO 18, via MMBT2222A)
 - **Language:** C++ (Arduino)
 
 ## Key Files
 
 - `clock.ino` - Main application (single-file Arduino sketch)
+- `board_config.h` - GPIO pinout e compilação condicional (Matrix Portal S3 / ESP32 Dev Module)
+- `auto_solar.h/.cpp` - Motor de cálculo solar
+- `sound.h/.cpp` - Engine de áudio chiptune
+- `captive_portal.h/.cpp` - Portal WiFi para configuração
+- `DEVKIT_DISPLAY_BUTTONS.md` - Design do ecrã OLED + botões (bottom side)
+- `product/CLICK_WHEEL.md` - Design do encoder óptico iPod-style
 
 ## Dependencies
 
 ```cpp
+// Produto (Proto Circadian Clock)
 #include <P10_32x16_QuarterScan.h>  // Custom wrapper: github.com/filipe3x/P10_32x16_QuarterScan
 #include <RTClib.h>                  // Adafruit RTC library
 #include <WiFi.h>                    // ESP32 built-in
@@ -38,29 +70,79 @@ ESP32-based LED clock that simulates the natural solar light cycle for circadian
 #include <esp_wifi.h>                // WiFi channel control
 #include <Preferences.h>             // NVS persistent storage
 #include <Dusk2Dawn.h>               // Sunrise/sunset calculations
+
+// DevKit (ecrã OLED)
+#include <Adafruit_SSD1306.h>        // OLED driver (I2C)
+#include <Adafruit_GFX.h>            // Graphics primitives
 ```
 
 ## Hardware Configuration
 
-### Pinout (ESP32 → P10 Panel)
+### Pinout Completo (ESP32 Dev Module)
 ```
-GPIO 0  → Button (INPUT_PULLUP)
-GPIO 4  → LAT
-GPIO 5  → C
-GPIO 12 → G2
-GPIO 13 → B2
-GPIO 14 → R2
-GPIO 15 → OE
-GPIO 16 → CLK
-GPIO 17 → D
-GPIO 19 → B
-GPIO 21 → SDA (RTC)
-GPIO 22 → SCL (RTC)
-GPIO 23 → A
-GPIO 25 → R1
-GPIO 26 → G1
-GPIO 27 → B1
+── HUB75 (Painel P10) ──────────────────
+GPIO 4  → LAT          GPIO 16 → CLK
+GPIO 5  → C            GPIO 17 → D
+GPIO 12 → G2           GPIO 19 → B
+GPIO 13 → B2           GPIO 23 → A
+GPIO 14 → R2           GPIO 25 → R1
+GPIO 15 → OE           GPIO 26 → G1
+                        GPIO 27 → B1
+
+── I2C (RTC + OLED) ────────────────────
+GPIO 21 → SDA (DS3231 @ 0x68, SSD1306 @ 0x3C)
+GPIO 22 → SCL
+
+── Input (partilhado — ver INPUT_MODE) ─
+GPIO 34 → ENCODER_A / BTN_A  (pull-up 10kΩ externo)
+GPIO 35 → ENCODER_B / BTN_B  (pull-up 10kΩ externo)
+GPIO 36 → BTN_L              (pull-up 10kΩ externo, exclusivo devkit)
+GPIO 39 → ENCODER_BTN / BTN_R (pull-up 10kΩ externo)
+
+── Outros ──────────────────────────────
+GPIO 0  → BOOT Button (INPUT_PULLUP)
+GPIO 2  → LED_BUILTIN
+GPIO 18 → Buzzer (via Q1 MMBT2222A)
+GPIO 33 → VBUS_SENSE (ADC, deteção 20V)
+GPIO 1  → DEBUG TX
+GPIO 3  → DEBUG RX
+
+── Reserva ─────────────────────────────
+GPIO 32 → Livre (I2S DIN / expansão futura)
 ```
+
+### BOM — Componentes por Configuração
+
+**Base (sempre presente na PCB):**
+
+| Ref | Componente | Qtd | JLCPCB | Tipo | Notas |
+|-----|-----------|-----|--------|------|-------|
+| U1 | ESP32-WROOM-32E 8MB | 1 | C2934560 | Extended | MCU principal |
+| U2 | DS3231SN (RTC) | 1 | C9866 | Extended | I2C 0x68 |
+| U3 | CH340C (USB-UART) | 1 | C84681 | Basic | Programação |
+| Q1 | MMBT2222A (NPN) | 1 | C2145 | Basic | Driver buzzer |
+| BZ1 | Buzzer piezo passivo | 1 | C252948 | Extended | 4-5 kHz |
+| R×3 | 10kΩ 0603 | 3 | C25804 | Basic | Pull-up GPIO 34/35/39 |
+| Y1 | Crystal 32.768kHz | 1 | — | — | Se RTC externo |
+
+**Modo DevKit (`INPUT_MODE=1`) — bottom side, hand solder:**
+
+| Ref | Componente | Qtd | JLCPCB | Tipo | Preço |
+|-----|-----------|-----|--------|------|-------|
+| OLED1 | SSD1306 0.96" 128×64 I2C | 1 | Módulo hand solder | — | ~$1.00 |
+| SW×4 | Botão tátil 6×6mm THT | 4 | C136662 | Basic | ~$0.02/un |
+| R_L | 10kΩ 0603 (pull-up BTN_L) | 1 | C25804 | Basic | ~$0.002 |
+| J_OLED | Header fêmea 1×4 2.54mm | 1 | C124413 | Basic | ~$0.05 |
+
+**Modo Click Wheel (`INPUT_MODE=0`) — top side, hand solder:**
+
+| Ref | Componente | Qtd | JLCPCB | Tipo | Preço |
+|-----|-----------|-----|--------|------|-------|
+| IR×2 | ITR8307 (sensor óptico) | 2 | C7474 | Extended | ~$0.10/un |
+| R_IR×2 | 100Ω 0402 (LED IR) | 2 | — | Basic | ~$0.002/un |
+| DISC | Disco óptico 96 slots | 1 | Custom/3D print | — | — |
+
+> **Nota:** As 3 resistências pull-up (GPIO 34/35/39) são partilhadas — presentes na base, servem ambos os modos. Apenas a R do GPIO 36 (BTN_L) é exclusiva do modo DevKit.
 
 ## Architecture
 
