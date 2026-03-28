@@ -169,36 +169,6 @@ void IRAM_ATTR buttonISR() {
   buttonPressed = true;
 }
 
-// ============= CLICK WHEEL (Encoder + Botão Central) =============
-#if CLICK_WHEEL_ENABLED
-volatile int           encoderTicks     = 0;
-volatile int           lastEncoderA     = HIGH;
-volatile bool          encoderBtnPressed = false;
-volatile unsigned long encoderBtnLastMs  = 0;
-
-void IRAM_ATTR encoderISR() {
-  int a = digitalRead(ENCODER_A_PIN);
-  int b = digitalRead(ENCODER_B_PIN);
-  if (a != lastEncoderA) {
-    int dir = (a == HIGH) ? ((b == LOW) ? +1 : -1)
-                          : ((b == HIGH) ? +1 : -1);
-    #if ENCODER_INVERT_DIR
-      dir = -dir;
-    #endif
-    encoderTicks += dir;
-    lastEncoderA = a;
-  }
-}
-
-void IRAM_ATTR encoderBtnISR() {
-  unsigned long now = millis();
-  if ((now - encoderBtnLastMs) >= ENCODER_BTN_DEBOUNCE_MS) {
-    encoderBtnPressed = true;
-    encoderBtnLastMs  = now;
-  }
-}
-#endif // CLICK_WHEEL_ENABLED
-
 // ============= MODOS =============
 enum Mode {
   AUTO_SOLAR,
@@ -226,10 +196,6 @@ void displayTherapyRed();
 void displayOff();
 void handleButton();
 void updateDisplay();
-#if CLICK_WHEEL_ENABLED
-void setupClickWheel();
-void handleClickWheel();
-#endif
 uint16_t getStatusColor(SystemStatus status);
 const char* getStatusName(SystemStatus status);
 
@@ -1464,10 +1430,6 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
   Serial.println("✅ Botão UP configurado");
 
-  #if CLICK_WHEEL_ENABLED
-    setupClickWheel();
-  #endif
-
   currentMode = AUTO_SOLAR;
   updateBootStatus(display->color565(50, 0, 0), 20);
   
@@ -1744,64 +1706,6 @@ void updateDisplay() {
   }
 }
 
-// ============= CLICK WHEEL SETUP & HANDLER =============
-#if CLICK_WHEEL_ENABLED
-void setupClickWheel() {
-  // GPIO 34/35/39 são input-only sem pullup interno — pullup externo 10kΩ a 3.3V
-  pinMode(ENCODER_A_PIN,   INPUT);
-  pinMode(ENCODER_B_PIN,   INPUT);
-  pinMode(ENCODER_BTN_PIN, INPUT);
-
-  lastEncoderA = digitalRead(ENCODER_A_PIN);
-
-  attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN),   encoderISR,    CHANGE);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_B_PIN),   encoderISR,    CHANGE);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_BTN_PIN), encoderBtnISR, FALLING);
-
-  Serial.println("[WHEEL] Click wheel configurada (encoder + click GPIO39)");
-}
-
-void handleClickWheel() {
-  // --- Rotação: ajuste de brilho ---
-  int ticks = 0;
-  noInterrupts();
-    ticks        = encoderTicks;
-    encoderTicks = 0;
-  interrupts();
-
-  if (ticks != 0) {
-    int delta = ticks * BRIGHTNESS_STEP;
-    int newBrightness = constrain(configBrightness + delta, BRIGHTNESS_MIN, MAX_BRIGHTNESS_CAP);
-
-    if (newBrightness != configBrightness) {
-      configBrightness = newBrightness;
-      setSafeBrightness(configBrightness);
-
-      // Feedback visual: barra nas 2 linhas inferiores
-      int barWidth = map(configBrightness, BRIGHTNESS_MIN, MAX_BRIGHTNESS_CAP, 0, 32);
-      uint16_t barColor;
-      if (configBrightness < MAX_BRIGHTNESS_CAP / 2) {
-        barColor = display->color565(0, 200, 80);       // Verde
-      } else if (configBrightness < MAX_BRIGHTNESS_CAP * 3 / 4) {
-        barColor = display->color565(251, 191, 36);      // Amber
-      } else {
-        barColor = display->color565(255, 60, 20);       // Laranja/vermelho
-      }
-      display->fillRect(0, 14, 32, 2, display->color565(0, 0, 0));
-      display->fillRect(0, 14, barWidth, 2, barColor);
-
-      Serial.printf("[WHEEL] Brilho: %d/%d\n", configBrightness, MAX_BRIGHTNESS_CAP);
-    }
-  }
-
-  // --- Click central: change mode (reutiliza handleButton via flag) ---
-  if (encoderBtnPressed) {
-    encoderBtnPressed = false;
-    buttonPressed = true;  // Dispara handleButton() no próximo ciclo
-  }
-}
-#endif // CLICK_WHEEL_ENABLED
-
 // ============= LOOP =============
 void loop() {
   static unsigned long lastUpdate = 0;
@@ -1819,10 +1723,6 @@ void loop() {
   }
 
   handleButton();
-
-  #if CLICK_WHEEL_ENABLED
-    handleClickWheel();
-  #endif
 
   // Atualizar mesh sync
   updateMeshSync();
