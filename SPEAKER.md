@@ -58,13 +58,61 @@ Song → Chain[] → Pattern[] → Step {note, cmd, val, inst}
 
 O piezo passivo tem limitações severas de qualidade sonora. Para o alarme circadiano gradual funcionar como pretendido (aurora suave), é necessário um speaker real com amplificador I2S.
 
-### Módulo: MAX98357A
+### Módulo: MAX98357AEWL+T
 
 - Amplificador I2S digital Class D, mono, 3 W @ 4 Ω
 - Alimentação: 3.3 V–5 V (directo do 3V3 do ESP32 ou 5V_OUT)
 - Interface: I2S digital (sem DA externo necessário)
-- Custo: ~1–2 € (módulo breakout GY-MAX98357A ou equivalente)
-- Footprint: 16 mm × 11 mm
+- LCSC: **C2682619**
+- Package: WLP-9 (3×3, 0.4mm pitch) — 1.595mm × 1.415mm
+- **Footprint KiCad:** `Maxim_WLP-9_1.595x1.415_Layout3x3_P0.4mm_Ball0.27mm_Pad0.25mm_NSMD`
+  - ✅ Usar este default do KiCad — dimensões exactas do datasheet Maxim
+  - ❌ Não usar `WLP-9_1.468x1.448mm` (genérico, ligeiramente pequeno)
+  - ❌ Não usar o easyeda2kicad `WLP-9_L1.4-W1.3-P0.40-R3-C3-BR` (1.4×1.3mm, pequeno)
+
+**Estado no clockv7:** U9 presente no esquemático e PCB como **DNP** (`exclude_from_bom yes`). Footprint e traces pré-roteadas para facilitar clockv8. Não consta no BOM nem na montagem JLCPCB.
+
+### Pinout completo MAX98357AEWL+T (WLP-9, 3×3 grid, 0.4mm pitch)
+
+```
+        Col 1      Col 2        Col 3
+Row A:  SD_MODE    VDD          OUT+ (OUTP)
+Row B:  DIN        GAIN_SLOT    OUT- (OUTN)
+Row C:  BCLK       GND/EP       LRCLK
+```
+
+| Pin | Nome | Tipo | Ligação clockv7 (DNP) | Ligação clockv8 |
+|-----|------|------|----------------------|-----------------|
+| A1  | SD_MODE | Shutdown / ch. select | 3V3 (always ON, L ch.) | 3V3 (always ON, L ch.) |
+| A2  | VDD | Alimentação | 3V3 | 3V3 |
+| A3  | OUT+ (OUTP) | Saída BTL + | Pad speaker | Speaker + |
+| B1  | DIN | I2S data in | IO32 | IO32 |
+| B2  | GAIN_SLOT | Ganho analógico | GND (15 dB) | GND (15 dB) |
+| B3  | OUT− (OUTN) | Saída BTL − | Pad speaker | Speaker − |
+| C1  | BCLK | I2S bit clock | IO33 | IO33 |
+| C2  | GND / EP | GND + thermal pad | GND + vias térmicas | GND + vias térmicas |
+| C3  | LRCLK | I2S word select | IO2 | IO2 |
+
+**Notas por pino:**
+
+- **SD_MODE (A1):** Shutdown e selecção de canal:
+  - GND → Shutdown (~1 µA)
+  - **3V3 → ON, canal esquerdo** ← usar isto (clockv7 DNP e clockv8 simples)
+  - Float → ON, canal esquerdo (pull-up interno fraco)
+  - 100kΩ → GND → canal direito
+  - 1.5MΩ → VDD → mono mix (L+R)/2
+  - GPIO opcional: permite shutdown por software (poupa corrente em standby)
+- **VDD (A2):** 2.5V–5.5V. Usar 3V3. Decoupling: 100nF + 10µF o mais próximo possível.
+- **OUT+ (A3) / OUT− (B3):** Saída BTL (bridge-tied load). Ligar directamente ao speaker (4Ω ou 8Ω). **Não ligar ao GND.** Sem capacitor de acoplamento necessário (BTL).
+- **DIN (B1):** I2S data. → IO32 (livre no clockv7).
+- **GAIN_SLOT (B2):** Programação de ganho por resistor ou ligação directa:
+  - GND directo → **15 dB** ← usar isto
+  - Float (pull-up interno) → 12 dB
+  - VDD → 9 dB
+  - Resistores específicos → 6 / 3 / 0 dB
+- **GND/EP (C2):** Pad térmico central. Ligar a GND com **mínimo 4 vias térmicas** (0.3mm drill). Crítico para dissipar calor (3W @ 4Ω).
+- **BCLK (C1):** I2S bit clock. → IO33 (libertar de VBUS_SENSE → mover para IO36 no clockv8).
+- **LRCLK (C3):** Word select (44.1kHz ou 22.05kHz). → IO2 (liberto em clockv8, sem LED físico na PCB custom).
 
 ### Pinout I2S no ESP32 custom PCB (clockv8)
 
@@ -74,7 +122,7 @@ O ESP32 clássico suporta I2S em praticamente qualquer GPIO via matrix de roteam
 |------|-----------|-------|
 | **IO32** | I2S DIN (dados) | Livre no clockv7 |
 | **IO33** | I2S BCLK (bit clock) | Libertar de VBUS_SENSE → mover para IO36 |
-| **IO2**  | I2S LRCLK (word select) | **DNP error LED** na PCB (ver abaixo) |
+| **IO2**  | I2S LRCLK (word select) | Sem LED físico na PCB custom clockv8 |
 
 ### Questão: IO2 e o Error LED
 
@@ -124,16 +172,17 @@ Ajuste na PCB: redirigir o divisor resistivo (47kΩ + 5.6kΩ) de IO33 para IO36.
 ### Ligação física MAX98357A
 
 ```
-ESP32          MAX98357A
-------         ---------
-IO32  ───────► DIN
-IO33  ───────► BCLK
-IO2   ───────► LRC
-3V3   ───────► VIN
-GND   ───────► GND
-              GAIN ── GND    (15 dB; float=12 dB, 3V3=9 dB)
-              SD    ── 3V3   (enable always-on; deixar float = shutdown)
-              OUT+/OUT- ──► speaker 4Ω ou 8Ω
+ESP32          MAX98357A (U9)
+------         ---------------
+IO32  ───────► DIN    (B1)
+IO33  ───────► BCLK   (C1)
+IO2   ───────► LRCLK  (C3)
+3V3   ───────► VDD    (A2)  + 100nF || 10µF ao GND
+3V3   ─────── SD_MODE (A1)  → always ON, canal esquerdo
+GND   ───────► GND/EP (C2)  + vias térmicas (≥4×)
+GND   ─────── GAIN_SLOT (B2)   → 15 dB
+         OUT+ (A3) ──► speaker+  (4Ω ou 8Ω)
+         OUT- (B3) ──► speaker-
 ```
 
 ---
