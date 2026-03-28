@@ -9,6 +9,8 @@ Transformar a PCB do Proto Circadian Clock num **kit de desenvolvimento Arduino*
 
 Tudo hand-soldered, sem alterar o circuito existente do lado top.
 
+> **Compatibilidade com Click Wheel:** Os botões A, B e R partilham os mesmos GPIOs (34, 35, 39) que o encoder óptico documentado em `product/CLICK_WHEEL.md`. Isto é **intencional** — o circuito elétrico é idêntico (input-only + pull-up externo 10kΩ a 3.3V + active LOW). Na PCB, os mesmos pads servem para ambas as configurações. Uma flag de compilação (`INPUT_MODE`) seleciona o firmware adequado. Ver [secção 8](#8-partilha-de-pinos-com-click-wheel) para detalhes.
+
 ---
 
 ## 1. GPIOs Disponíveis (ESP32 Dev Module)
@@ -90,14 +92,16 @@ GND ─────────────────── GND   ┘
 
 ### Atribuição de Pinos
 
-| Botão | GPIO | Tipo       | Função Sugerida          |
-|-------|------|------------|--------------------------|
-| **A** | 34   | Input only | Confirmar / Select       |
-| **B** | 35   | Input only | Cancelar / Back          |
-| **L** | 36   | Input only | Esquerda / Menos         |
-| **R** | 39   | Input only | Direita / Mais           |
+| Botão | GPIO | Tipo       | Partilhado com Click Wheel? | Função Sugerida    |
+|-------|------|------------|-----------------------------|--------------------|
+| **A** | 34   | Input only | Sim — ENCODER_A             | Confirmar / Select |
+| **B** | 35   | Input only | Sim — ENCODER_B             | Cancelar / Back    |
+| **L** | 36   | Input only | Não — exclusivo DevKit      | Esquerda / Menos   |
+| **R** | 39   | Input only | Sim — ENCODER_BTN           | Direita / Mais     |
 
-> GPIO 32 fica de reserva para expansão futura (ex: encoder rotativo, sensor adicional).
+> GPIO 32 fica de reserva para expansão futura (ex: I2S DIN para MAX98357A, sensor adicional).
+>
+> **Nota:** Os GPIOs 34, 35 e 39 são partilhados com a click wheel (`product/CLICK_WHEEL.md`). O circuito (pull-up 10kΩ + active LOW) é idêntico — os mesmos pads e resistências servem ambas as configurações. A seleção é feita por `#define INPUT_MODE` no firmware.
 
 ### Circuito por Botão
 
@@ -243,16 +247,45 @@ python3 -m easyeda2kicad --symbol --footprint --3d --lcsc_id=C136662
 
 ## 6. Firmware — Exemplo de Código
 
-### Inicialização dos Botões
+### Flag de Modo de Input
 
 ```cpp
 // Em board_config.h — adicionar:
+// ============================================================
+// INPUT MODE — Seleciona hardware de input nos GPIOs partilhados
+// ============================================================
+// Os GPIOs 34, 35, 39 são partilhados entre:
+//   - Click Wheel (encoder óptico/mecânico) — ver product/CLICK_WHEEL.md
+//   - DevKit Buttons (4 botões táteis A/B/L/R)
+// O circuito elétrico é idêntico (pull-up 10kΩ + active LOW).
+// Apenas o firmware muda.
+//
+//   0 = INPUT_CLICK_WHEEL  — encoder + click (brilho + modo)
+//   1 = INPUT_DEVKIT_BUTTONS — 4 botões táteis (A/B/L/R)
+//
+#ifndef INPUT_MODE
+  #define INPUT_MODE 1  // Default: DevKit buttons
+#endif
+
+#define INPUT_CLICK_WHEEL    0
+#define INPUT_DEVKIT_BUTTONS 1
+
 #if !BOARD_MATRIXPORTAL_S3
-  #define BTN_A_PIN   34   // Input only, pull-up externo
-  #define BTN_B_PIN   35   // Input only, pull-up externo
+  // GPIO 36 é sempre exclusivo do DevKit (não usado pela click wheel)
   #define BTN_L_PIN   36   // Input only, pull-up externo (SVP)
-  #define BTN_R_PIN   39   // Input only, pull-up externo (SVN)
-  #define DEVKIT_BUTTON_COUNT 4
+
+  #if INPUT_MODE == INPUT_DEVKIT_BUTTONS
+    #define BTN_A_PIN   34   // Partilhado com ENCODER_A
+    #define BTN_B_PIN   35   // Partilhado com ENCODER_B
+    #define BTN_R_PIN   39   // Partilhado com ENCODER_BTN
+    #define DEVKIT_BUTTON_COUNT 4
+  #elif INPUT_MODE == INPUT_CLICK_WHEEL
+    #define ENCODER_A_PIN   34
+    #define ENCODER_B_PIN   35
+    #define ENCODER_BTN_PIN 39
+    #define CLICK_WHEEL_ENABLED 1
+    // BTN_L (GPIO36) continua disponível como botão extra
+  #endif
 #endif
 ```
 
@@ -269,55 +302,54 @@ python3 -m easyeda2kicad --symbol --footprint --3d --lcsc_id=C136662
 
 Adafruit_SSD1306 oled(OLED_WIDTH, OLED_HEIGHT, &Wire, -1);
 
-void setupDevKit() {
-  // Botões (pull-up externo, input only)
-  pinMode(BTN_A_PIN, INPUT);
-  pinMode(BTN_B_PIN, INPUT);
-  pinMode(BTN_L_PIN, INPUT);
-  pinMode(BTN_R_PIN, INPUT);
-
+void setupOLED() {
   // I2C já inicializado pelo RTC (Wire.begin(21, 22))
-  // Iniciar OLED no mesmo barramento
   if (oled.begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ADDR)) {
     oled.clearDisplay();
     oled.setTextSize(1);
     oled.setTextColor(SSD1306_WHITE);
     oled.setCursor(0, 0);
-    oled.println("DevKit Ready");
+    #if INPUT_MODE == INPUT_DEVKIT_BUTTONS
+      oled.println("DevKit Ready");
+    #else
+      oled.println("Click Wheel Ready");
+    #endif
     oled.display();
   }
+}
+```
+
+### Setup e Loop (DevKit Buttons)
+
+```cpp
+#if INPUT_MODE == INPUT_DEVKIT_BUTTONS
+
+void setupDevKitButtons() {
+  // Todos input-only com pull-up externo
+  pinMode(BTN_A_PIN, INPUT);
+  pinMode(BTN_B_PIN, INPUT);
+  pinMode(BTN_L_PIN, INPUT);
+  pinMode(BTN_R_PIN, INPUT);
 }
 
 bool readButton(uint8_t pin) {
   return digitalRead(pin) == LOW;  // Active LOW com pull-up
 }
-```
 
-### Loop de Leitura
-
-```cpp
-void loopDevKit() {
+void loopDevKitButtons() {
   static uint32_t lastDebounce = 0;
-  if (millis() - lastDebounce < 50) return;  // 50ms debounce
+  if (millis() - lastDebounce < 50) return;
 
-  if (readButton(BTN_A_PIN)) {
-    // Ação A — confirmar
-    lastDebounce = millis();
-  }
-  if (readButton(BTN_B_PIN)) {
-    // Ação B — cancelar
-    lastDebounce = millis();
-  }
-  if (readButton(BTN_L_PIN)) {
-    // Ação L — esquerda/menos
-    lastDebounce = millis();
-  }
-  if (readButton(BTN_R_PIN)) {
-    // Ação R — direita/mais
-    lastDebounce = millis();
-  }
+  if (readButton(BTN_A_PIN)) { lastDebounce = millis(); /* Confirmar */ }
+  if (readButton(BTN_B_PIN)) { lastDebounce = millis(); /* Cancelar  */ }
+  if (readButton(BTN_L_PIN)) { lastDebounce = millis(); /* Esquerda  */ }
+  if (readButton(BTN_R_PIN)) { lastDebounce = millis(); /* Direita   */ }
 }
+
+#endif // INPUT_DEVKIT_BUTTONS
 ```
+
+> **Click Wheel mode:** Quando `INPUT_MODE == INPUT_CLICK_WHEEL`, usa-se o código de `product/CLICK_WHEEL.md` (ISRs, setupClickWheel, handleClickWheel). O GPIO 36 (BTN_L) continua disponível como botão auxiliar.
 
 ---
 
@@ -360,14 +392,66 @@ Negligível comparado com o painel P10 (~2-5A).
 
 ---
 
-## 8. Resumo
+## 8. Partilha de Pinos com Click Wheel
+
+### Mapa de Partilha
+
+| GPIO | Pull-up | Click Wheel (`INPUT_MODE=0`) | DevKit Buttons (`INPUT_MODE=1`) |
+|------|---------|------------------------------|---------------------------------|
+| **34** | 10kΩ externo | ENCODER_A (canal A quadratura) | BTN_A (confirmar) |
+| **35** | 10kΩ externo | ENCODER_B (canal B quadratura) | BTN_B (cancelar)  |
+| **36** | 10kΩ externo | _(não usado)_ — livre como BTN extra | BTN_L (esquerda)  |
+| **39** | 10kΩ externo | ENCODER_BTN (click central)  | BTN_R (direita)   |
+
+### Porquê funciona sem conflito
+
+1. **Circuito idêntico** — Tanto os botões como os sensores ópticos (ITR8307) usam o mesmo esquema: pull-up 10kΩ a 3.3V, sinal active LOW. O encoder mecânico (EC11) também.
+2. **Mesmo footprint de resistência** — As 3 resistências pull-up (R nos GPIO 34, 35, 39) servem ambos os modos. Só a R do GPIO 36 é exclusiva do DevKit.
+3. **Seleção por firmware** — `#define INPUT_MODE 0` ou `1` em `board_config.h`. Sem alteração de hardware.
+4. **Sem curto-circuito possível** — Todos são input-only. Mesmo que ambos os componentes estivessem soldados (botão + sensor óptico no mesmo GPIO), o pior caso é leitura ambígua — não há dano.
+
+### PCB: Dois footprints, mesma net
+
+No KiCad, o mesmo net label (ex: `ENC_A` / `BTN_A` no GPIO 34) liga a:
+- Footprint do botão tátil (bottom layer)
+- Pads para o sensor ITR8307 (top layer, junto ao disco)
+
+O utilizador solda **um ou outro**. A resistência pull-up é partilhada.
+
+```
+              3.3V
+               │
+            R 10kΩ         ← Partilhada (1 resistência por GPIO)
+               │
+         ┌─────┼─────┐
+         │     │     │
+      [BTN]   [ITR]  ├── GPIO 34/35/39
+      (bottom) (top)  │
+         │     │     │
+        GND   GND    │
+                     ESP32
+```
+
+### GPIO 36 — Exclusivo DevKit
+
+O GPIO 36 não é usado pela click wheel (que só precisa de 3 pinos: A, B, BTN). No modo click wheel, o GPIO 36 fica disponível como botão auxiliar (ex: toggle OLED on/off, menu rápido).
+
+---
+
+## 9. Resumo
 
 Esta adição transforma a PCB existente num kit de desenvolvimento versátil:
 
-- **Custo:** ~$1.14 extra por placa
-- **Pinos usados:** 4 GPIOs (34, 35, 36, 39) — todos input-only, sem conflito
-- **I2C:** Partilhado com RTC, sem conflito de endereços
+- **Custo:** ~$1.14 extra por placa (botões) | ~$0.20 extra (click wheel, sensores hand-solder)
+- **Pinos usados:** 4 GPIOs (34, 35, 36, 39) — todos input-only
+- **Partilha:** 3 GPIOs (34, 35, 39) partilhados com click wheel — circuito idêntico, seleção por firmware
+- **I2C:** OLED partilhado com RTC, sem conflito de endereços (0x3C vs 0x68)
 - **Funcionalidade original:** 100% preservada
-- **GPIO 32:** Livre para expansão futura (output capaz)
+- **GPIO 32:** Livre para expansão futura (I2S DIN, sensor, output)
 
-O ecrã OLED permite debug visual, menus de configuração, e display de informações sem necessitar de Serial Monitor. Os 4 botões permitem navegação completa em menus, tornando o dispositivo autónomo para desenvolvimento.
+| Modo | Componentes soldados | Input |
+|------|---------------------|-------|
+| `INPUT_DEVKIT_BUTTONS` | 4 botões + OLED (bottom) | A, B, L, R — navegação tipo gamepad |
+| `INPUT_CLICK_WHEEL` | Encoder + OLED (top/bottom) | Rotação (brilho) + click (modo) + BTN_L extra |
+
+O ecrã OLED permite debug visual, menus de configuração, e display de informações sem necessitar de Serial Monitor. A mesma PCB serve como relógio circadiano (com click wheel) ou como dev board Arduino (com botões e ecrã).

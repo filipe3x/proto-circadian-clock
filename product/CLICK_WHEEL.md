@@ -56,6 +56,8 @@ Estratégia para $0 extra: hand-solder os ITR8307 (4 pads expostos de 1.5mm, sol
 > **Decisão final (v3):** GPIO 32 foi libertado para I2S DIN (MAX98357A).
 > Todos os pins do click wheel são agora **input-only** e precisam de **pullup externo 10kΩ a 3.3V**.
 > BOOT (GPIO0) mantém-se livre para flash/debug — o click do encoder assume mode change.
+>
+> **Partilha com DevKit Buttons:** Os GPIOs 34, 35 e 39 são partilhados com os botões A, B e R do DevKit (ver `DEVKIT_DISPLAY_BUTTONS.md`). O circuito elétrico é idêntico — mesmos pull-ups, mesmos pads. A seleção é feita por `#define INPUT_MODE` no firmware (`0` = click wheel, `1` = devkit buttons).
 
 ```c
 // ESP32 Dev Module — pins input-only, pullup externo 10kΩ a 3.3V
@@ -103,6 +105,8 @@ ENCODER_BTN_PIN = GPIO11
   #define ENCODER_BTN_PIN 39   // SENSOR_VN — click do encoder
 #endif
 
+// INPUT_MODE seleciona entre click wheel e devkit buttons (ver DEVKIT_DISPLAY_BUTTONS.md)
+// Estes defines são activados automaticamente quando INPUT_MODE == INPUT_CLICK_WHEEL (0)
 #define CLICK_WHEEL_ENABLED    1    // 1 = click wheel activa, 0 = só botão BOOT
 #define ENCODER_INVERT_DIR     0    // 1 = inverter CW/CCW
 #define BRIGHTNESS_STEP        10   // Incremento por tick do encoder
