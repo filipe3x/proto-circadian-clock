@@ -25,6 +25,71 @@ An ESP32-powered LED clock that simulates the natural solar light cycle to suppo
 
 ## Wiring
 
+### Pinout Absoluto ESP32 — Todos os GPIOs
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ESP32-WROOM-32E  PINOUT                      │
+├───────┬──────────────┬──────────┬───────────────────────────────┤
+│ GPIO  │ Função       │ Direção  │ Notas                        │
+├───────┼──────────────┼──────────┼───────────────────────────────┤
+│       │ ── HUB75 (Painel P10 RGB) ──                           │
+│  4    │ LAT          │ Output   │ Latch                        │
+│  5    │ C            │ Output   │ Row select bit 2             │
+│ 12    │ G2           │ Output   │ Green lower                  │
+│ 13    │ B2           │ Output   │ Blue lower                   │
+│ 14    │ R2           │ Output   │ Red lower                    │
+│ 15    │ OE           │ Output   │ Output Enable (active LOW)   │
+│ 16    │ CLK          │ Output   │ Pixel clock                  │
+│ 17    │ D            │ Output   │ Row select bit 3             │
+│ 19    │ B            │ Output   │ Row select bit 1             │
+│ 23    │ A            │ Output   │ Row select bit 0             │
+│ 25    │ R1           │ Output   │ Red upper                    │
+│ 26    │ G1           │ Output   │ Green upper                  │
+│ 27    │ B1           │ Output   │ Blue upper                   │
+├───────┼──────────────┼──────────┼───────────────────────────────┤
+│       │ ── I2C (RTC + OLED) ──                                 │
+│ 21    │ SDA          │ Bidi     │ DS3231 (0x68) + SSD1306 (0x3C) │
+│ 22    │ SCL          │ Bidi     │ Barramento partilhado        │
+├───────┼──────────────┼──────────┼───────────────────────────────┤
+│       │ ── Input (partilhado — ver INPUT_MODE) ──              │
+│ 34    │ ENC_A/BTN_A  │ Input    │ Pull-up 10kΩ ext. Encoder A ou Botão A │
+│ 35    │ ENC_B/BTN_B  │ Input    │ Pull-up 10kΩ ext. Encoder B ou Botão B │
+│ 36    │ BTN_L        │ Input    │ Pull-up 10kΩ ext. Exclusivo DevKit     │
+│ 39    │ ENC_BTN/BTN_R│ Input    │ Pull-up 10kΩ ext. Enc Click ou Botão R │
+├───────┼──────────────┼──────────┼───────────────────────────────┤
+│       │ ── Outros ──                                           │
+│  0    │ BOOT Button  │ Input    │ INPUT_PULLUP, modo cycle     │
+│  2    │ LED_BUILTIN  │ Output   │ LED azul onboard             │
+│ 18    │ BUZZER       │ Output   │ PWM → R 1kΩ → Q1 MMBT2222A  │
+│ 33    │ VBUS_SENSE   │ Input    │ ADC1_CH5, deteção 20V        │
+│  1    │ DEBUG TX     │ Output   │ UART0 TX (USB-UART)          │
+│  3    │ DEBUG RX     │ Input    │ UART0 RX (USB-UART)          │
+├───────┼──────────────┼──────────┼───────────────────────────────┤
+│       │ ── Não disponíveis ──                                  │
+│ 6-11  │ Flash SPI    │ —        │ Reservados internamente      │
+│ 20    │ Não exposto  │ —        │ Indisponível na maioria dos devkits │
+│ 24    │ Não existe   │ —        │ Não existe no ESP32          │
+│ 28-31 │ Não expostos │ —        │ Não expostos em devkits      │
+├───────┼──────────────┼──────────┼───────────────────────────────┤
+│       │ ── Livre ──                                            │
+│ 32    │ RESERVA      │ I/O      │ ADC1_CH4, touch — I2S DIN ou expansão │
+└───────┴──────────────┴──────────┴───────────────────────────────┘
+```
+
+**Total: 28 GPIOs utilizados, 1 livre (GPIO 32), 10 indisponíveis.**
+
+### Input Mode — GPIOs Partilhados
+
+Os GPIOs 34, 35 e 39 servem dois modos de input (mesmo circuito elétrico):
+
+```cpp
+#define INPUT_MODE 0  // Click Wheel — encoder óptico (brilho + modo)
+#define INPUT_MODE 1  // DevKit Buttons — 4 botões táteis (A/B/L/R)
+```
+
+Ver `DEVKIT_DISPLAY_BUTTONS.md` e `product/CLICK_WHEEL.md` para detalhes.
+
 ### ESP32 → P10 Panel (HUB75)
 
 ```
@@ -46,16 +111,19 @@ GPIO 16   →    CLK
 GND       →    GND
 ```
 
-### RTC DS3231 (Optional)
+### I2C — RTC DS3231 + OLED SSD1306 (barramento partilhado)
 
 ```
-ESP32          DS3231
-─────          ──────
-GPIO 21   →    SDA
-GPIO 22   →    SCL
-3.3V      →    VCC (NOT 5V!)
-GND       →    GND
+ESP32          DS3231 (0x68)     SSD1306 (0x3C)
+─────          ──────            ──────────────
+GPIO 21   →    SDA          →    SDA
+GPIO 22   →    SCL          →    SCL
+3.3V      →    VCC          →    VCC
+GND       →    GND          →    GND
 ```
+
+> **Nota:** O OLED (SSD1306) é opcional, montado no verso da PCB (modo DevKit).
+> Não conflitua com o RTC — endereços I2C diferentes.
 
 ### Button
 
