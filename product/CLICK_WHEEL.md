@@ -53,67 +53,79 @@ Estratégia para $0 extra: hand-solder os ITR8307 (4 pads expostos de 1.5mm, sol
 
 ## Pinout
 
+> **Decisão final (v3):** GPIO 32 foi libertado para I2S DIN (MAX98357A).
+> Todos os pins do click wheel são agora **input-only** e precisam de **pullup externo 10kΩ a 3.3V**.
+> BOOT (GPIO0) mantém-se livre para flash/debug — o click do encoder assume mode change.
+
 ```c
-// ESP32 Dev Module — ADC1, todos suportam interrupts
-ENCODER_A_PIN   = GPIO32   // Canal A (ADC1_CH4)
+// ESP32 Dev Module — pins input-only, pullup externo 10kΩ a 3.3V
+ENCODER_A_PIN   = GPIO34   // Canal A (input-only, interrupt ok)
 ENCODER_B_PIN   = GPIO35   // Canal B (input-only, interrupt ok)
-CENTER_BTN_PIN  = GPIO34   // Botão central (input-only, interrupt ok)
+ENCODER_BTN_PIN = GPIO39   // SENSOR_VN — click central do encoder
 
 // Matrix Portal S3 — GPIOs livres no conector de expansão
 ENCODER_A_PIN   = GPIO9
 ENCODER_B_PIN   = GPIO10
-CENTER_BTN_PIN  = GPIO11
+ENCODER_BTN_PIN = GPIO11
 ```
+
+### Evolução do pinout (histórico de decisões)
+
+| Versão | A | B | Click | Notas |
+|--------|---|---|-------|-------|
+| v1 | GPIO32 | GPIO35 | GPIO34 | Design inicial, GPIO32 com pullup interno |
+| v2 | GPIO34 | GPIO35 | _(BOOT)_ | Simplificado: BOOT como mode, GPIO32 livre para I2S |
+| v3 | GPIO34 | GPIO35 | GPIO39 | **Final:** click do encoder = mode, BOOT livre para flash |
 
 ---
 
-## Firmware
+## Firmware (TO DO — ainda não implementado)
 
-### board_config.h — defines a adicionar
+> O código abaixo é referência de design. Ainda **não foi aplicado** ao `clock.ino` / `board_config.h`.
+
+### TO DO 1: board_config.h — adicionar defines do click wheel
 
 ```c
 // ============================================================
-// CLICK WHEEL (Encoder Quadratura + Botão Central)
+// CLICK WHEEL (Encoder + Botão Central)
 // ============================================================
+// Rotação = brilho, click central = change mode
+// BOOT (GPIO0) mantém-se livre para flash/debug
+// Compatível com EC11 mecânico, Hall Effect ou óptico (ITR8307)
 #if BOARD_MATRIXPORTAL_S3
   #define ENCODER_A_PIN    9
   #define ENCODER_B_PIN   10
-  #define CENTER_BTN_PIN  11
+  #define ENCODER_BTN_PIN 11
 #else
-  #define ENCODER_A_PIN   32
+  // GPIO 34/35/39: input-only, precisam de pullup externo 10kΩ a 3.3V
+  #define ENCODER_A_PIN   34
   #define ENCODER_B_PIN   35
-  #define CENTER_BTN_PIN  34
+  #define ENCODER_BTN_PIN 39   // SENSOR_VN — click do encoder
 #endif
 
-#define ENCODER_TICKS_PER_CLICK   1
-#define BRIGHTNESS_STEP           10
-#define BRIGHTNESS_MIN            10
-#define CENTER_DEBOUNCE_MS        200
-#define ENCODER_INVERT_DIR        0    // 1 = inverter CW/CCW
+#define CLICK_WHEEL_ENABLED    1    // 1 = click wheel activa, 0 = só botão BOOT
+#define ENCODER_INVERT_DIR     0    // 1 = inverter CW/CCW
+#define BRIGHTNESS_STEP        10   // Incremento por tick do encoder
+#define BRIGHTNESS_MIN         10   // Brilho mínimo
+#define ENCODER_BTN_DEBOUNCE_MS 200 // Debounce do click central
 ```
 
-### clock.ino — variáveis globais
+### TO DO 2: clock.ino — variáveis globais e ISRs
 
 ```c
-volatile int  encoderTicks   = 0;
-volatile int  lastEncoderA   = HIGH;
-volatile bool centerBtnPressed  = false;
-volatile unsigned long centerBtnLastMs = 0;
-```
+// ============= CLICK WHEEL (Encoder + Botão Central) =============
+#if CLICK_WHEEL_ENABLED
+volatile int           encoderTicks      = 0;
+volatile int           lastEncoderA      = HIGH;
+volatile bool          encoderBtnPressed = false;
+volatile unsigned long encoderBtnLastMs  = 0;
 
-### ISR do encoder (quadratura 4×)
-
-```c
 void IRAM_ATTR encoderISR() {
   int a = digitalRead(ENCODER_A_PIN);
   int b = digitalRead(ENCODER_B_PIN);
   if (a != lastEncoderA) {
-    int dir;
-    if (a == HIGH) {
-      dir = (b == LOW)  ? +1 : -1;
-    } else {
-      dir = (b == HIGH) ? +1 : -1;
-    }
+    int dir = (a == HIGH) ? ((b == LOW) ? +1 : -1)
+                          : ((b == HIGH) ? +1 : -1);
     #if ENCODER_INVERT_DIR
       dir = -dir;
     #endif
@@ -121,41 +133,41 @@ void IRAM_ATTR encoderISR() {
     lastEncoderA = a;
   }
 }
+
+void IRAM_ATTR encoderBtnISR() {
+  unsigned long now = millis();
+  if ((now - encoderBtnLastMs) >= ENCODER_BTN_DEBOUNCE_MS) {
+    encoderBtnPressed = true;
+    encoderBtnLastMs  = now;
+  }
+}
+#endif
 ```
 
 Princípio: Canal A gera pulsos. Canal B está 90° desfasado. No flanco de A, o estado de B determina a direcção. Equivalente ao crankshaft position sensor — cada "dente" = 1 tick.
 
-### ISR do botão central (debounce em ISR)
-
-```c
-void IRAM_ATTR centerBtnISR() {
-  unsigned long now = millis();
-  if ((now - centerBtnLastMs) >= CENTER_DEBOUNCE_MS) {
-    centerBtnPressed = true;
-    centerBtnLastMs  = now;
-  }
-}
-```
-
-### Setup
+### TO DO 3: clock.ino — setupClickWheel()
 
 ```c
 void setupClickWheel() {
-  pinMode(ENCODER_A_PIN,  INPUT_PULLUP);
-  pinMode(ENCODER_B_PIN,  INPUT_PULLUP);
-  pinMode(CENTER_BTN_PIN, INPUT_PULLUP);
+  // GPIO 34/35/39 são input-only sem pullup interno — pullup externo 10kΩ a 3.3V
+  pinMode(ENCODER_A_PIN,   INPUT);
+  pinMode(ENCODER_B_PIN,   INPUT);
+  pinMode(ENCODER_BTN_PIN, INPUT);
 
   lastEncoderA = digitalRead(ENCODER_A_PIN);
 
-  attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN),  encoderISR,   CHANGE);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_B_PIN),  encoderISR,   CHANGE);
-  attachInterrupt(digitalPinToInterrupt(CENTER_BTN_PIN), centerBtnISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN),   encoderISR,    CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_B_PIN),   encoderISR,    CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_BTN_PIN), encoderBtnISR, FALLING);
+
+  Serial.println("[WHEEL] Click wheel configurada (encoder + click GPIO39)");
 }
 ```
 
 Chamar em `setup()`, após `attachInterrupt(BUTTON_PIN, ...)`.
 
-### Handler (chamar em loop)
+### TO DO 4: clock.ino — handleClickWheel()
 
 ```c
 void handleClickWheel() {
@@ -174,7 +186,7 @@ void handleClickWheel() {
       configBrightness = newBrightness;
       setSafeBrightness(configBrightness);
 
-      // Feedback visual: barra na linha inferior (verde → amber → laranja)
+      // Feedback visual: barra nas 2 linhas inferiores (verde → amber → laranja)
       int barWidth = map(configBrightness, BRIGHTNESS_MIN, MAX_BRIGHTNESS_CAP, 0, 32);
       uint16_t barColor;
       if (configBrightness < MAX_BRIGHTNESS_CAP / 2) {
@@ -186,21 +198,43 @@ void handleClickWheel() {
       }
       display->fillRect(0, 14, 32, 2, display->color565(0, 0, 0));
       display->fillRect(0, 14, barWidth, 2, barColor);
+
+      Serial.printf("[WHEEL] Brilho: %d/%d\n", configBrightness, MAX_BRIGHTNESS_CAP);
     }
   }
 
-  // --- Botão central: ciclar modo ---
-  if (centerBtnPressed) {
-    centerBtnPressed = false;
-    currentMode = (Mode)((currentMode + 1) % 3); // AUTO_SOLAR → THERAPY_RED → OFF
-    broadcastModeChange();
-    showModeFeedback(currentMode);
-    updateDisplay();
+  // --- Click central: change mode (reutiliza handleButton via flag) ---
+  if (encoderBtnPressed) {
+    encoderBtnPressed = false;
+    buttonPressed = true;  // Dispara handleButton() no próximo ciclo
   }
 }
 ```
 
 Chamar em `loop()`, após `handleButton()`.
+
+### TO DO 5: clock.ino — forward declarations e integração
+
+Adicionar forward declarations:
+```c
+#if CLICK_WHEEL_ENABLED
+void setupClickWheel();
+void handleClickWheel();
+#endif
+```
+
+Integrar no `setup()` e `loop()`:
+```c
+// Em setup(), após attachInterrupt(BUTTON_PIN, ...):
+#if CLICK_WHEEL_ENABLED
+  setupClickWheel();
+#endif
+
+// Em loop(), após handleButton():
+#if CLICK_WHEEL_ENABLED
+  handleClickWheel();
+#endif
+```
 
 ---
 
