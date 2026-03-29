@@ -125,14 +125,15 @@ GPIO 32 → Livre (I2S DIN / expansão futura)
 | R×3 | 10kΩ 0603 | 3 | C25804 | Basic | Pull-up GPIO 34/35/39 |
 | Y1 | Crystal 32.768kHz | 1 | — | — | Se RTC externo |
 
-**Modo DevKit (`INPUT_MODE=1`) — bottom side, hand solder:**
+**Modo DevKit (`INPUT_MODE=1`) — bottom side:**
 
-| Ref | Componente | Qtd | JLCPCB | Tipo | Preço |
+| Ref | Componente | Qtd | JLCPCB | Tipo | Notas |
 |-----|-----------|-----|--------|------|-------|
+| R_L | 10kΩ 0603 (pull-up BTN_L) | 1 | C25804 | Basic | SMD assembly |
+| PAD×4 | Contact pads cobre exposto | 4 | — (Gerbers) | — | Sem componente — pads na PCB |
 | OLED1 | SSD1306 0.96" 128×64 I2C | 1 | Módulo hand solder | — | ~$1.00 |
-| SW×4 | Botão tátil 6×6mm THT | 4 | C136662 | Basic | ~$0.02/un |
-| R_L | 10kΩ 0603 (pull-up BTN_L) | 1 | C25804 | Basic | ~$0.002 |
-| J_OLED | Header fêmea 1×4 2.54mm | 1 | C124413 | Basic | ~$0.05 |
+| J_OLED | Header fêmea 1×4 2.54mm | 1 | C124413 | Basic | Hand solder |
+| DOME×4 | Rubber dome c/ carbon pill | 4 | AliExpress | — | ~$0.01/un |
 
 **Modo Click Wheel (`INPUT_MODE=0`) — top side, hand solder:**
 

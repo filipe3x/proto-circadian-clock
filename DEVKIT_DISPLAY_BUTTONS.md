@@ -5,9 +5,9 @@
 Transformar a PCB do Proto Circadian Clock num **kit de desenvolvimento Arduino** adicionando no lado oposto (bottom side):
 
 - **1x Ecrã OLED monocromático** (I2C, partilha SDA/SCL com o RTC DS3231)
-- **4x Botões táteis** (A, B, L, R) para navegação/menus
+- **4x Copper contact pads** (A, B, L, R) com borrachas condutivas — estilo gamepad, perfil baixo, ideal para case 3D printed
 
-Tudo hand-soldered, sem alterar o circuito existente do lado top.
+OLED hand-soldered via header. Botões sem componentes a soldar — pads de cobre expostos na PCB + rubber domes (borracha condutiva) pressionados pelo case 3D printed.
 
 > **Compatibilidade com Click Wheel:** Os botões A, B e R partilham os mesmos GPIOs (34, 35, 39) que o encoder óptico documentado em `product/CLICK_WHEEL.md`. Isto é **intencional** — o circuito elétrico é idêntico (input-only + pull-up externo 10kΩ a 3.3V + active LOW). Na PCB, os mesmos pads servem para ambas as configurações. Uma flag de compilação (`INPUT_MODE`) seleciona o firmware adequado. Ver [secção 8](#8-partilha-de-pinos-com-click-wheel) para detalhes.
 
@@ -88,7 +88,32 @@ GND ─────────────────── GND   ┘
 
 ---
 
-## 3. Botões — 4x Táteis (A, B, L, R)
+## 3. Botões — 4x Copper Contact Pads + Rubber Domes (A, B, L, R)
+
+### Conceito
+
+Em vez de tactile switches soldados, cada botão é um par de **pads de cobre expostos** (sem solder mask) na PCB. Uma **borracha condutiva (rubber dome com carbon pill)** faz ponte entre os dois pads quando pressionada. É o mesmo princípio usado em comandos de TV, GameBoy, e calculadoras.
+
+```
+   Case 3D printed
+   ┌─────────────────┐
+   │   ┌────────┐    │  ← Botão moldado no case (guiado, solto)
+   │   │  cap   │    │
+   └───┤        ├────┘
+       └───┬────┘
+       ┌───▼────┐
+       │ RUBBER │        ← Dome de borracha condutiva (carbon pill na base)
+       │  DOME  │
+   ────┤●  gap ●├─── PCB (bottom side)
+       pad1   pad2       ← Dois pads cobre expostos, sem solder mask
+```
+
+**Vantagens para case 3D printed:**
+- Perfil ultra-baixo (~1-2mm vs ~9.5mm de um tactile switch)
+- Sem componentes a soldar nos botões — só as resistências pull-up
+- Feel customizável pela dureza/forma da borracha
+- Silencioso (sem click mecânico)
+- O case 3D imprime os botões integrados ou como peças soltas guiadas
 
 ### Atribuição de Pinos
 
@@ -108,46 +133,53 @@ GND ─────────────────── GND   ┘
 ```
 3.3V ─── R (10kΩ) ──┬── GPIO 34/35/36/39
                      │
-                   [BTN]
+                   pad 1 ┐
+                          ├── rubber dome (ponte condutiva quando premido)
+                   pad 2 ┘
                      │
                     GND
 ```
 
-**Importante:** GPIO 34-39 **não têm pull-up interno**, portanto as resistências de 10kΩ são obrigatórias. Sem elas, o pino flutua quando o botão não está premido.
+- **Repouso:** Pull-up mantém GPIO HIGH (3.3V). Os pads não se tocam.
+- **Premido:** Carbon pill na base do rubber dome faz ponte pad1↔pad2 → GPIO puxa para GND → lê LOW.
+
+**Importante:** GPIO 34-39 **não têm pull-up interno**, portanto as resistências de 10kΩ são obrigatórias. Sem elas, o pino flutua quando o contacto está aberto.
 
 ### Debounce
 
-Recomendação: debounce por software (20-50ms) no firmware. Opcional: condensador cerâmico de 100nF em paralelo com cada botão para debounce por hardware.
+Rubber domes têm transição mais suave que switches mecânicos — menos bounce. Debounce por software (20-50ms) no firmware é suficiente. Não são necessários condensadores.
 
 ---
 
 ## 4. BOM (Bill of Materials)
 
-### Componentes Obrigatórios
+### Componentes na PCB (assembly JLCPCB)
 
-| # | Componente | Quantidade | JLCPCB Part | Tipo | Preço Est. |
-|---|-----------|------------|-------------|------|------------|
-| 1 | OLED 0.96" 128×64 SSD1306 I2C | 1 | Módulo — hand solder | N/A | ~$1.00 |
-| 2 | Botão tátil 6×6mm THT | 4 | C136662 (TS-1187A) | Basic | ~$0.02/un |
-| 3 | Resistência 10kΩ 0402/0603 | 4 | C25744 (0402) ou C25804 (0603) | Basic | ~$0.002/un |
-| 4 | Header fêmea 1×4 2.54mm | 1 | C124413 | Basic | ~$0.05 |
+| # | Componente | Qtd | JLCPCB Part | Tipo | Notas |
+|---|-----------|-----|-------------|------|-------|
+| 1 | Resistência 10kΩ 0603 | 4 | C25804 | Basic | Pull-up para GPIO 34/35/36/39 |
 
-### Componentes Opcionais
+> **Nota:** Os contact pads dos botões são apenas cobre exposto na PCB — não há componente a montar. A JLCPCB fabrica os pads automaticamente ao produzir a PCB (são áreas sem solder mask definidas nos Gerbers).
 
-| # | Componente | Quantidade | JLCPCB Part | Notas |
-|---|-----------|------------|-------------|-------|
-| 5 | Condensador 100nF 0402 | 4 | C1525 | Debounce HW (opcional) |
-| 6 | Header macho 1×4 2.54mm | 1 | C124378 | Alternativa a soldar direto |
+### Componentes hand-solder (comprados à parte)
+
+| # | Componente | Qtd | Fonte | Preço Est. |
+|---|-----------|-----|-------|------------|
+| 2 | OLED 0.96" 128×64 SSD1306 I2C | 1 | AliExpress / LCSC | ~$1.00 |
+| 3 | Header fêmea 1×4 2.54mm | 1 | C124413 (JLCPCB) ou AliExpress | ~$0.05 |
+| 4 | Rubber dome pads 6-8mm (com carbon pill) | 4 | AliExpress "conductive rubber dome button" | ~$0.50/pack 50un |
 
 ### Custo Estimado por Placa
 
-| Item           | Custo   |
-|----------------|---------|
-| OLED SSD1306   | ~$1.00  |
-| 4× Botões      | ~$0.08  |
-| 4× Resistências| ~$0.01  |
-| Header         | ~$0.05  |
-| **Total**      | **~$1.14** |
+| Item              | Custo   |
+|-------------------|---------|
+| 4× Resistências   | ~$0.01  |
+| OLED SSD1306      | ~$1.00  |
+| Header 1×4        | ~$0.05  |
+| 4× Rubber domes   | ~$0.04  |
+| **Total**         | **~$1.10** |
+
+> Sem tactile switches. Sem condensadores de debounce. O custo de "botões" é essencialmente $0 na PCB — só os rubber domes comprados à parte (~$0.01/unidade em packs).
 
 ---
 
@@ -177,71 +209,199 @@ Recomendação: debounce por software (20-50ms) no firmware. Opcional: condensad
      BTN_R → GPIO39 (via R pull-up a 3V3)
    ```
 
-### 5.2 Footprints
+### 5.2 Footprints e Estratégia Bottom Side
 
-**Para o OLED (módulo com header):**
-- Usar footprint `PinHeader_1x04_P2.54mm_Vertical` (GND, VCC, SCL, SDA)
-- Colocar no bottom layer (B.Cu, B.Fab, B.Silk)
+#### Footprints a usar
 
-**Para os botões:**
-- Footprint: `SW_Push_1P1T_NO_6x6mm_H9.5mm` (THT, 4 pads)
-- Colocar no bottom layer
+| Componente | Footprint KiCad | Library | Notas |
+|-----------|----------------|---------|-------|
+| Header OLED 1×4 | `Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical` | Built-in | THT, furos ø1.0mm |
+| Contact pad (botão) | **Custom** — criar no Footprint Editor | — | 2 pads SMD expostos por botão |
+| Resistência pull-up | `Resistor_SMD:R_0603_1608Metric_Pad0.98x0.95mm_HandSolder` | Built-in | SMD no bottom layer |
 
-**Para as resistências:**
-- Footprint: `R_0603_1608Metric` (hand solder friendly)
-- Colocar no bottom layer junto aos botões
+> O header OLED é THT — os furos atravessam a PCB e fazem de via automática entre F.Cu e B.Cu.
+> Os contact pads e resistências são SMD no B.Cu (bottom).
 
-**Importar footprints em falta:**
-```bash
-# Botão tátil TS-1187A (se não existir no KiCad)
-python3 -m easyeda2kicad --symbol --footprint --3d --lcsc_id=C136662
+#### Criar o footprint custom do contact pad
 
-# Resistência 0603 (já incluída no KiCad por defeito)
-# Header 1x4 (já incluído no KiCad por defeito)
+Não existe um footprint standard no KiCad para rubber dome pads. É fácil criar:
+
+**Footprint Editor → File → New Footprint → nome: `ContactPad_RubberDome_8mm`**
+
+1. **Pad 1** (sinal — GPIO):
+   - Type: SMD
+   - Shape: Roundrect (cantos arredondados)
+   - Size: 3mm × 4mm
+   - Layer: `B.Cu`
+   - Net: GPIO (34/35/36/39)
+   - Solder Mask: expandir 0.1mm (expõe o cobre — **essencial**)
+
+2. **Pad 2** (GND):
+   - Type: SMD
+   - Shape: Roundrect
+   - Size: 3mm × 4mm
+   - Layer: `B.Cu`
+   - Net: GND
+   - Solder Mask: expandir 0.1mm
+
+3. **Gap entre pads:** ~1mm (centro a centro: 4mm)
+
+4. **Contornos:**
+   - `B.CrtYd`: retângulo 8mm × 6mm (courtyard)
+   - `B.SilkS`: label do botão (ex: "A", "B", "L", "R")
+   - `B.Fab`: contorno do rubber dome (referência, ø8mm)
+
 ```
+  Footprint (visto de baixo — B.Cu):
+  ┌─────────────────────────┐
+  │                         │  B.CrtYd (8×6mm)
+  │   ┌───────┐ ┌───────┐  │
+  │   │       │ │       │  │
+  │   │ pad 1 │ │ pad 2 │  │  ← Cobre exposto (sem solder mask)
+  │   │ GPIO  │ │  GND  │  │    3mm × 4mm cada, gap 1mm
+  │   │       │ │       │  │
+  │   └───────┘ └───────┘  │
+  │         "A"             │  B.SilkS
+  └─────────────────────────┘
+```
+
+> **Solder mask override** é o passo crítico. Sem ele, a máscara verde cobre os pads e o rubber dome não faz contacto com o cobre. No KiCad: Pad Properties → Solder Mask Override → `0.1` (mm).
+
+#### Colocar footprints no bottom layer no KiCad
+
+1. **Tools → Update PCB from Schematic** para importar os novos componentes
+2. Os footprints aparecem no top layer por defeito
+3. Selecionar o componente no PCB editor
+4. Premir **`F`** (atalho para Flip) — o componente passa para B.Cu
+5. Verificar: o componente aparece **espelhado** e em **azul** (cor do B.Cu)
+
+O que acontece ao fazer Flip:
+- **Silk screen** → B.SilkS (impresso no verso)
+- **Courtyard** → B.CrtYd
+- **Pads SMD** → B.Cu (bottom copper)
+- **Pads THT** (header OLED) → mantêm furos em ambos os layers
+
+#### Resistências SMD no bottom
+
+As resistências 0603 ficam no B.Cu junto aos contact pads. Ao fazer Flip:
+- Pads em B.Cu, silk em B.SilkS
+- Traces roteados em B.Cu ligando: 3.3V → R pull-up → pad 1 (GPIO) do contact pad
+- Via para ligar ao GPIO do ESP32 no top layer
 
 ### 5.3 PCB Layout (Bottom Side)
 
 ```
-┌──────────────────────────────────┐
-│          BOTTOM SIDE             │
-│                                  │
-│   [L]                    [R]     │  ← Botões esquerda/direita
-│                                  │
-│         ┌──────────┐             │
-│         │  OLED    │             │
-│         │ 128×64   │             │
-│         │ 0.96"    │             │
-│         └──────────┘             │
-│                                  │
-│   [B]                    [A]     │  ← Botões B (cancel) / A (confirm)
-│                                  │
-└──────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│              BOTTOM SIDE                 │
+│          (visto de baixo)                │
+│                                          │
+│  R_L ─(L)                     (R)─ R_R  │  ← Contact pads + resistências
+│                                          │
+│           ┌──────────────┐               │
+│           │    OLED      │               │
+│           │   128×64     │               │
+│           │   0.96"      │               │
+│           │  [GND VCC    │               │
+│           │   SCL SDA]   │               │  ← Header 1×4 THT
+│           └──────────────┘               │
+│                                          │
+│  R_B ─(B)                     (A)─ R_A  │  ← Contact pads + resistências
+│                                          │
+└──────────────────────────────────────────┘
+
+Legenda:
+  (X)  = Contact pad (2 pads cobre expostos, ø~8mm total)
+  R_X  = Resistência 10kΩ 0603 SMD (B.Cu)
+  Tudo em B.Cu — perfil ~0mm (flush com a PCB)
 ```
 
-**Dicas de layout:**
-- Manter OLED centrado no bottom
-- Botões L/R nas extremidades horizontais (layout tipo gamepad)
-- Botões A/B abaixo do ecrã
-- Resistências pull-up junto aos pads dos botões (minimizar trace length)
-- Traces: 0.25mm para sinais, 0.5mm para alimentação
-- Vias para ligar ao barramento I2C e GPIOs do top layer
+#### Routing Strategy
+
+Todos os componentes dos botões são SMD no bottom — routing inteiro em B.Cu:
+
+```
+    F.Cu (top layer)
+    ┌─────────────────────────────────┐
+    │  ESP32 GPIO34 ──┐               │
+    │  3.3V ──────────┼──┐            │
+    └─────────────────┼──┼────────────┘
+                    [via][via]          ← Vias top→bottom
+    ┌─────────────────┼──┼────────────┐
+    │                 ▼  ▼            │
+    │           ┌─[R 10k]─┐          │
+    │           │          │          │
+    │           ▼          │          │   B.Cu (bottom layer)
+    │     ┌──────────┐     │          │
+    │     │●pad1  pad2●│────┘          │
+    │     │  GPIO   GND│              │   ← Contact pads (cobre exposto)
+    │     └──────────┘                │
+    │                                 │
+    └─────────────────────────────────┘
+```
+
+Vantagem: routing dos botões **não interfere** com os traces HUB75 do top layer.
 
 ### 5.4 Passos no KiCad (Step-by-Step)
 
-1. **Abrir esquemático** → Add Symbol → Colocar `SW_Push` ×4 e `R` ×4
-2. **Ligar** cada botão: 3V3 → R(10k) → junction → GPIO + BTN → GND
-3. **Colocar** símbolo OLED (ou connector 1×4) → ligar a SDA, SCL, 3V3, GND
-4. **Anotar** esquemático (Tools → Annotate Schematic)
-5. **Gerar netlist** e abrir PCB editor
-6. **Update PCB** from schematic (Tools → Update PCB)
-7. **Mover footprints** para o bottom layer:
-   - Selecionar componente → Propriedades → Layer: `B.Cu`
-   - Ou: Right-click → Flip (atalho: `F`)
-8. **Posicionar** conforme layout acima
-9. **Rotear traces** no bottom layer (B.Cu)
-10. **Adicionar vias** onde necessário para ligar a nets do top layer
-11. **DRC** (Design Rules Check) antes de gerar Gerbers
+**Passo 1 — Criar o footprint custom (uma vez):**
+
+1. **Footprint Editor → File → New Footprint**
+2. Nome: `ContactPad_RubberDome_8mm`
+3. **Add Pad** (pad 1):
+   - Number: `1`, Type: `SMD`, Shape: `Roundrect`
+   - Size X: `3`, Size Y: `4`, Layer: `B.Cu`
+   - Pad Properties → Solder Mask Expansion (override): `0.1` mm
+4. **Add Pad** (pad 2):
+   - Number: `2`, Type: `SMD`, Shape: `Roundrect`
+   - Size X: `3`, Size Y: `4`, Layer: `B.Cu`
+   - Position X: `4` (offset 4mm do pad 1 → gap de 1mm)
+   - Solder Mask Expansion (override): `0.1` mm
+5. Adicionar contorno em `B.CrtYd` (8mm × 6mm)
+6. Adicionar label em `B.SilkS` (referência: `%R`)
+7. **File → Save** na library local do projeto
+
+**Passo 2 — Esquemático:**
+
+1. **Place → Add Symbol** → `SW_Push` → colocar 4 instâncias (representam o contacto)
+2. **Place → Add Symbol** → `R` → colocar 4 instâncias (10kΩ)
+3. **Place → Add Symbol** → `Conn_01x04` → colocar 1 (header OLED)
+4. **Ligar** cada botão:
+   ```
+   3V3 ── R(10k) ──┬── net BTN_x (→ GPIO)
+                    │
+                  [SW]     ← Símbolo SW_Push (representa rubber dome)
+                    │
+                   GND
+   ```
+5. **Ligar** connector OLED: pin 1 → GND, pin 2 → 3V3, pin 3 → SCL, pin 4 → SDA
+6. **Anotar** (Tools → Annotate Schematic)
+7. **Atribuir footprints** (Tools → Assign Footprints):
+   - SW1-SW4 → `ContactPad_RubberDome_8mm` (custom)
+   - R → `R_0603_1608Metric_Pad0.98x0.95mm_HandSolder`
+   - J_OLED → `PinHeader_1x04_P2.54mm_Vertical`
+
+**Passo 3 — PCB:**
+
+8. **Tools → Update PCB from Schematic** — componentes aparecem agrupados
+9. **Selecionar todos os novos componentes** (contact pads + resistências + header)
+10. **Premir `F`** para fazer Flip para o bottom layer
+    - Contact pads e resistências: ficam em B.Cu (azul)
+    - Header OLED (THT): furos visíveis em ambos os lados, silk em B.SilkS
+11. **Posicionar** conforme layout da secção 5.3:
+    - Header OLED centrado
+    - Contact pads L/R nas laterais, A/B em baixo
+    - Resistências junto ao contact pad de cada botão
+12. **Rotear traces** (tecla `X`):
+    - Selecionar layer B.Cu antes de começar
+    - Traçar: via do GPIO (top→bottom) → R pull-up → pad 1 do contact pad
+    - Traçar: pad 2 do contact pad → GND
+    - Tecla `V` durante routing para adicionar via se necessário
+13. **Adicionar plano GND no bottom** (se não existir): Place → Zone → B.Cu → net GND
+14. **DRC** (Inspect → Design Rules Check) antes de gerar Gerbers
+15. **3D Viewer** (View → 3D Viewer) — verificar:
+    - Contact pads e OLED no verso (bottom)
+    - Pads de cobre visíveis (cor cobre, sem máscara verde)
+    - ESP32 e HUB75 no top
 
 ---
 
@@ -375,11 +535,34 @@ Os endereços não conflituam. O barramento I2C suporta múltiplos dispositivos 
 
 Negligível comparado com o painel P10 (~2-5A).
 
-### Mecânica
+### Mecânica e Case 3D Printed
 
-- O OLED de 0.96" (27×27mm) cabe confortavelmente no verso de uma PCB para painel P10
-- Os botões 6×6mm THT são robustos para hand soldering
-- Altura total adicional no verso: ~10mm (OLED) + ~9.5mm (botões) — verificar clearance com o painel
+- O OLED de 0.96" (27×27mm) cabe no verso de uma PCB para painel P10
+- **Contact pads são flush com a PCB** — perfil ~0mm (só o cobre)
+- **Rubber domes** adicionam ~1-2mm de altura — muito menos que tactile switches (~9.5mm)
+- Altura total no verso: ~10mm (OLED com header) + ~2mm (rubber domes)
+- O **case 3D printed** deve ter:
+  - Cavidade para o OLED (recesso ~11mm de profundidade)
+  - Botões moldados ou peças soltas que pressionam os rubber domes
+  - Guias para alinhar os rubber domes com os contact pads
+
+```
+Case 3D (corte lateral):
+
+   ┌────────────┐
+   │  Botão cap │ ← Peça solta no case, guiada por paredes
+   └─────┬──────┘
+         │
+   ┌─────▼──────┐
+   │ Rubber dome│ ← Assente sobre os contact pads
+   └────────────┘
+   ═══●══gap══●═══ ← PCB bottom (pads cobre expostos)
+   ════════════════ ← PCB top
+   ┌────────────┐
+   │  ESP32 /   │ ← Componentes top side
+   │  HUB75     │
+   └────────────┘
+```
 
 ### Riscos e Mitigações
 
@@ -388,7 +571,8 @@ Negligível comparado com o painel P10 (~2-5A).
 | Pull-ups duplos (RTC + OLED módulo) | Valor efetivo ~2.35kΩ, OK para I2C 400kHz |
 | GPIO 36/39 glitch (errata ESP32) | Resolvido em rev. 3 do ESP32; adicionar 100nF |
 | OLED interfere com refresh do P10 | I2C opera a 400kHz, P10 usa HUB75 paralelo — sem interferência |
-| Altura dos botões no verso | Usar botões de 4.5mm de altura se necessário |
+| Rubber dome desalinhado | Case 3D deve ter guias de posicionamento para os domes |
+| Oxidação dos contact pads | Aplicar ENIG (gold) ou HASL nos pads; solder mask override garante cobre exposto |
 
 ---
 
@@ -413,10 +597,10 @@ Negligível comparado com o painel P10 (~2-5A).
 ### PCB: Dois footprints, mesma net
 
 No KiCad, o mesmo net label (ex: `ENC_A` / `BTN_A` no GPIO 34) liga a:
-- Footprint do botão tátil (bottom layer)
+- Contact pad do rubber dome (bottom layer, cobre exposto)
 - Pads para o sensor ITR8307 (top layer, junto ao disco)
 
-O utilizador solda **um ou outro**. A resistência pull-up é partilhada.
+O utilizador coloca rubber dome **ou** sensor óptico. A resistência pull-up é partilhada.
 
 ```
               3.3V
@@ -425,7 +609,7 @@ O utilizador solda **um ou outro**. A resistência pull-up é partilhada.
                │
          ┌─────┼─────┐
          │     │     │
-      [BTN]   [ITR]  ├── GPIO 34/35/39
+      [DOME]  [ITR]  ├── GPIO 34/35/39
       (bottom) (top)  │
          │     │     │
         GND   GND    │
@@ -449,9 +633,9 @@ Esta adição transforma a PCB existente num kit de desenvolvimento versátil:
 - **Funcionalidade original:** 100% preservada
 - **GPIO 32:** Livre para expansão futura (I2S DIN, sensor, output)
 
-| Modo | Componentes soldados | Input |
-|------|---------------------|-------|
-| `INPUT_DEVKIT_BUTTONS` | 4 botões + OLED (bottom) | A, B, L, R — navegação tipo gamepad |
-| `INPUT_CLICK_WHEEL` | Encoder + OLED (top/bottom) | Rotação (brilho) + click (modo) + BTN_L extra |
+| Modo | Componentes | Input |
+|------|-------------|-------|
+| `INPUT_DEVKIT_BUTTONS` | OLED (header hand-solder) + 4 rubber domes sobre contact pads (bottom) | A, B, L, R — navegação tipo gamepad |
+| `INPUT_CLICK_WHEEL` | Encoder óptico (top, hand-solder) + OLED (bottom) | Rotação (brilho) + click (modo) + BTN_L extra |
 
-O ecrã OLED permite debug visual, menus de configuração, e display de informações sem necessitar de Serial Monitor. A mesma PCB serve como relógio circadiano (com click wheel) ou como dev board Arduino (com botões e ecrã).
+O ecrã OLED permite debug visual, menus de configuração, e display de informações sem necessitar de Serial Monitor. A mesma PCB serve como relógio circadiano (com click wheel) ou como dev board Arduino (com contact pads + rubber domes e ecrã), com case 3D printed.
