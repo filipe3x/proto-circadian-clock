@@ -26,18 +26,18 @@ Uma única PCB com dupla função:
 Os GPIOs 34, 35 e 39 são partilhados entre dois modos de input, selecionados por flag de compilação:
 
 ```cpp
-#define INPUT_MODE 0  // INPUT_CLICK_WHEEL  — encoder óptico (brilho + modo)
+#define INPUT_MODE 0  // INPUT_CLICK_WHEEL  — encoder magnético AS5600 (brilho + modo)
 #define INPUT_MODE 1  // INPUT_DEVKIT_BUTTONS — 4 botões táteis (A/B/L/R)
 ```
 
 | GPIO | `INPUT_CLICK_WHEEL` (0) | `INPUT_DEVKIT_BUTTONS` (1) |
 |------|-------------------------|----------------------------|
-| 34   | ENCODER_A               | BTN_A (confirmar)          |
-| 35   | ENCODER_B               | BTN_B (cancelar)           |
+| 34   | _(livre — analog backup AS5600)_ | BTN_A (confirmar) |
+| 35   | _(livre)_               | BTN_B (cancelar)           |
 | 36   | _(livre — btn extra)_   | BTN_L (esquerda)           |
 | 39   | ENCODER_BTN (click)     | BTN_R (direita)            |
 
-Circuito elétrico idêntico (pull-up 10kΩ + active LOW) — mesmos pads, mesmas resistências. Ver `DEVKIT_DISPLAY_BUTTONS.md` e `product/CLICK_WHEEL.md`.
+O AS5600 usa I2C (0x36) no barramento existente — não consome GPIOs 34/35. Apenas o GPIO 39 é partilhado (botão central). Ver `DEVKIT_DISPLAY_BUTTONS.md` e `product/CLICK_WHEEL.md`.
 
 ## Tech Stack
 
@@ -45,7 +45,7 @@ Circuito elétrico idêntico (pull-up 10kΩ + active LOW) — mesmos pads, mesma
 - **Display (produto):** P10 32×16 RGB LED panel (HUB75 interface, 1/4 scan)
 - **Display (devkit):** SSD1306 0.96" 128×64 OLED (I2C, endereço 0x3C)
 - **RTC:** DS3231 (optional, I2C, endereço 0x68)
-- **Input:** Click wheel óptico OU 4 botões táteis (seleção por `INPUT_MODE`)
+- **Input:** Click wheel magnético (AS5600 I2C) OU 4 botões táteis (seleção por `INPUT_MODE`)
 - **Audio:** Buzzer piezo passivo (GPIO 18, via MMBT2222A)
 - **Language:** C++ (Arduino)
 
@@ -57,7 +57,7 @@ Circuito elétrico idêntico (pull-up 10kΩ + active LOW) — mesmos pads, mesma
 - `sound.h/.cpp` - Engine de áudio chiptune
 - `captive_portal.h/.cpp` - Portal WiFi para configuração
 - `DEVKIT_DISPLAY_BUTTONS.md` - Design do ecrã OLED + botões (bottom side)
-- `product/CLICK_WHEEL.md` - Design do encoder óptico iPod-style
+- `product/CLICK_WHEEL.md` - Design do encoder magnético AS5600 iPod-style
 
 ## Dependencies
 
@@ -89,13 +89,13 @@ GPIO 14 → R2           GPIO 25 → R1
 GPIO 15 → OE           GPIO 26 → G1
                         GPIO 27 → B1
 
-── I2C (RTC + OLED) ────────────────────
-GPIO 21 → SDA (DS3231 @ 0x68, SSD1306 @ 0x3C)
+── I2C (RTC + OLED + Encoder) ──────────
+GPIO 21 → SDA (DS3231 @ 0x68, SSD1306 @ 0x3C, AS5600 @ 0x36)
 GPIO 22 → SCL
 
 ── Input (partilhado — ver INPUT_MODE) ─
-GPIO 34 → ENCODER_A / BTN_A  (pull-up 10kΩ externo)
-GPIO 35 → ENCODER_B / BTN_B  (pull-up 10kΩ externo)
+GPIO 34 → BTN_A / AS5600 OUT backup (pull-up 10kΩ externo)
+GPIO 35 → BTN_B              (pull-up 10kΩ externo)
 GPIO 36 → BTN_L              (pull-up 10kΩ externo, exclusivo devkit)
 GPIO 39 → ENCODER_BTN / BTN_R (pull-up 10kΩ externo)
 
@@ -135,15 +135,15 @@ GPIO 32 → Livre (I2S DIN / expansão futura)
 | J_OLED | Header fêmea 1×4 2.54mm | 1 | C124413 | Basic | Hand solder |
 | DOME×4 | Rubber dome c/ carbon pill | 4 | AliExpress | — | ~$0.01/un |
 
-**Modo Click Wheel (`INPUT_MODE=0`) — top side, hand solder:**
+**Modo Click Wheel (`INPUT_MODE=0`) — AS5600 magnético:**
 
 | Ref | Componente | Qtd | JLCPCB | Tipo | Preço |
 |-----|-----------|-----|--------|------|-------|
-| IR×2 | ITR8307 (sensor óptico) | 2 | C7474 | Extended | ~$0.10/un |
-| R_IR×2 | 100Ω 0402 (LED IR) | 2 | — | Basic | ~$0.002/un |
-| DISC | Disco óptico 96 slots | 1 | Custom/3D print | — | — |
+| U_ENC | AS5600-ASOM (encoder magnético) | 1 | C183784 | Extended | ~$1.20 |
+| C_ENC | 100nF 0402 (decoupling) | 1 | C307331 | Basic | ~$0.002 |
+| MAG1 | Íman 6×2.5mm diametric NdFeB | 1 | Hand place (AliExpress) | — | ~$0.10 |
 
-> **Nota:** As 3 resistências pull-up (GPIO 34/35/39) são partilhadas — presentes na base, servem ambos os modos. Apenas a R do GPIO 36 (BTN_L) é exclusiva do modo DevKit.
+> **Nota:** O AS5600 usa o barramento I2C existente (0x36) — não consome GPIOs extra. Apenas o GPIO 39 (botão central) é partilhado com BTN_R do DevKit. A R do GPIO 36 (BTN_L) é exclusiva do modo DevKit.
 
 ## Architecture
 
