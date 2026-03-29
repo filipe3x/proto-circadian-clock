@@ -177,71 +177,168 @@ Recomendação: debounce por software (20-50ms) no firmware. Opcional: condensad
      BTN_R → GPIO39 (via R pull-up a 3V3)
    ```
 
-### 5.2 Footprints
+### 5.2 Footprints e Estratégia Bottom Side
 
-**Para o OLED (módulo com header):**
-- Usar footprint `PinHeader_1x04_P2.54mm_Vertical` (GND, VCC, SCL, SDA)
-- Colocar no bottom layer (B.Cu, B.Fab, B.Silk)
+#### Princípio: THT atravessa a PCB
 
-**Para os botões:**
-- Footprint: `SW_Push_1P1T_NO_6x6mm_H9.5mm` (THT, 4 pads)
-- Colocar no bottom layer
+Componentes through-hole (THT) criam **furos que atravessam a PCB inteira**. O pad fica visível em ambos os lados (F.Cu e B.Cu). Isto significa que:
 
-**Para as resistências:**
-- Footprint: `R_0603_1608Metric` (hand solder friendly)
-- Colocar no bottom layer junto aos botões
+- Os traces podem ser roteados no **top layer (F.Cu)** normalmente
+- Os componentes são soldados no **bottom (B.Cu)** — inseridos por baixo, solda por baixo
+- **Não são necessárias vias extra** — o próprio furo THT já é a via
 
-**Importar footprints em falta:**
-```bash
-# Botão tátil TS-1187A (se não existir no KiCad)
-python3 -m easyeda2kicad --symbol --footprint --3d --lcsc_id=C136662
+Para componentes SMD no bottom (como as resistências pull-up), basta colocá-los no B.Cu — os traces correm no bottom e ligam-se ao resto do circuito via vias ou via pads THT próximos.
 
-# Resistência 0603 (já incluída no KiCad por defeito)
-# Header 1x4 (já incluído no KiCad por defeito)
+#### Footprints a usar (todos incluídos no KiCad por defeito)
+
+| Componente | Footprint KiCad | Library | Notas |
+|-----------|----------------|---------|-------|
+| Header OLED 1×4 | `Connector_PinHeader_2.54mm:PinHeader_1x04_P2.54mm_Vertical` | Built-in | THT, furos ø1.0mm |
+| Botão tátil 6×6mm | `Button_Switch_THT:SW_Push_1P1T_NO_6x6mm_H9.5mm` | Built-in | 4 pads THT, 2 ligados em paralelo |
+| Resistência pull-up | `Resistor_SMD:R_0603_1608Metric_Pad0.98x0.95mm_HandSolder` | Built-in | SMD no bottom layer |
+
+> **Nota:** Todos estes footprints vêm com o KiCad — não é necessário importar nada. Se quiseres o footprint exato do TS-1187A da JLCPCB:
+> ```bash
+> python3 -m easyeda2kicad --symbol --footprint --3d --lcsc_id=C136662
+> ```
+> Mas o footprint genérico `SW_Push_1P1T_NO_6x6mm` é compatível (mesmo pitch 6.5mm entre pads).
+
+#### Como colocar footprints no bottom layer no KiCad
+
+**Método 1 — Flip no PCB Editor (recomendado):**
+
+1. **Tools → Update PCB from Schematic** para importar os novos componentes
+2. Os footprints aparecem no top layer por defeito
+3. Selecionar o componente no PCB editor
+4. Premir **`F`** (atalho para Flip) — o componente passa para B.Cu
+5. Verificar: o componente aparece **espelhado** e em **azul** (cor do B.Cu)
+
+**Método 2 — Via propriedades:**
+
+1. Double-click no componente → Properties
+2. Em **Layer**, mudar de `F.Cu` para `B.Cu`
+3. OK
+
+**O que acontece ao fazer Flip:**
+
 ```
+ANTES (F.Cu — top):            DEPOIS (B.Cu — bottom):
+┌────────────┐                 ┌────────────┐
+│  [BTN] ←pad no top           │            │  ← top limpo
+│            │                 │  [BTN] ←pad no bottom (espelhado)
+└────────────┘                 └────────────┘
+```
+
+- O **silk screen** move para B.SilkS (impresso no verso)
+- O **courtyard** move para B.CrtYd
+- Os **pads SMD** movem para B.Cu
+- Os **pads THT** mantêm furos em ambos os layers (F.Cu + B.Cu) — é por isso que THT é ideal para este caso
+
+#### Resistências SMD no bottom
+
+As resistências 0603 são SMD — ficam coladas ao bottom. Ao fazer Flip:
+- Pads em B.Cu (bottom copper)
+- Silk em B.SilkS
+- Soldadas no verso, junto aos botões
+- Traces roteados em B.Cu ligando pull-up → pad do botão → via para GPIO
 
 ### 5.3 PCB Layout (Bottom Side)
 
 ```
-┌──────────────────────────────────┐
-│          BOTTOM SIDE             │
-│                                  │
-│   [L]                    [R]     │  ← Botões esquerda/direita
-│                                  │
-│         ┌──────────┐             │
-│         │  OLED    │             │
-│         │ 128×64   │             │
-│         │ 0.96"    │             │
-│         └──────────┘             │
-│                                  │
-│   [B]                    [A]     │  ← Botões B (cancel) / A (confirm)
-│                                  │
-└──────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│              BOTTOM SIDE                 │
+│          (visto de baixo)                │
+│                                          │
+│  R_L ┐                         ┌ R_R    │  ← Resistências 0603
+│  [L] ┘                         └ [R]    │  ← Botões esquerda/direita
+│                                          │
+│           ┌──────────────┐               │
+│           │    OLED      │               │
+│           │   128×64     │               │
+│           │   0.96"      │               │
+│           │  [GND VCC    │               │
+│           │   SCL SDA]   │               │  ← Header 1×4
+│           └──────────────┘               │
+│                                          │
+│  R_B ┐                         ┌ R_A    │  ← Resistências 0603
+│  [B] ┘                         └ [A]    │  ← Botões A (confirm) / B (cancel)
+│                                          │
+└──────────────────────────────────────────┘
+
+Legenda:
+  [X]  = Botão tátil 6×6mm THT (4 furos)
+  R_X  = Resistência 10kΩ 0603 SMD (B.Cu)
+  Os furos THT dos botões são visíveis do top — rotear traces no top ou bottom
 ```
 
-**Dicas de layout:**
-- Manter OLED centrado no bottom
-- Botões L/R nas extremidades horizontais (layout tipo gamepad)
-- Botões A/B abaixo do ecrã
-- Resistências pull-up junto aos pads dos botões (minimizar trace length)
-- Traces: 0.25mm para sinais, 0.5mm para alimentação
-- Vias para ligar ao barramento I2C e GPIOs do top layer
+#### Routing Strategy
+
+```
+                F.Cu (top layer)
+    ┌─────────────────────────────────┐
+    │  ESP32 GPIO34 ──trace──┐        │
+    │                        │        │  ← Traces no top ligam
+    │  3.3V ──trace──┐       │        │    GPIOs e alimentação
+    │                │       │        │    aos furos THT
+    └────────────────│───────│────────┘
+                     │       │
+              ┌──────┼───────┼──────┐   ← Furos THT atravessam
+              │      │       │      │     ambos os layers
+    ┌─────────│──────│───────│──────│─┐
+    │         ▼      ▼       │      │ │
+    │   ┌─[R 10k]───┤       │      │ │  ← R pull-up SMD em B.Cu
+    │   │            │       │      │ │
+    │   └──────────[BTN]─────┘      │ │  ← Botão THT em B.Cu
+    │              │                │ │
+    │             GND               │ │
+    │        B.Cu (bottom layer)    │ │
+    └───────────────────────────────┘
+```
+
+**Opção alternativa — traces só no bottom:**
+Se o top layer estiver congestionado (muitos traces HUB75), podes rotear tudo no bottom:
+1. Adiciona uma **via** junto ao pad do GPIO do ESP32 (top → bottom)
+2. Roteia o trace inteiro em B.Cu até ao botão/resistência
+3. Vantagem: não interfere com os traces HUB75 do top
 
 ### 5.4 Passos no KiCad (Step-by-Step)
 
-1. **Abrir esquemático** → Add Symbol → Colocar `SW_Push` ×4 e `R` ×4
-2. **Ligar** cada botão: 3V3 → R(10k) → junction → GPIO + BTN → GND
-3. **Colocar** símbolo OLED (ou connector 1×4) → ligar a SDA, SCL, 3V3, GND
-4. **Anotar** esquemático (Tools → Annotate Schematic)
-5. **Gerar netlist** e abrir PCB editor
-6. **Update PCB** from schematic (Tools → Update PCB)
-7. **Mover footprints** para o bottom layer:
-   - Selecionar componente → Propriedades → Layer: `B.Cu`
-   - Ou: Right-click → Flip (atalho: `F`)
-8. **Posicionar** conforme layout acima
-9. **Rotear traces** no bottom layer (B.Cu)
-10. **Adicionar vias** onde necessário para ligar a nets do top layer
-11. **DRC** (Design Rules Check) antes de gerar Gerbers
+**Esquemático:**
+
+1. **Place → Add Symbol** → procurar `SW_Push` → colocar 4 instâncias
+2. **Place → Add Symbol** → procurar `R` → colocar 4 instâncias (10kΩ)
+3. **Place → Add Symbol** → procurar `Conn_01x04` → colocar 1 (para header OLED)
+4. **Ligar** cada botão:
+   ```
+   3V3 ── R(10k) ──┬── net BTN_x (→ GPIO)
+                    │
+                  [SW]
+                    │
+                   GND
+   ```
+5. **Ligar** connector OLED: pin 1 → GND, pin 2 → 3V3, pin 3 → SCL, pin 4 → SDA
+6. **Anotar** (Tools → Annotate Schematic)
+
+**PCB:**
+
+7. **Tools → Update PCB from Schematic** — componentes aparecem agrupados no canto
+8. **Selecionar todos os novos componentes** (botões + resistências + header OLED)
+9. **Premir `F`** para fazer Flip para o bottom layer
+10. **Posicionar** conforme layout da secção 5.3:
+    - Header OLED centrado
+    - Botões L/R nas laterais, A/B em baixo
+    - Resistências junto ao pad do botão que liga ao GPIO
+11. **Rotear traces** (tecla `X`):
+    - Em B.Cu para ligações locais (R → BTN → GND)
+    - Via para ligar ao GPIO no top se necessário (tecla `V` durante routing)
+12. **Adicionar plano GND no bottom** (se não existir): Place → Zone → B.Cu → net GND
+13. **DRC** (Inspect → Design Rules Check) — corrigir erros antes de gerar Gerbers
+14. **3D Viewer** (View → 3D Viewer) — verificar que os componentes estão no verso
+
+**Verificação final:**
+- No 3D viewer, rodar a PCB — botões e OLED devem estar no lado oposto do ESP32/HUB75
+- Silk screen dos componentes bottom deve estar em B.SilkS (texto espelhado quando visto de cima)
+- Furos THT dos botões e header devem ser visíveis de ambos os lados
 
 ---
 
