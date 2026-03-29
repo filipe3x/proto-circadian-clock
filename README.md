@@ -84,7 +84,7 @@ An ESP32-powered LED clock that simulates the natural solar light cycle to suppo
 Os GPIOs 34, 35 e 39 servem dois modos de input (mesmo circuito elétrico):
 
 ```cpp
-#define INPUT_MODE 0  // Click Wheel — encoder óptico (brilho + modo)
+#define INPUT_MODE 0  // Click Wheel — encoder magnético AS5600 I2C (brilho + modo)
 #define INPUT_MODE 1  // DevKit Buttons — 4 botões táteis (A/B/L/R)
 ```
 
