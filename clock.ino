@@ -105,6 +105,11 @@ enum MeshMsgType {
   MSG_ACK = 0x04           // Confirmacao de recepcao
 };
 
+// Flags de campos opcionais carregados em SyncSettings (extensoes do remoto C3)
+#define SYNC_FLAG_BRIGHTNESS    0x01
+#define SYNC_FLAG_TIME_OFFSET   0x02
+#define SYNC_FLAG_EPOCH         0x04
+
 // Estrutura de definicoes sincronizaveis
 struct __attribute__((packed)) SyncSettings {
   float latitude;
@@ -112,8 +117,14 @@ struct __attribute__((packed)) SyncSettings {
   int8_t timezoneOffset;
   int8_t solarOffsetHours;
   uint8_t mode;            // AUTO_SOLAR, THERAPY_RED, OFF
-  uint8_t reserved[5];     // Para expansao futura
+  uint8_t flags;           // SYNC_FLAG_* (campos validos abaixo)
+  uint8_t brightness;      // 0-255 (se SYNC_FLAG_BRIGHTNESS)
+  int16_t timeOffsetMin;   // delta de minutos para solar (se SYNC_FLAG_TIME_OFFSET)
+  uint32_t epoch;          // unix time do remetente (se SYNC_FLAG_EPOCH)
 };
+
+// Offset de tempo aplicado pelo remoto (long press em AUTO no comando C3)
+static int16_t remoteTimeOffsetMin = 0;
 
 // Estrutura de mensagem ESP-NOW
 struct __attribute__((packed)) MeshMessage {
@@ -895,6 +906,7 @@ void handleDiscovery(const uint8_t* mac, MeshMessage* msg) {
 // Processa settings recebidas de outro dispositivo
 void handleSettings(MeshMessage* msg) {
   SyncSettings* settings = &msg->payload.settings;
+  bool needsRedraw = false;
 
   // MODO: Aceitar de qualquer dispositivo para sync imediato
   // Isto permite que qualquer pessoa mude o modo e todos sincronizem
@@ -904,7 +916,27 @@ void handleSettings(MeshMessage* msg) {
                   modeNames[currentMode], modeNames[settings->mode]);
 
     currentMode = (Mode)settings->mode;
+    needsRedraw = true;
+  }
 
+  // Comandos do remoto C3 (long press)
+  if (settings->flags & SYNC_FLAG_BRIGHTNESS) {
+    if (settings->brightness != configBrightness) {
+      configBrightness = settings->brightness;
+      setSafeBrightness(configBrightness);
+      Serial.printf("[MESH] Brightness remoto: %u\n", configBrightness);
+      needsRedraw = true;
+    }
+  }
+  if (settings->flags & SYNC_FLAG_TIME_OFFSET) {
+    if (settings->timeOffsetMin != remoteTimeOffsetMin) {
+      remoteTimeOffsetMin = settings->timeOffsetMin;
+      Serial.printf("[MESH] Time offset remoto: %+d min\n", remoteTimeOffsetMin);
+      needsRedraw = true;
+    }
+  }
+
+  if (needsRedraw) {
     // Atualizar display imediatamente (sem animacao para ser instantaneo)
     updateDisplay();
   }
@@ -1006,12 +1038,16 @@ void sendSettings() {
   msg.msgId = nextMsgId++;
 
   // Preencher settings atuais
+  memset(&msg.payload.settings, 0, sizeof(SyncSettings));
   msg.payload.settings.latitude = LATITUDE;
   msg.payload.settings.longitude = LONGITUDE;
   msg.payload.settings.timezoneOffset = TIMEZONE_OFFSET;
   msg.payload.settings.solarOffsetHours = configSolarOffset;
   msg.payload.settings.mode = currentMode;
-  memset(msg.payload.settings.reserved, 0, 5);
+  msg.payload.settings.flags = SYNC_FLAG_BRIGHTNESS | SYNC_FLAG_TIME_OFFSET | SYNC_FLAG_EPOCH;
+  msg.payload.settings.brightness = configBrightness;
+  msg.payload.settings.timeOffsetMin = remoteTimeOffsetMin;
+  msg.payload.settings.epoch = getCurrentTime().unixtime();
 
   // Enviar broadcast
   esp_now_send(broadcastAddress, (uint8_t*)&msg, sizeof(msg));
@@ -1032,12 +1068,13 @@ void broadcastModeChange() {
   msg.firstBootTime = myFirstBootTime;
   msg.msgId = nextMsgId++;
 
+  memset(&msg.payload.settings, 0, sizeof(SyncSettings));
   msg.payload.settings.latitude = LATITUDE;
   msg.payload.settings.longitude = LONGITUDE;
   msg.payload.settings.timezoneOffset = TIMEZONE_OFFSET;
   msg.payload.settings.solarOffsetHours = configSolarOffset;
   msg.payload.settings.mode = currentMode;
-  memset(msg.payload.settings.reserved, 0, 5);
+  // Nao marcar flags: mudancas de modo locais nao tocam brightness/offset
 
   esp_now_send(broadcastAddress, (uint8_t*)&msg, sizeof(msg));
   Serial.printf("[MESH] Mode change broadcast: %d\n", currentMode);
@@ -1562,9 +1599,9 @@ void displayAutoSolar() {
   DateTime now = getCurrentTime();
   
   DateTime solarTime = now;
-  if (SOLAR_OFFSET_HOURS != 0) {
-    int offsetMinutes = SOLAR_OFFSET_HOURS * 60;
-    solarTime = now + TimeSpan(0, 0, offsetMinutes, 0);
+  int totalOffsetMin = SOLAR_OFFSET_HOURS * 60 + (int)remoteTimeOffsetMin;
+  if (totalOffsetMin != 0) {
+    solarTime = now + TimeSpan(0, 0, totalOffsetMin, 0);
   }
   
   float elevation = calculateSolarElevation(solarTime, LATITUDE, LONGITUDE, TIMEZONE_OFFSET);
