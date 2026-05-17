@@ -126,6 +126,22 @@ struct __attribute__((packed)) SyncSettings {
 // Offset de tempo aplicado pelo remoto (long press em AUTO no comando C3)
 static int16_t remoteTimeOffsetMin = 0;
 
+// Ramps nao-bloqueantes para suavizar comandos vindos do remoto.
+//
+// Brightness:  step de 2 a cada 15ms => ~133 u/s. Cobre um jump de 6
+// unidades (passo do C3) em 45ms, e 0->255 em ~2s.
+// Time offset: step de 1 minuto a cada 25ms => 40 min/s. Cobre um jump
+// de 60 min (passo maximo do C3) em 1.5s.
+#define BRIGHTNESS_RAMP_STEP         2
+#define BRIGHTNESS_RAMP_INTERVAL_MS  15
+#define AUTO_OFFSET_RAMP_STEP        1
+#define AUTO_OFFSET_RAMP_INTERVAL_MS 25
+
+static int16_t brightnessRampTarget = -1;          // -1 => sem ramp pendente
+static unsigned long brightnessRampLastMs = 0;
+static int16_t timeOffsetRampTarget = 0;           // valor desejado de offset
+static unsigned long timeOffsetRampLastMs = 0;
+
 // Estrutura de mensagem ESP-NOW
 struct __attribute__((packed)) MeshMessage {
   uint32_t magic;          // Identificador PCLK
@@ -919,25 +935,27 @@ void handleSettings(MeshMessage* msg) {
     needsRedraw = true;
   }
 
-  // Comandos do remoto C3 (long press)
+  // Comandos do remoto C3 (long press) — guardados como TARGETS dos ramps,
+  // a transicao real e feita por updateBrightnessRamp / updateTimeOffsetRamp
+  // no loop principal para que a mudanca seja suave.
   if (settings->flags & SYNC_FLAG_BRIGHTNESS) {
-    if (settings->brightness != configBrightness) {
-      configBrightness = settings->brightness;
-      setSafeBrightness(configBrightness);
-      Serial.printf("[MESH] Brightness remoto: %u\n", configBrightness);
-      needsRedraw = true;
+    if (settings->brightness != brightnessRampTarget &&
+        settings->brightness != configBrightness) {
+      brightnessRampTarget = settings->brightness;
+      Serial.printf("[MESH] Brightness target: %u (current %u)\n",
+                    settings->brightness, configBrightness);
     }
   }
   if (settings->flags & SYNC_FLAG_TIME_OFFSET) {
-    if (settings->timeOffsetMin != remoteTimeOffsetMin) {
-      remoteTimeOffsetMin = settings->timeOffsetMin;
-      Serial.printf("[MESH] Time offset remoto: %+d min\n", remoteTimeOffsetMin);
-      needsRedraw = true;
+    if (settings->timeOffsetMin != timeOffsetRampTarget) {
+      timeOffsetRampTarget = settings->timeOffsetMin;
+      Serial.printf("[MESH] Time offset target: %+d min (current %+d)\n",
+                    timeOffsetRampTarget, remoteTimeOffsetMin);
     }
   }
 
   if (needsRedraw) {
-    // Atualizar display imediatamente (sem animacao para ser instantaneo)
+    // Mode change continua a aplicar-se imediatamente
     updateDisplay();
   }
 
@@ -1743,6 +1761,65 @@ void updateDisplay() {
   }
 }
 
+// ============= RAMPS SUAVES (comandos do remoto C3) =============
+//
+// updateBrightnessRamp(): aproxima configBrightness do target em passos
+// pequenos. Em RED re-renderiza o framebuffer para refletir a brightness
+// no calculo per-pixel; em AUTO basta o ajuste de HW (setSafeBrightness)
+// porque a cor solar e recalculada por displayAutoSolar a cada update.
+void updateBrightnessRamp() {
+  if (brightnessRampTarget < 0) return;
+  if (brightnessRampTarget == (int16_t)configBrightness) {
+    brightnessRampTarget = -1;
+    return;
+  }
+  unsigned long now = millis();
+  if (now - brightnessRampLastMs < BRIGHTNESS_RAMP_INTERVAL_MS) return;
+  brightnessRampLastMs = now;
+
+  int16_t curr = (int16_t)configBrightness;
+  int16_t target = brightnessRampTarget;
+  if (curr < target) {
+    curr += BRIGHTNESS_RAMP_STEP;
+    if (curr > target) curr = target;
+  } else {
+    curr -= BRIGHTNESS_RAMP_STEP;
+    if (curr < target) curr = target;
+  }
+  configBrightness = (uint8_t)curr;
+  setSafeBrightness(configBrightness);
+  if (currentMode == THERAPY_RED) {
+    displayTherapyRed();
+  }
+}
+
+// updateTimeOffsetRamp(): aproxima remoteTimeOffsetMin do target em
+// passos de 1 minuto. Em AUTO re-renderiza para que a curva de cor
+// solar transite suavemente (em vez de saltar entre estados).
+void updateTimeOffsetRamp() {
+  if (timeOffsetRampTarget == remoteTimeOffsetMin) return;
+  if (currentMode != AUTO_SOLAR) {
+    // Fora de AUTO nao ha cor solar a interpolar — snap directo.
+    remoteTimeOffsetMin = timeOffsetRampTarget;
+    return;
+  }
+  unsigned long now = millis();
+  if (now - timeOffsetRampLastMs < AUTO_OFFSET_RAMP_INTERVAL_MS) return;
+  timeOffsetRampLastMs = now;
+
+  int16_t curr = remoteTimeOffsetMin;
+  int16_t target = timeOffsetRampTarget;
+  if (curr < target) {
+    curr += AUTO_OFFSET_RAMP_STEP;
+    if (curr > target) curr = target;
+  } else {
+    curr -= AUTO_OFFSET_RAMP_STEP;
+    if (curr < target) curr = target;
+  }
+  remoteTimeOffsetMin = curr;
+  displayAutoSolar();
+}
+
 // ============= LOOP =============
 void loop() {
   static unsigned long lastUpdate = 0;
@@ -1763,6 +1840,10 @@ void loop() {
 
   // Atualizar mesh sync
   updateMeshSync();
+
+  // Ramps suaves de comandos vindos do remoto C3
+  updateBrightnessRamp();
+  updateTimeOffsetRamp();
 
   unsigned long currentMillis = millis();
   

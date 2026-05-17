@@ -83,11 +83,13 @@ struct __attribute__((packed)) MeshMessage {
 #define DEBOUNCE_MS           30
 #define BCAST_MIN_GAP_MS      100
 
-// Brightness (THERAPY_RED): step + min/max
-#define BRIGHT_STEP           15
+// Brightness (THERAPY_RED): step + min/max + tick rate.
+// Em RED queremos uma alteracao bem lenta para o utilizador ter controlo
+// preciso (o painel filtra com um ramp suave por cima disto).
+#define BRIGHT_STEP           6
 #define BRIGHT_MIN            20
 #define BRIGHT_MAX            240
-#define BRIGHT_TICK_MS        180
+#define BRIGHT_TICK_MS        260
 
 // ===================== ESTADO =====================
 static uint8_t  broadcastAddress[] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
