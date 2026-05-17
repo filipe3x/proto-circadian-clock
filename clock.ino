@@ -105,6 +105,11 @@ enum MeshMsgType {
   MSG_ACK = 0x04           // Confirmacao de recepcao
 };
 
+// Flags de campos opcionais carregados em SyncSettings (extensoes do remoto C3)
+#define SYNC_FLAG_BRIGHTNESS    0x01
+#define SYNC_FLAG_TIME_OFFSET   0x02
+#define SYNC_FLAG_EPOCH         0x04
+
 // Estrutura de definicoes sincronizaveis
 struct __attribute__((packed)) SyncSettings {
   float latitude;
@@ -112,8 +117,30 @@ struct __attribute__((packed)) SyncSettings {
   int8_t timezoneOffset;
   int8_t solarOffsetHours;
   uint8_t mode;            // AUTO_SOLAR, THERAPY_RED, OFF
-  uint8_t reserved[5];     // Para expansao futura
+  uint8_t flags;           // SYNC_FLAG_* (campos validos abaixo)
+  uint8_t brightness;      // 0-255 (se SYNC_FLAG_BRIGHTNESS)
+  int16_t timeOffsetMin;   // delta de minutos para solar (se SYNC_FLAG_TIME_OFFSET)
+  uint32_t epoch;          // unix time do remetente (se SYNC_FLAG_EPOCH)
 };
+
+// Offset de tempo aplicado pelo remoto (long press em AUTO no comando C3)
+static int16_t remoteTimeOffsetMin = 0;
+
+// Ramps nao-bloqueantes para suavizar comandos vindos do remoto.
+//
+// Brightness:  step de 2 a cada 15ms => ~133 u/s. Cobre um jump de 6
+// unidades (passo do C3) em 45ms, e 0->255 em ~2s.
+// Time offset: step de 1 minuto a cada 25ms => 40 min/s. Cobre um jump
+// de 60 min (passo maximo do C3) em 1.5s.
+#define BRIGHTNESS_RAMP_STEP         2
+#define BRIGHTNESS_RAMP_INTERVAL_MS  15
+#define AUTO_OFFSET_RAMP_STEP        1
+#define AUTO_OFFSET_RAMP_INTERVAL_MS 25
+
+static int16_t brightnessRampTarget = -1;          // -1 => sem ramp pendente
+static unsigned long brightnessRampLastMs = 0;
+static int16_t timeOffsetRampTarget = 0;           // valor desejado de offset
+static unsigned long timeOffsetRampLastMs = 0;
 
 // Estrutura de mensagem ESP-NOW
 struct __attribute__((packed)) MeshMessage {
@@ -895,6 +922,7 @@ void handleDiscovery(const uint8_t* mac, MeshMessage* msg) {
 // Processa settings recebidas de outro dispositivo
 void handleSettings(MeshMessage* msg) {
   SyncSettings* settings = &msg->payload.settings;
+  bool needsRedraw = false;
 
   // MODO: Aceitar de qualquer dispositivo para sync imediato
   // Isto permite que qualquer pessoa mude o modo e todos sincronizem
@@ -904,8 +932,30 @@ void handleSettings(MeshMessage* msg) {
                   modeNames[currentMode], modeNames[settings->mode]);
 
     currentMode = (Mode)settings->mode;
+    needsRedraw = true;
+  }
 
-    // Atualizar display imediatamente (sem animacao para ser instantaneo)
+  // Comandos do remoto C3 (long press) — guardados como TARGETS dos ramps,
+  // a transicao real e feita por updateBrightnessRamp / updateTimeOffsetRamp
+  // no loop principal para que a mudanca seja suave.
+  if (settings->flags & SYNC_FLAG_BRIGHTNESS) {
+    if (settings->brightness != brightnessRampTarget &&
+        settings->brightness != configBrightness) {
+      brightnessRampTarget = settings->brightness;
+      Serial.printf("[MESH] Brightness target: %u (current %u)\n",
+                    settings->brightness, configBrightness);
+    }
+  }
+  if (settings->flags & SYNC_FLAG_TIME_OFFSET) {
+    if (settings->timeOffsetMin != timeOffsetRampTarget) {
+      timeOffsetRampTarget = settings->timeOffsetMin;
+      Serial.printf("[MESH] Time offset target: %+d min (current %+d)\n",
+                    timeOffsetRampTarget, remoteTimeOffsetMin);
+    }
+  }
+
+  if (needsRedraw) {
+    // Mode change continua a aplicar-se imediatamente
     updateDisplay();
   }
 
@@ -1006,12 +1056,16 @@ void sendSettings() {
   msg.msgId = nextMsgId++;
 
   // Preencher settings atuais
+  memset(&msg.payload.settings, 0, sizeof(SyncSettings));
   msg.payload.settings.latitude = LATITUDE;
   msg.payload.settings.longitude = LONGITUDE;
   msg.payload.settings.timezoneOffset = TIMEZONE_OFFSET;
   msg.payload.settings.solarOffsetHours = configSolarOffset;
   msg.payload.settings.mode = currentMode;
-  memset(msg.payload.settings.reserved, 0, 5);
+  msg.payload.settings.flags = SYNC_FLAG_BRIGHTNESS | SYNC_FLAG_TIME_OFFSET | SYNC_FLAG_EPOCH;
+  msg.payload.settings.brightness = configBrightness;
+  msg.payload.settings.timeOffsetMin = remoteTimeOffsetMin;
+  msg.payload.settings.epoch = getCurrentTime().unixtime();
 
   // Enviar broadcast
   esp_now_send(broadcastAddress, (uint8_t*)&msg, sizeof(msg));
@@ -1032,12 +1086,13 @@ void broadcastModeChange() {
   msg.firstBootTime = myFirstBootTime;
   msg.msgId = nextMsgId++;
 
+  memset(&msg.payload.settings, 0, sizeof(SyncSettings));
   msg.payload.settings.latitude = LATITUDE;
   msg.payload.settings.longitude = LONGITUDE;
   msg.payload.settings.timezoneOffset = TIMEZONE_OFFSET;
   msg.payload.settings.solarOffsetHours = configSolarOffset;
   msg.payload.settings.mode = currentMode;
-  memset(msg.payload.settings.reserved, 0, 5);
+  // Nao marcar flags: mudancas de modo locais nao tocam brightness/offset
 
   esp_now_send(broadcastAddress, (uint8_t*)&msg, sizeof(msg));
   Serial.printf("[MESH] Mode change broadcast: %d\n", currentMode);
@@ -1562,9 +1617,9 @@ void displayAutoSolar() {
   DateTime now = getCurrentTime();
   
   DateTime solarTime = now;
-  if (SOLAR_OFFSET_HOURS != 0) {
-    int offsetMinutes = SOLAR_OFFSET_HOURS * 60;
-    solarTime = now + TimeSpan(0, 0, offsetMinutes, 0);
+  int totalOffsetMin = SOLAR_OFFSET_HOURS * 60 + (int)remoteTimeOffsetMin;
+  if (totalOffsetMin != 0) {
+    solarTime = now + TimeSpan(0, 0, totalOffsetMin, 0);
   }
   
   float elevation = calculateSolarElevation(solarTime, LATITUDE, LONGITUDE, TIMEZONE_OFFSET);
@@ -1706,6 +1761,65 @@ void updateDisplay() {
   }
 }
 
+// ============= RAMPS SUAVES (comandos do remoto C3) =============
+//
+// updateBrightnessRamp(): aproxima configBrightness do target em passos
+// pequenos. Em RED re-renderiza o framebuffer para refletir a brightness
+// no calculo per-pixel; em AUTO basta o ajuste de HW (setSafeBrightness)
+// porque a cor solar e recalculada por displayAutoSolar a cada update.
+void updateBrightnessRamp() {
+  if (brightnessRampTarget < 0) return;
+  if (brightnessRampTarget == (int16_t)configBrightness) {
+    brightnessRampTarget = -1;
+    return;
+  }
+  unsigned long now = millis();
+  if (now - brightnessRampLastMs < BRIGHTNESS_RAMP_INTERVAL_MS) return;
+  brightnessRampLastMs = now;
+
+  int16_t curr = (int16_t)configBrightness;
+  int16_t target = brightnessRampTarget;
+  if (curr < target) {
+    curr += BRIGHTNESS_RAMP_STEP;
+    if (curr > target) curr = target;
+  } else {
+    curr -= BRIGHTNESS_RAMP_STEP;
+    if (curr < target) curr = target;
+  }
+  configBrightness = (uint8_t)curr;
+  setSafeBrightness(configBrightness);
+  if (currentMode == THERAPY_RED) {
+    displayTherapyRed();
+  }
+}
+
+// updateTimeOffsetRamp(): aproxima remoteTimeOffsetMin do target em
+// passos de 1 minuto. Em AUTO re-renderiza para que a curva de cor
+// solar transite suavemente (em vez de saltar entre estados).
+void updateTimeOffsetRamp() {
+  if (timeOffsetRampTarget == remoteTimeOffsetMin) return;
+  if (currentMode != AUTO_SOLAR) {
+    // Fora de AUTO nao ha cor solar a interpolar — snap directo.
+    remoteTimeOffsetMin = timeOffsetRampTarget;
+    return;
+  }
+  unsigned long now = millis();
+  if (now - timeOffsetRampLastMs < AUTO_OFFSET_RAMP_INTERVAL_MS) return;
+  timeOffsetRampLastMs = now;
+
+  int16_t curr = remoteTimeOffsetMin;
+  int16_t target = timeOffsetRampTarget;
+  if (curr < target) {
+    curr += AUTO_OFFSET_RAMP_STEP;
+    if (curr > target) curr = target;
+  } else {
+    curr -= AUTO_OFFSET_RAMP_STEP;
+    if (curr < target) curr = target;
+  }
+  remoteTimeOffsetMin = curr;
+  displayAutoSolar();
+}
+
 // ============= LOOP =============
 void loop() {
   static unsigned long lastUpdate = 0;
@@ -1726,6 +1840,10 @@ void loop() {
 
   // Atualizar mesh sync
   updateMeshSync();
+
+  // Ramps suaves de comandos vindos do remoto C3
+  updateBrightnessRamp();
+  updateTimeOffsetRamp();
 
   unsigned long currentMillis = millis();
   

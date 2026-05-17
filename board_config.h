@@ -20,8 +20,13 @@
 // ============================================================
 // SELEÇÃO DE PLACA (alterar aqui ou via build flags)
 // ============================================================
+// NOTA: vamos abandonar o Matrix Portal S3. Toda a produção e
+// desenvolvimento ativo a partir daqui é no ESP32 Dev Module
+// (BOARD_MATRIXPORTAL_S3 = 0). O caminho S3 fica no código apenas
+// como referência histórica e pode ser removido em qualquer momento
+// sem aviso. Não dependas dele para features novas.
 #ifndef BOARD_MATRIXPORTAL_S3
-  #define BOARD_MATRIXPORTAL_S3 1  // 0 = ESP32 Dev Module, 1 = Matrix Portal S3
+  #define BOARD_MATRIXPORTAL_S3 0  // 0 = ESP32 Dev Module (default), 1 = Matrix Portal S3 (DEPRECATED)
 #endif
 
 // ============================================================
