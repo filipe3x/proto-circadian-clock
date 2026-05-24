@@ -120,7 +120,7 @@ Em vez de tactile switches soldados, cada botão é um par de **pads de cobre ex
 | Botão | GPIO | Tipo       | Partilhado com Click Wheel? | Função Sugerida    |
 |-------|------|------------|-----------------------------|--------------------|
 | **A** | 34   | Input only | Não (AS5600 usa I2C)        | Confirmar / Select |
-| **B** | 35   | Input only | Não                         | Cancelar / Back    |
+| **B** | 35   | Input only | Não (AS5600 usa I2C)        | Cancelar / Back    |
 | **L** | 36   | Input only | Não — exclusivo DevKit      | Esquerda / Menos   |
 | **R** | 39   | Input only | Sim — ENCODER_BTN           | Direita / Mais     |
 
@@ -412,12 +412,12 @@ Vantagem: routing dos botões **não interfere** com os traces HUB75 do top laye
 ```cpp
 // Em board_config.h — adicionar:
 // ============================================================
-// INPUT MODE — Seleciona hardware de input nos GPIOs partilhados
+// INPUT MODE — Seleciona hardware de input
 // ============================================================
-// Os GPIOs 34, 35, 39 são partilhados entre:
-//   - Click Wheel (encoder magnético AS5600 I2C) — ver product/CLICK_WHEEL.md
+// O GPIO 39 é partilhado entre:
+//   - Click Wheel (encoder magnético AS5600 I2C + botão central) — ver product/CLICK_WHEEL.md
 //   - DevKit Buttons (4 botões táteis A/B/L/R)
-// O circuito elétrico é idêntico (pull-up 10kΩ + active LOW).
+// O AS5600 comunica via I2C (0x36), GPIO 34/35 ficam livres no modo click wheel.
 // Apenas o firmware muda.
 //
 //   0 = INPUT_CLICK_WHEEL  — AS5600 I2C + click (brilho + modo)
@@ -440,11 +440,10 @@ Vantagem: routing dos botões **não interfere** com os traces HUB75 do top laye
     #define BTN_R_PIN   39   // Partilhado com ENCODER_BTN
     #define DEVKIT_BUTTON_COUNT 4
   #elif INPUT_MODE == INPUT_CLICK_WHEEL
-    // AS5600 encoder magnético — usa I2C (0x36), não consome GPIOs 34/35
-    #define AS5600_I2C_ADDR     0x36
+    #define AS5600_I2C_ADDR 0x36
     #define ENCODER_BTN_PIN 39
     #define CLICK_WHEEL_ENABLED 1
-    // GPIOs 34, 35, 36 ficam livres (BTN_L no GPIO36 como botão extra)
+    // GPIO 34, 35, 36 ficam livres como botões auxiliares
   #endif
 #endif
 ```
@@ -509,7 +508,7 @@ void loopDevKitButtons() {
 #endif // INPUT_DEVKIT_BUTTONS
 ```
 
-> **Click Wheel mode:** Quando `INPUT_MODE == INPUT_CLICK_WHEEL`, usa-se o AS5600 via I2C (ver `product/CLICK_WHEEL.md` — setupClickWheel, handleClickWheel com polling I2C). O GPIO 36 (BTN_L) continua disponível como botão auxiliar. Os GPIOs 34/35 ficam livres.
+> **Click Wheel mode:** Quando `INPUT_MODE == INPUT_CLICK_WHEEL`, usa-se o AS5600 via I2C (ver `product/CLICK_WHEEL.md` — setupClickWheel, handleClickWheel com polling I2C). Os GPIOs 34, 35 e 36 ficam disponíveis como botões auxiliares.
 
 ---
 
@@ -521,6 +520,7 @@ void loopDevKitButtons() {
 |-------------|----------|-----------|
 | DS3231 RTC  | 0x68     | Não       |
 | SSD1306 OLED| 0x3C     | Não       |
+| AS5600      | 0x36     | Não       |
 | LIS3DH (S3) | 0x19     | N/A (outra placa) |
 
 Os endereços não conflituam. O barramento I2C suporta múltiplos dispositivos sem problemas a 400kHz (Fast Mode).
@@ -580,19 +580,20 @@ Case 3D (corte lateral):
 
 ### Mapa de Partilha
 
-| GPIO | Pull-up | Click Wheel (`INPUT_MODE=0`) | DevKit Buttons (`INPUT_MODE=1`) |
-|------|---------|------------------------------|---------------------------------|
-| **34** | 10kΩ externo | _(livre — analog backup AS5600 OUT)_ | BTN_A (confirmar) |
+| GPIO/Bus | Pull-up | Click Wheel (`INPUT_MODE=0`) | DevKit Buttons (`INPUT_MODE=1`) |
+|----------|---------|------------------------------|---------------------------------|
+| **I2C** (21/22) | Já existente (RTC) | AS5600 @ 0x36 (rotação) | — |
+| **34** | 10kΩ externo | _(livre)_ | BTN_A (confirmar) |
 | **35** | 10kΩ externo | _(livre)_ | BTN_B (cancelar)  |
 | **36** | 10kΩ externo | _(livre)_ — BTN extra | BTN_L (esquerda)  |
 | **39** | 10kΩ externo | ENCODER_BTN (click central)  | BTN_R (direita)   |
 
 ### Porquê funciona sem conflito
 
-1. **AS5600 usa I2C** — O encoder magnético opera no barramento I2C existente (endereço 0x36), sem consumir GPIOs 34/35. Apenas o GPIO 39 (botão central) é partilhado com BTN_R.
-2. **Seleção por firmware** — `#define INPUT_MODE 0` ou `1` em `board_config.h`. Sem alteração de hardware.
-3. **Sem curto-circuito possível** — Todos são input-only.
-4. **GPIOs 34/35 libertados** — Com o AS5600 via I2C, os GPIOs 34 e 35 ficam livres no modo click wheel (anteriormente eram usados pelo encoder óptico ITR8307). Podem servir como inputs extra.
+1. **AS5600 no barramento I2C** — O encoder magnético comunica via I2C (endereço 0x36), partilhando o barramento com RTC (0x68) e OLED (0x3C). Sem conflito de endereços.
+2. **GPIO 39 partilhado** — O botão central do click wheel e o BTN_R do DevKit partilham o mesmo GPIO com circuito idêntico (pull-up 10kΩ + active LOW).
+3. **GPIO 34/35 livres no modo click wheel** — Com AS5600 no I2C, os GPIO 34/35 ficam livres e podem ser usados como botões auxiliares.
+4. **Seleção por firmware** — `#define INPUT_MODE 0` ou `1` em `board_config.h`. Sem alteração de hardware para o botão central.
 
 ### PCB: AS5600 no I2C, botão no GPIO 39
 
@@ -615,9 +616,9 @@ Case 3D (corte lateral):
     └────┴────┴────┘
 ```
 
-### GPIO 36 — Exclusivo DevKit
+### GPIO 34/35/36 — Livres no modo Click Wheel
 
-O GPIO 36 não é usado pela click wheel (o AS5600 usa I2C, o botão central usa GPIO 39). No modo click wheel, o GPIO 36 fica disponível como botão auxiliar (ex: toggle OLED on/off, menu rápido).
+O AS5600 usa I2C para rotação + GPIO 39 para click. Os GPIOs 34, 35 e 36 ficam todos disponíveis como botões auxiliares no modo click wheel (ex: toggle OLED, menu rápido, presets de brilho).
 
 ---
 
@@ -625,16 +626,16 @@ O GPIO 36 não é usado pela click wheel (o AS5600 usa I2C, o botão central usa
 
 Esta adição transforma a PCB existente num kit de desenvolvimento versátil:
 
-- **Custo:** ~$1.14 extra por placa (botões) | ~$1.35 extra (click wheel AS5600 + íman)
+- **Custo:** ~$1.14 extra por placa (botões) | ~$1.60 extra (click wheel AS5600 + ímã)
 - **Pinos usados:** 4 GPIOs (34, 35, 36, 39) — todos input-only
 - **Partilha:** Apenas GPIO 39 partilhado com click wheel (botão central). AS5600 usa I2C (0x36)
-- **I2C:** OLED partilhado com RTC, sem conflito de endereços (0x3C vs 0x68)
+- **I2C:** OLED + AS5600 partilhados com RTC, sem conflito de endereços (0x3C / 0x36 / 0x68)
 - **Funcionalidade original:** 100% preservada
 - **GPIO 32:** Livre para expansão futura (I2S DIN, sensor, output)
 
 | Modo | Componentes | Input |
 |------|-------------|-------|
 | `INPUT_DEVKIT_BUTTONS` | OLED (header hand-solder) + 4 rubber domes sobre contact pads (bottom) | A, B, L, R — navegação tipo gamepad |
-| `INPUT_CLICK_WHEEL` | AS5600 magnético (I2C) + knob + OLED (bottom) | Rotação (brilho) + click (modo) + BTN_L extra |
+| `INPUT_CLICK_WHEEL` | AS5600 encoder magnético (top, SMD) + ímã + OLED (bottom) | Rotação (brilho) + click (modo) + 3 BTN extra |
 
 O ecrã OLED permite debug visual, menus de configuração, e display de informações sem necessitar de Serial Monitor. A mesma PCB serve como relógio circadiano (com click wheel AS5600) ou como dev board Arduino (com contact pads + rubber domes e ecrã), com case 3D printed.

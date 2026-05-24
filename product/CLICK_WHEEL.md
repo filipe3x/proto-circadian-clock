@@ -4,9 +4,9 @@
 
 Click wheel ao estilo iPod para o relógio circadiano. Controla brilho (rotação) e modo (botão central).
 
-O iPod 1G era **capacitivo e completamente liso** — sem detents mecânicos. O "click" era o botão central. O prazer vinha do **momentum em software**. Este design segue o mesmo princípio: rotação fluída sem detents.
+O iPod 1G era **capacitivo e completamente liso** — sem detents mecânicos. O "click" era o botão central. O prazer vinha do **momentum em software**. Este design segue o mesmo princípio: encoder magnético + ímã, sem detents.
 
-> **Nota histórica:** A versão anterior deste design usava **2× ITR8307** (sensores ópticos reflectivos IR) com um disco óptico de 96 slots (3D print/laser cut). Após avaliação mais atenta dos custos, complexidade mecânica e facilidade de montagem, a solução foi substituída pelo **AS5600** — encoder magnético absoluto via I2C. O AS5600 elimina o disco custom (~€5–15), reduz a BOM, simplifica o alinhamento mecânico (apenas um íman de 6mm no eixo) e oferece 4096 posições/revolução vs 384 PPR do óptico.
+> **Nota histórica:** A versão anterior deste design usava **2× ITR8307** (sensores ópticos reflectivos IR) com um disco óptico de 96 slots para gerar quadratura em GPIO 34/35. Após avaliação mais atenta, o AS5600 foi escolhido por ser mais simples (1 chip I2C vs 2 sensores + disco + 2 resistências), sem partes mecânicas de precisão (disco óptico), e com resolução 12-bit nativa (4096 posições) sem necessidade de quadratura em software. O custo é semelhante (~$1.50 vs ~$0.20 sensores + disco custom de ~€5–15).
 
 ---
 
@@ -14,88 +14,89 @@ O iPod 1G era **capacitivo e completamente liso** — sem detents mecânicos. O 
 
 ### AS5600 — Encoder magnético absoluto 12-bit
 
-O AS5600 é um encoder rotativo magnético contactless com saída I2C, analógica ou PWM. Mede o ângulo absoluto de um íman diametricamente magnetizado colocado acima do IC.
-
-**Características principais:**
+O AS5600 (ams-OSRAM) é um encoder rotativo magnético contactless com saída I2C. Mede o ângulo absoluto (0–360°, resolução 0.0879°) de um ímã diametralmente magnetizado posicionado acima do chip.
 
 | Parâmetro | Valor |
 |-----------|-------|
-| Resolução | 12-bit (4096 posições/revolução) |
+| Resolução | 12-bit (4096 posições/volta) |
 | Interface | I2C (endereço fixo **0x36**) |
-| Alimentação | 3.3V ou 5V |
-| Consumo | ~6.5 mA típico |
-| Package | SOIC-8 |
-| Air gap (íman → IC) | 0.5–3 mm |
+| Alimentação | 3.3V (VDD: 3.0–3.6V) |
+| Consumo | ~6.5mA típico |
+| Air gap (ímã ↔ chip) | 0.5–3.0mm |
+| Ímã recomendado | Diametralmente magnetizado, ø6mm × 2.5mm |
+| Package | SOIC-8 (SOP-8) |
+| Tempo de resposta | ~150µs (modo rápido I2C 400kHz) |
 | Temperatura | -40°C a +125°C |
+| Saída alternativa | Analógica (0–VDD) ou PWM no pin OUT |
 
-### Pinout AS5600 (SOIC-8)
+### Pinout do AS5600 (SOIC-8)
 
 ```
-        ┌────────────┐
-  SDA  1│            │8  VDD (3.3V)
-  SCL  2│  AS5600    │7  N.C.
-  PGO  3│            │6  DIR
-  GND  4│            │5  OUT (analog/PWM)
-        └────────────┘
+         ┌────────┐
+   SCL  1│        │8  DIR
+   SDA  2│ AS5600 │7  VDD
+   PGO  3│        │6  (pad GND)
+   GND  4│        │5  OUT
+         └────────┘
 ```
 
-| Pin | Nome | Função |
-|-----|------|--------|
-| 1 | SDA | I2C Data (open-drain, precisa pull-up) |
-| 2 | SCL | I2C Clock (open-drain, precisa pull-up) |
-| 3 | PGO | Programming output (não usado — deixar flutuante) |
-| 4 | GND | Ground |
-| 5 | OUT | Saída analógica (0–3.3V) ou PWM — backup via ADC |
-| 6 | DIR | Direcção: GND = CW incrementa, VDD = CCW incrementa |
-| 7 | N.C. | Não ligado |
-| 8 | VDD | Alimentação 3.3V |
+| Pin | Nome | Ligação |
+|-----|------|---------|
+| 1 | SCL | GPIO 22 (barramento I2C partilhado) |
+| 2 | SDA | GPIO 21 (barramento I2C partilhado) |
+| 3 | PGO | Não ligado (flutuante) — só para programação OTP |
+| 4 | GND | GND |
+| 5 | OUT | Não ligado (usa-se I2C para leitura) |
+| 6 | (pad) | GND (pad térmico/eléctrico) |
+| 7 | VDD | 3.3V (com 100nF decoupling) |
+| 8 | DIR | GND (CW incrementa ângulo) ou VDD (CCW) |
 
 ### Esquemático — Typical Application
 
 ```
-ESP32 GPIO 21 (SDA) ──┬── DS3231/PCF8563 SDA
+ESP32 GPIO 21 (SDA) ──┬── DS3231 SDA
                        ├── SSD1306 SDA
-                       └── AS5600 pin 1 (SDA)
+                       └── AS5600 pin 2 (SDA)
 
-ESP32 GPIO 22 (SCL) ──┬── DS3231/PCF8563 SCL
+ESP32 GPIO 22 (SCL) ──┬── DS3231 SCL
                        ├── SSD1306 SCL
-                       └── AS5600 pin 2 (SCL)
+                       └── AS5600 pin 1 (SCL)
 
-3.3V ──┬── AS5600 pin 8 (VDD)
+3.3V ──┬── AS5600 pin 7 (VDD)
        └── C_DEC 100nF ── GND
 
 GND ─── AS5600 pin 4 (GND)
-GND ─── AS5600 pin 6 (DIR)     ← CW = ângulo incrementa
+GND ─── AS5600 pin 6 (pad GND)
 
-AS5600 pin 5 (OUT) ── GPIO 34  ← Backup analógico (opcional, 0–3.3V ratiométrico)
+AS5600 pin 8 (DIR) ── GND       ← CW = ângulo incrementa
+AS5600 pin 5 (OUT) ── N/C       ← Não usado (leitura via I2C)
 AS5600 pin 3 (PGO) ── flutuante
-AS5600 pin 7 (N.C.) ── flutuante
 ```
 
-**Pull-ups I2C:** Já existem no barramento (4.7kΩ do módulo RTC). Não adicionar mais.
+**Pull-ups I2C:** Já existentes no barramento (do módulo RTC DS3231 — 4.7kΩ). Não adicionar novos.
 
 **DIR pin:** Ligado a GND → rotação CW incrementa o ângulo. Para inverter, ligar a VDD.
 
-### Íman
+### Ímã
 
 | Parâmetro | Valor |
 |-----------|-------|
 | Tipo | **Diametricamente magnetizado** (N–S através do diâmetro) |
 | Material | NdFeB (neodímio) N35 ou superior |
-| Tamanho | 6mm diâmetro × 2–3mm altura (standard) |
-| Air gap | 0.5–3mm entre topo do íman e topo do IC |
+| Tamanho | 6mm diâmetro × 2.5mm altura (standard) |
+| Air gap | 0.5–3mm entre topo do ímã e topo do IC |
 | Montagem | Colado no eixo do knob, centrado sobre o IC |
 | Tolerância | ±0.5mm lateral (o AS5600 é tolerante) |
 | Fonte | AliExpress "6x2.5mm diametric magnet" (~€0.05–0.15/un) |
 
-> **IMPORTANTE:** O íman deve ser **diametricamente magnetizado** (campo N–S perpendicular ao eixo de rotação). Ímanes axiais (N–S paralelo ao eixo) **não funcionam**.
+> **IMPORTANTE:** O ímã deve ser **diametricamente magnetizado** (campo N–S perpendicular ao eixo de rotação). Ímãs axiais (N–S paralelo ao eixo) **não funcionam**.
 
 ```
 Vista lateral:                Vista topo (campo magnético):
 
   ┌──────────┐ Knob
   │  ┌────┐  │                    N ←──── S
-  │  │íman│  │ ← 6mm Ø             (diametric)
+  │  │ímã │  │ ← 6mm Ø             (diametric)
   │  └────┘  │
   ═══════════  ← air gap 1-2mm
   ┌──────────┐
@@ -105,19 +106,24 @@ Vista lateral:                Vista topo (campo magnético):
 
 ### BOM — Componentes Click Wheel (AS5600)
 
-| Ref | Componente | LCSC | Tipo | Qtd | Custo/un | Notas |
-|-----|-----------|------|------|-----|----------|-------|
-| U_ENC | AS5600-ASOM | C183784 | Extended | 1 | ~€1.20 | SOIC-8, I2C 0x36 |
-| C_ENC | 100nF 0402 | C307331 | Basic | 1 | ~€0.002 | Decoupling VDD |
-| MAG1 | Íman 6×2.5mm diametric | — | Hand place | 1 | ~€0.10 | AliExpress, colado no knob |
+| Ref | Componente | LCSC | Basic/Extended | Qtd | Preço | Notas |
+|-----|-----------|------|----------------|-----|-------|-------|
+| U4 | AS5600-ASOM | C526588 | Extended | 1 | ~$1.50 | SMD assembly JLCPCB |
+| C_AS | 100nF 0402 | — | Basic | 1 | ~$0.001 | Decoupling VDD |
+| MAG | Ímã diametral ø6×2.5mm | — | Hand place | 1 | ~$0.10 | AliExpress, colado no knob |
 
-**Custo total: ~€1.35** (vs ~€5–15 da solução óptica anterior com disco custom)
+**Custo total: ~$1.60** (vs ~€5–15 da solução óptica anterior com disco custom)
 
-**GPIOs consumidos: 0** — reutiliza o barramento I2C existente (GPIO 21/22). O GPIO 34 pode opcionalmente receber a saída analógica do AS5600 como backup.
+**GPIOs consumidos: 0** — reutiliza o barramento I2C existente (GPIO 21/22).
+
+Footprint JLCPCB em falta? Usar:
+```bash
+python3 -m easyeda2kicad --symbol --footprint --3d --lcsc_id=C526588
+```
 
 ### Botão Central (Click)
 
-O botão central do encoder continua no **GPIO 39** (SENSOR_VN) com pull-up externo 10kΩ — partilhado com BTN_R do modo DevKit. Pode ser um tactile switch, rubber dome, ou contacto mecânico no knob.
+O botão central do encoder continua no **GPIO 39** (SENSOR_VN) com pull-up externo 10kΩ — partilhado com BTN_R do modo DevKit.
 
 ```
 3.3V ─── 10kΩ ──┬── GPIO 39
@@ -129,13 +135,13 @@ O botão central do encoder continua no **GPIO 39** (SENSOR_VN) com pull-up exte
 
 ### Compatibilidade I2C — Endereços no Bus
 
-| Dispositivo | Endereço | Conflito? |
-|-------------|----------|-----------|
-| DS3231 / PCF8563 (RTC) | 0x68 / 0x51 | Não |
-| SSD1306 (OLED) | 0x3C | Não |
-| AS5600 (encoder) | **0x36** | Não |
+| Dispositivo | Endereço I2C | Função | Conflito? |
+|-------------|-------------|--------|-----------|
+| DS3231 RTC | 0x68 | Relógio tempo-real | Não |
+| SSD1306 OLED | 0x3C | Ecrã DevKit | Não |
+| AS5600 | 0x36 | Encoder magnético | Não |
 
-Todos os endereços são únicos. O barramento I2C suporta os 3 dispositivos sem problema a 400kHz.
+Todos coexistem no mesmo barramento I2C a 400kHz (Fast Mode) sem conflito.
 
 ---
 
@@ -157,52 +163,59 @@ Todos os endereços são únicos. O barramento I2C suporta os 3 dispositivos sem
 
 ```c
 // ============================================================
-// CLICK WHEEL (AS5600 Magnetic Encoder + Botão Central)
+// CLICK WHEEL (AS5600 Encoder Magnético + Botão Central)
 // ============================================================
-// Rotação = brilho (leitura via I2C), click central = change mode
+// Rotação = brilho (leitura de ângulo via I2C)
+// Click central = change mode (GPIO 39)
 // BOOT (GPIO0) mantém-se livre para flash/debug
 // AS5600 no barramento I2C existente (0x36, sem conflito)
-#define AS5600_I2C_ADDR     0x36
-#define AS5600_RAW_ANGLE_H  0x0C
-#define AS5600_RAW_ANGLE_L  0x0D
-#define AS5600_STATUS_REG   0x0B
-#define AS5600_AGC_REG      0x1A
+#define AS5600_I2C_ADDR       0x36
+#define AS5600_RAW_ANGLE_REG  0x0C   // Registos 0x0C:0x0D (12 bits)
+#define AS5600_STATUS_REG     0x0B   // Bit 5: magnet detected
+#define AS5600_AGC_REG        0x1A   // Automatic gain control
 
-// Botão central do encoder — GPIO input-only, pull-up externo 10kΩ
 #if BOARD_MATRIXPORTAL_S3
   #define ENCODER_BTN_PIN 11
 #else
+  // GPIO 39: input-only, pull-up externo 10kΩ a 3.3V
   #define ENCODER_BTN_PIN 39   // SENSOR_VN — click do encoder
 #endif
 
 // INPUT_MODE seleciona entre click wheel e devkit buttons (ver DEVKIT_DISPLAY_BUTTONS.md)
-// Estes defines são activados automaticamente quando INPUT_MODE == INPUT_CLICK_WHEEL (0)
-#define CLICK_WHEEL_ENABLED    1    // 1 = click wheel activa, 0 = só botão BOOT
+#define CLICK_WHEEL_ENABLED    1    // 1 = click wheel activa, 0 = desactivada
 #define ENCODER_INVERT_DIR     0    // 1 = inverter CW/CCW (ou trocar DIR pin)
-#define BRIGHTNESS_STEP        10   // Incremento por tick do encoder
+#define BRIGHTNESS_STEP        10   // Incremento base por unidade de rotação
 #define BRIGHTNESS_MIN         10   // Brilho mínimo
 #define ENCODER_BTN_DEBOUNCE_MS 200 // Debounce do click central
-#define WHEEL_POLL_INTERVAL_MS  20  // Polling I2C a 50Hz (suficiente para rotação humana)
-#define WHEEL_ANGLE_THRESHOLD   30  // Ângulo mínimo (de 4096) para registar 1 tick
+#define AS5600_POLL_MS         20   // Intervalo de polling I2C (20ms = 50Hz)
+#define AS5600_ANGLE_THRESHOLD 30   // Ângulo mínimo (de 4096) para registar 1 tick
 ```
 
 ### TO DO 2: clock.ino — variáveis globais e leitura I2C
 
 ```c
-// ============= CLICK WHEEL (AS5600 Magnetic Encoder) =============
+// ============= CLICK WHEEL (AS5600 Encoder Magnético) =============
 #if CLICK_WHEEL_ENABLED
 #include <Wire.h>
 
 int           lastAngle         = -1;    // Último ângulo lido (-1 = não inicializado)
 int           accumAngle        = 0;     // Ângulo acumulado desde último tick
-unsigned long lastWheelPollMs   = 0;     // Timestamp do último polling
+unsigned long lastWheelPollMs   = 0;
 volatile bool encoderBtnPressed = false;
 volatile unsigned long encoderBtnLastMs = 0;
+
+void IRAM_ATTR encoderBtnISR() {
+  unsigned long now = millis();
+  if ((now - encoderBtnLastMs) >= ENCODER_BTN_DEBOUNCE_MS) {
+    encoderBtnPressed = true;
+    encoderBtnLastMs  = now;
+  }
+}
 
 // Lê ângulo raw 12-bit do AS5600 via I2C
 int readAS5600Angle() {
   Wire.beginTransmission(AS5600_I2C_ADDR);
-  Wire.write(AS5600_RAW_ANGLE_H);
+  Wire.write(AS5600_RAW_ANGLE_REG);
   if (Wire.endTransmission(false) != 0) return -1;  // NACK → sensor ausente
 
   Wire.requestFrom((uint8_t)AS5600_I2C_ADDR, (uint8_t)2);
@@ -213,7 +226,7 @@ int readAS5600Angle() {
   return ((high & 0x0F) << 8) | low;  // 12-bit: 0–4095
 }
 
-// Verifica se o íman está detectado
+// Verifica se o ímã está detectado
 bool as5600MagnetOK() {
   Wire.beginTransmission(AS5600_I2C_ADDR);
   Wire.write(AS5600_STATUS_REG);
@@ -226,13 +239,6 @@ bool as5600MagnetOK() {
   return (status & 0x20) != 0;  // Bit 5 = MD (Magnet Detected)
 }
 
-void IRAM_ATTR encoderBtnISR() {
-  unsigned long now = millis();
-  if ((now - encoderBtnLastMs) >= ENCODER_BTN_DEBOUNCE_MS) {
-    encoderBtnPressed = true;
-    encoderBtnLastMs  = now;
-  }
-}
 #endif
 ```
 
@@ -240,15 +246,17 @@ void IRAM_ATTR encoderBtnISR() {
 
 ```c
 void setupClickWheel() {
+  // I2C já inicializado pelo RTC (Wire.begin(21, 22))
+
   // Verificar presença do AS5600 no bus I2C
   Wire.beginTransmission(AS5600_I2C_ADDR);
   if (Wire.endTransmission() == 0) {
     Serial.println("[WHEEL] AS5600 detectado no I2C (0x36)");
 
     if (as5600MagnetOK()) {
-      Serial.println("[WHEEL] Íman detectado — OK");
+      Serial.println("[WHEEL] Ímã detectado — OK");
     } else {
-      Serial.println("[WHEEL] AVISO: Íman não detectado (verificar posição/air gap)");
+      Serial.println("[WHEEL] AVISO: Ímã não detectado (verificar posição/air gap)");
     }
 
     lastAngle = readAS5600Angle();
@@ -264,7 +272,7 @@ void setupClickWheel() {
 }
 ```
 
-Chamar em `setup()`, após `Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN)`.
+Chamar em `setup()`, após `Wire.begin(21, 22)`.
 
 ### TO DO 4: clock.ino — handleClickWheel()
 
@@ -272,7 +280,7 @@ Chamar em `setup()`, após `Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN)`.
 void handleClickWheel() {
   // --- Polling do ângulo (não-bloqueante, 50Hz) ---
   unsigned long now = millis();
-  if (now - lastWheelPollMs < WHEEL_POLL_INTERVAL_MS) return;
+  if (now - lastWheelPollMs < AS5600_POLL_MS) return;
   lastWheelPollMs = now;
 
   int angle = readAS5600Angle();
@@ -283,8 +291,8 @@ void handleClickWheel() {
 
   // Calcular delta com wrap-around (0 ↔ 4095)
   int delta = angle - lastAngle;
-  if (delta > 2048)  delta -= 4096;   // Wrap CW → CCW
-  if (delta < -2048) delta += 4096;   // Wrap CCW → CW
+  if (delta > 2048)  delta -= 4096;
+  if (delta < -2048) delta += 4096;
 
   #if ENCODER_INVERT_DIR
     delta = -delta;
@@ -295,18 +303,20 @@ void handleClickWheel() {
   // Acumular ângulo — só dispara tick quando passa o threshold
   accumAngle += delta;
 
-  int ticks = accumAngle / WHEEL_ANGLE_THRESHOLD;
+  int ticks = accumAngle / AS5600_ANGLE_THRESHOLD;
   if (ticks != 0) {
-    accumAngle -= ticks * WHEEL_ANGLE_THRESHOLD;  // Manter resto
+    accumAngle -= ticks * AS5600_ANGLE_THRESHOLD;  // Manter resto
 
-    int brightnessChange = ticks * BRIGHTNESS_STEP;
-    int newBrightness = constrain(configBrightness + brightnessChange, BRIGHTNESS_MIN, MAX_BRIGHTNESS_CAP);
+    int newBrightness = constrain(
+      configBrightness + ticks * BRIGHTNESS_STEP,
+      BRIGHTNESS_MIN, MAX_BRIGHTNESS_CAP
+    );
 
     if (newBrightness != configBrightness) {
       configBrightness = newBrightness;
       setSafeBrightness(configBrightness);
 
-      // Feedback visual: barra nas 2 linhas inferiores (verde → amber → laranja)
+      // Feedback visual: barra nas 2 linhas inferiores
       int barWidth = map(configBrightness, BRIGHTNESS_MIN, MAX_BRIGHTNESS_CAP, 0, 32);
       uint16_t barColor;
       if (configBrightness < MAX_BRIGHTNESS_CAP / 2) {
@@ -319,19 +329,18 @@ void handleClickWheel() {
       display->fillRect(0, 14, 32, 2, display->color565(0, 0, 0));
       display->fillRect(0, 14, barWidth, 2, barColor);
 
-      Serial.printf("[WHEEL] Brilho: %d/%d (angle=%d)\n", configBrightness, MAX_BRIGHTNESS_CAP, angle);
+      Serial.printf("[WHEEL] Brilho: %d/%d (angle=%d)\n",
+                    configBrightness, MAX_BRIGHTNESS_CAP, angle);
     }
   }
 
-  // --- Click central: change mode (reutiliza handleButton via flag) ---
+  // --- Click central: change mode ---
   if (encoderBtnPressed) {
     encoderBtnPressed = false;
     buttonPressed = true;  // Dispara handleButton() no próximo ciclo
   }
 }
 ```
-
-Chamar em `loop()`, após `handleButton()`.
 
 ### TO DO 5: clock.ino — forward declarations e integração
 
@@ -345,7 +354,7 @@ void handleClickWheel();
 
 Integrar no `setup()` e `loop()`:
 ```c
-// Em setup(), após Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN):
+// Em setup(), após Wire.begin(21, 22):
 #if CLICK_WHEEL_ENABLED
   setupClickWheel();
 #endif
@@ -364,9 +373,10 @@ A diferença entre "funciona" e "não consigo parar de girar":
 
 ### Hardware
 - **Sem detents** — knob liso, rotação contínua sem clicks mecânicos
-- **Alta resolução** — AS5600: 4096 posições/revolução (vs 96 do disco óptico)
+- **Alta resolução** — AS5600: 4096 posições/revolução (12-bit nativo)
 - **Sem desgaste** — contactless, sem peças mecânicas a degradar
 - **Posição absoluta** — ao ligar, sabe imediatamente o ângulo
+- **Resposta rápida** — polling a 50Hz via I2C, ~150µs por leitura
 
 ### Software (a implementar)
 
@@ -384,7 +394,7 @@ Rápida (flick)      →  ±60 (salto grande)
 Algoritmo sugerido:
 ```c
 // Medir velocidade angular (delta/intervalo)
-float velocity = abs(delta) / (float)WHEEL_POLL_INTERVAL_MS;
+float velocity = abs(delta) / (float)AS5600_POLL_MS;
 
 // Aceleração: quanto mais rápido, maior o step
 int step = BRIGHTNESS_STEP;
@@ -405,22 +415,22 @@ configBrightness = constrain(configBrightness + (int)momentum, BRIGHTNESS_MIN, M
 | | Óptico (anterior) | AS5600 (actual) |
 |--|-------------------|-----------------|
 | Resolução | 96 PPR (384 c/ quadratura) | **4096/rev (12-bit)** |
-| Disco custom | Sim (3D print, ~€5–15) | **Não (íman €0.10)** |
-| Alinhamento | Crítico (2 sensores + disco ±0.1mm) | **Fácil (íman ±0.5mm)** |
+| Disco custom | Sim (3D print, ~€5–15) | **Não (ímã €0.10)** |
+| Alinhamento | Crítico (2 sensores + disco ±0.1mm) | **Fácil (ímã ±0.5mm)** |
 | GPIOs | 2 (GPIO 34, 35) | **0 (I2C partilhado)** |
 | Desgaste | Possível (pó, disco) | **Nenhum (contactless)** |
 | Posição absoluta | Não | **Sim** |
-| Custo total | ~€5–15 (com disco) | **~€1.35** |
+| Custo total | ~€5–15 (com disco) | **~$1.60** |
 
 ### vs Encoder mecânico (EC11)
 
-| | EC11 mecânico | AS5600 |
-|--|---------------|--------|
-| Feel | Click-click-click (tátil) | **Fluído, sem resistência** |
-| Momentum possível | Limitado pelos detents | **Sim, total** |
-| Desgaste | 15k–30k ciclos | **Sem desgaste** |
-| Resolução | 20–30 PPR | **4096/rev** |
-
-### vs Encoder mecânico (EC11)
-
-O EC11 continua a ser uma opção válida para prototipagem rápida (sem PCB custom, sem íman). O AS5600 é superior para o produto final.
+| | EC11 mecânico | AS5600 magnético |
+|--|---------------|------------------|
+| Feel | Click-click-click (tátil) | Fluído, sem resistência |
+| Resolução | 20–30 PPR | 4096 posições (12-bit) |
+| Momentum possível | Limitado pelos detents | Sim, total |
+| Desgaste | 15k–30k ciclos | Sem desgaste (sem contacto) |
+| Interface | 2× GPIO (quadratura + ISR) | I2C (partilhado) |
+| Componentes | 1 encoder + 2 pull-ups | 1 IC + 1 cap + 1 ímã |
+| Custo | ~$0.30 | ~$1.50 (IC) + ~$0.10 (ímã) |
+| Veredito | Bom para prototipagem rápida | Melhor para produto final iPod-style |
