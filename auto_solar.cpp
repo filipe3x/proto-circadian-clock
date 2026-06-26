@@ -76,8 +76,10 @@ float calculateSolarElevation(DateTime now, float latitude, float longitude, int
   // Calcular declinacao solar (delta)
   double delta = asin(sin(epsilon_rad) * sin(theta_rad));
 
-  // Calcular equacao do tempo (E)
-  double E = 4 * (L0 - 0.0057183 - atan2(tan(theta_rad), cos(epsilon_rad)) * 180.0 / PI + C);
+  // Calcular equacao do tempo (E) - deixou de funcionar desde 21 de junho de 2026
+  // double E = 4 * (L0 - 0.0057183 - atan2(tan(theta_rad), cos(epsilon_rad)) * 180.0 / PI + C);
+  // Calcular equacao do tempo (E) com correção de quadrante
+  double E = 4 * (L0 - 0.0057183 - atan2(cos(epsilon_rad) * sin(theta_rad), cos(theta_rad)) * 180.0 / PI + C);
 
   // Calcular tempo solar verdadeiro
   double solarTime = now.hour() * 60.0 + now.minute() + now.second() / 60.0 +
