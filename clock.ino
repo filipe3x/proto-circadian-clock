@@ -657,38 +657,54 @@ bool tryConnectWiFi() {
 // ============= SINCRONIZACAO NTP =============
 bool syncWithNTP() {
   Serial.println("\n=== Sincronizando NTP ===");
-  
-  configTime(TIMEZONE_OFFSET * 3600, 0, "pool.ntp.org", "time.google.com", "time.cloudflare.com");
-  
+
+  // Sincronizar NTP com offset 0 = UTC
+  // O RTC guarda hora standard (UTC + configTimezone, sem DST)
+  // Assim o cálculo solar é sempre preciso independentemente do país/DST
+  configTime(0, 0, "pool.ntp.org", "time.google.com", "time.cloudflare.com");
+
   struct tm timeinfo;
   int attempts = 0;
-  
+
   while (!getLocalTime(&timeinfo) && attempts < 15) {
     delay(500);
     Serial.print(".");
     attempts++;
   }
   Serial.println();
-  
+
   if (getLocalTime(&timeinfo)) {
     Serial.println("✅ NTP sincronizado!");
-    Serial.printf("   %02d/%02d/%04d %02d:%02d:%02d\n",
-                  timeinfo.tm_mday, timeinfo.tm_mon + 1, 
+
+    // getLocalTime devolve UTC (configTime com offset 0)
+    DateTime utcNow(timeinfo.tm_year + 1900,
+                    timeinfo.tm_mon + 1,
+                    timeinfo.tm_mday,
+                    timeinfo.tm_hour,
+                    timeinfo.tm_min,
+                    timeinfo.tm_sec);
+
+    // RTC guarda sempre hora standard (UTC + configTimezone, SEM DST)
+    // Assim o offset para cálculo solar é constante (configTimezone)
+    // e a transição DST não afeta a precisão da cor
+    DateTime standardTime = utcNow + TimeSpan(0, 0, configTimezone * 60, 0);
+
+    Serial.printf("   UTC: %02d/%02d/%04d %02d:%02d:%02d\n",
+                  timeinfo.tm_mday, timeinfo.tm_mon + 1,
                   timeinfo.tm_year + 1900,
-                  timeinfo.tm_hour, timeinfo.tm_min, 
+                  timeinfo.tm_hour, timeinfo.tm_min,
                   timeinfo.tm_sec);
-    
-    // Atualizar RTC se disponível
+    Serial.printf("   Hora standard (TZ=%+d): %02d/%02d/%04d %02d:%02d:%02d\n",
+                  configTimezone,
+                  standardTime.day(), standardTime.month(), standardTime.year(),
+                  standardTime.hour(), standardTime.minute(), standardTime.second());
+
+    // Atualizar RTC se disponivel (com hora standard, sem DST)
     if (rtcAvailable) {
-      rtc.adjust(DateTime(timeinfo.tm_year + 1900, 
-                         timeinfo.tm_mon + 1, 
-                         timeinfo.tm_mday, 
-                         timeinfo.tm_hour, 
-                         timeinfo.tm_min, 
-                         timeinfo.tm_sec));
-      Serial.println("   RTC atualizado com NTP");
+      rtc.adjust(standardTime);
+      Serial.println("   RTC atualizado com hora standard (sem DST)");
     }
-    
+
     return true;
   } else {
     Serial.println("❌ NTP falhou");
@@ -1600,8 +1616,10 @@ void setup() {
 // ============= INFORMACOES SOLARES =============
 void printSolarInfo() {
   DateTime now = getCurrentTime();
-  int sunrise = solarCalc->sunrise(now.year(), now.month(), now.day(), true);
-  int sunset = solarCalc->sunset(now.year(), now.month(), now.day(), true);
+  // RTC guarda hora standard (sem DST) → passar false ao Dusk2Dawn
+  bool isDST = false;
+  int sunrise = solarCalc->sunrise(now.year(), now.month(), now.day(), isDST);
+  int sunset = solarCalc->sunset(now.year(), now.month(), now.day(), isDST);
   
   Serial.println("\n--- Info Solar ---");
   Serial.printf("Data: %02d/%02d/%04d\n", now.day(), now.month(), now.year());
@@ -1622,18 +1640,21 @@ void displayAutoSolar() {
     solarTime = now + TimeSpan(0, 0, totalOffsetMin, 0);
   }
   
-  float elevation = calculateSolarElevation(solarTime, LATITUDE, LONGITUDE, TIMEZONE_OFFSET);
+  // RTC guarda hora standard (UTC + configTimezone, sem DST)
+  // O offset para calculo solar e sempre configTimezone (constante)
+  float elevation = calculateSolarElevation(solarTime, LATITUDE, LONGITUDE, configTimezone);
   SolarColor color = mapSolarElevationToColor(elevation);
-  
+
   fillPanel(color);
-  
+
   static uint8_t lastMinute = 255;
   if (now.minute() % 5 == 0 && now.minute() != lastMinute) {
     lastMinute = now.minute();
     uint8_t actualBrightness = cappedBrightness(color.brightness);
-    Serial.printf("[AUTO] %02d:%02d (offset %+dh) | Elev: %.2f° | %dK | RGB(%d,%d,%d) | Brilho: %d%%%s\n",
+    Serial.printf("[AUTO] %02d:%02d (sol %+dh TZ %+d) | Elev: %.2f° | %dK | RGB(%d,%d,%d) | Brilho: %d%%%s\n",
                   now.hour(), now.minute(),
                   SOLAR_OFFSET_HOURS,
+                  configTimezone,
                   elevation, color.colorTemp, color.r, color.g, color.b,
                   (actualBrightness * 100) / 255,
                   (actualBrightness < color.brightness) ? " [CAP]" : "");
